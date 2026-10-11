@@ -61,6 +61,11 @@ const RECOIL_ANGLE := 0.5            # 패리당하면 휩쓸던 반대쪽으로
 const RECOIL_TIME := 0.7
 const STAGGER_TIME := 1.0            # 밀려난 뒤 팔이 멈춰 관절이 드러나는 시간
 const FIST_R := 105.0
+const BEAM_WIND := 1.1               # 눈 레이저(패리 불가): 눈이 달아오르고 시작선이 표시된다
+const BEAM_SWEEP := 1.7              # 왼쪽 → 아래 → 오른쪽으로 긋는 시간
+const BEAM_FROM := PI + 0.2          # 시작 각도 (왼쪽, 살짝 위)
+const BEAM_TO := -0.2                # 끝 각도 (오른쪽, 살짝 위)
+const BEAM_HALF := 16.0              # 판정 반폭
 const BOLT_SPEED := 480.0
 const BOLT_SPEEDUP := 0.1            # 부위 하나 부술 때마다 탄 속도 +10%
 const BOLT_SPEEDUP_CORE := 0.15      # 최종 페이즈 추가 가속
@@ -86,6 +91,8 @@ const C_EYE := Color(1.0, 0.78, 0.42)
 const C_WARN := Color(1.0, 0.3, 0.25)
 const C_PARRY := Color(1.0, 0.88, 0.35)          # 패리할 수 있는 것 = 금색 (탄, 휩쓰는 팔)
 const C_LAVA := Color(1.0, 0.35, 0.12)
+const C_UNPARRY := Color(0.6, 0.08, 0.36)       # 패리 불가 = 검붉은 보라 (회피 돌진으로만 피한다)
+const C_UNPARRY_CORE := Color(1.0, 0.62, 0.86)
 
 var phase := 1
 var open_t := 0.0
@@ -100,6 +107,7 @@ var atk: Dictionary = {}
 var bolts: Array[Dictionary] = []
 var next_t := 2.5
 var eye_glow := 0.0
+var beam_glow := 0.0                 # 레이저 직전·중 눈이 보랏빛으로 달아오름
 var cannon_glow: Array[float] = [0.0, 0.0]   # 발사 전 포구가 달아오르는 정도
 var strike_glow := false             # 플레이어가 공격 돌진 중 = 타격점이 드러난다
 var focus_glow := 0.0                # 방향 지정·차지 중: 노릴 수 있는 표적 강조 (0~1)
@@ -138,6 +146,7 @@ func reset() -> void:
 	bolts.clear()
 	next_t = 2.5
 	eye_glow = 0.0
+	beam_glow = 0.0
 	cannon_glow = [0.0, 0.0]
 	dead = false
 	death_t = 0.0
@@ -412,6 +421,46 @@ func on_parried(hb: Dictionary) -> void:
 			bolts.erase(hb["bolt"])
 
 
+## 패리로 밀려난 팔: 패리 돌진이 끝나면 경직을 풀고 바로 제자리로
+func release_stagger() -> void:
+	if atk.get("kind", "") == "swing" and (atk["phase"] == "recoil" or atk["phase"] == "stagger"):
+		atk["phase"] = "return"; atk["t"] = 0.0
+
+
+## 레이저 끝점: 눈에서 쏜 광선이 벽·천장·용암에 닿는 곳
+func beam_end(th: float) -> Vector2:
+	var d := Vector2.from_angle(th)
+	var k := 99999.0
+	if d.x < -0.001:
+		k = minf(k, (-1150.0 - HEAD_POS.x) / d.x)
+	elif d.x > 0.001:
+		k = minf(k, (1150.0 - HEAD_POS.x) / d.x)
+	if d.y > 0.001:
+		k = minf(k, (0.0 - HEAD_POS.y) / d.y)
+	elif d.y < -0.001:
+		k = minf(k, (-3300.0 - HEAD_POS.y) / d.y)
+	return HEAD_POS + d * k
+
+
+## 레이저 판정(패리 불가). 이번 프레임에 광선이 쓸고 지나간 부채꼴 안이면 맞는다 → 밀려날 방향, 아니면 ZERO
+func beam_hit(p: Vector2, r: float) -> Vector2:
+	if dead or atk.get("kind", "") != "beam" or atk["phase"] != "sweep":
+		return Vector2.ZERO
+	var rel := p - HEAD_POS
+	var dist := rel.length()
+	if dist < 1.0:
+		return Vector2.ZERO
+	var th: float = atk["th"]
+	var th_prev: float = atk["th_prev"]
+	var d := wrapf(th_prev - rel.angle(), -PI, PI)      # 광선은 각도가 줄어드는 방향으로 돈다
+	var w := (BEAM_HALF + r) / dist
+	if d < -w or d > (th_prev - th) + w:
+		return Vector2.ZERO
+	if dist > HEAD_POS.distance_to(beam_end(rel.angle())) + r:
+		return Vector2.ZERO
+	return Vector2.from_angle(th - PI * 0.5)           # 쓸고 가는 방향으로 밀려난다
+
+
 func on_hit_player(hb: Dictionary) -> void:
 	if hb["id"] == "bolt":
 		bolts.erase(hb["bolt"])
@@ -442,6 +491,7 @@ func step(dt: float, ppos: Vector2) -> void:
 			phase = 3
 			events.append({"type": "core_ready", "pos": heart_pos()})
 	eye_glow = move_toward(eye_glow, 0.0, dt * 2.0)
+	beam_glow = move_toward(beam_glow, 0.0, dt * 2.0)
 	for i in 2:
 		cannon_glow[i] = move_toward(cannon_glow[i], 0.0, dt * 2.0)
 	_step_bolts(dt)
@@ -456,6 +506,7 @@ func step(dt: float, ppos: Vector2) -> void:
 			"swing": _step_swing(dt, ppos)
 			"volley": _step_volley(ppos)
 			"burst": _step_burst()
+			"beam": _step_beam()
 	queue_redraw()
 
 
@@ -475,14 +526,17 @@ func _choose(ppos: Vector2) -> void:
 	if ppos.y > LOW_ZONE_Y and roll < 0.6:      # 용암 근처: 아래에서 솟는 탄막 위주
 		_start_erupt(ppos)
 		return
-	if roll < 0.22:
+	if roll < 0.2:
 		_start_erupt(ppos)
 		return
-	if arm >= 0 and (roll < 0.6 or not can_shoot):
+	if roll < 0.36:                               # 패리 불가 눈 레이저
+		atk = {"kind": "beam", "phase": "wind", "t": 0.0, "th": BEAM_FROM, "th_prev": BEAM_FROM}
+		return
+	if arm >= 0 and (roll < 0.64 or not can_shoot):
 		atk = {"kind": "swing", "phase": "wind", "t": 0.0, "arm": arm}
 		_aim_swing(arm, ppos)
 	elif can_shoot:
-		if roll < 0.82:
+		if roll < 0.86:
 			atk = {"kind": "volley", "t": 0.0, "shots": 0}
 		else:
 			atk = {"kind": "burst", "t": 0.0}
@@ -625,6 +679,24 @@ func _step_swing(dt: float, ppos: Vector2) -> void:
 			fists[a] = fists[a].lerp(FIST_IDLE[a], minf(1.0, dt * 3.0))
 			if tt >= 1.4:
 				fists[a] = FIST_IDLE[a]
+				_finish()
+
+
+## 눈 레이저: 왼쪽에서 아래를 지나 오른쪽까지 맵을 긋는다. 패리 불가 → 회피 돌진 무적으로 통과
+func _step_beam() -> void:
+	var tt: float = atk["t"]
+	match atk["phase"]:
+		"wind":
+			beam_glow = minf(1.0, tt / BEAM_WIND)
+			if tt >= BEAM_WIND:
+				atk["phase"] = "sweep"; atk["t"] = 0.0
+				events.append({"type": "beam", "pos": HEAD_POS})
+		"sweep":
+			beam_glow = 1.0
+			var k := minf(1.0, tt / BEAM_SWEEP)
+			atk["th_prev"] = atk["th"]
+			atk["th"] = lerpf(BEAM_FROM, BEAM_TO, k * k * (3.0 - 2.0 * k) * 0.3 + k * 0.7)
+			if k >= 1.0:
 				_finish()
 
 
@@ -974,9 +1046,14 @@ func _draw_head() -> void:
 	for e in EYES:
 		draw_circle(e, 32.0 + eye_glow * 32.0, Color(C_EYE, 0.16 * glow))
 		draw_circle(e, 10.0 + eye_glow * 6.0, Color(C_EYE, glow))
+		if beam_glow > 0.0:                          # 레이저: 보랏빛으로 달아오른다
+			draw_circle(e, 30.0 + beam_glow * 40.0, Color(C_UNPARRY, 0.35 * beam_glow))
+			draw_circle(e, 8.0 + beam_glow * 10.0, Color(C_UNPARRY_CORE, beam_glow))
 
 
 func _draw_telegraphs() -> void:
+	if atk.get("kind", "") == "beam":
+		_draw_beam()
 	if atk.get("kind", "") == "erupt" and int(atk["fired"]) < ERUPT_GLOBS:
 		# 용암 분출 경고: 분출 지점의 용암이 부글거리고, 솟을 높이까지 희미한 기둥
 		var k := clampf(float(atk["t"]) / (STOMP_LIFT_TIME + STOMP_SLAM_TIME), 0.0, 1.0)
@@ -1027,6 +1104,36 @@ func _draw_telegraphs() -> void:
 			var tangent := Vector2(-s * sin(th2), cos(th2))
 			var at := sh + radial * SWING_L * 0.8
 			draw_colored_polygon(PackedVector2Array([at + tangent * 40.0, at - tangent * 12.0 + radial * 26.0, at - tangent * 12.0 - radial * 26.0]), Color(1, 0.9, 0.7, 0.3 + 0.45 * k))
+
+
+## 눈 레이저 (패리 불가 = 검붉은 보라)
+func _draw_beam() -> void:
+	if atk["phase"] == "wind":
+		# 경고: 시작선이 점점 진해지고, 긋는 방향(왼→아래→오른)을 화살표로 보여준다
+		var k := clampf(float(atk["t"]) / BEAM_WIND, 0.0, 1.0)
+		var blink := 0.6 + 0.4 * sin(t * 30.0)
+		for e in EYES:
+			draw_line(e, beam_end(BEAM_FROM), Color(C_UNPARRY, (0.15 + 0.5 * k) * blink), 2.0 + 6.0 * k)
+		for f in [0.2, 0.4, 0.6, 0.8]:
+			var th: float = lerpf(BEAM_FROM, BEAM_TO, f)
+			var radial := Vector2.from_angle(th)
+			var tangent := Vector2.from_angle(th - PI * 0.5)
+			var at := HEAD_POS + radial * 700.0
+			draw_colored_polygon(PackedVector2Array([at + tangent * 40.0, at - tangent * 12.0 + radial * 24.0, at - tangent * 12.0 - radial * 24.0]), Color(C_UNPARRY, 0.15 + 0.4 * k))
+		return
+	var end := beam_end(float(atk["th"]))
+	var fl := randf_range(0.9, 1.1)
+	for e in EYES:
+		draw_line(e, end, Color(C_UNPARRY, 0.22), 70.0 * fl)
+		draw_line(e, end, Color(C_UNPARRY, 0.75), 30.0 * fl)
+		draw_line(e, end, Color(C_UNPARRY_CORE, 0.95), 9.0)
+	# 지나간 자리의 잔광
+	var trail_th: float = minf(BEAM_FROM, float(atk["th"]) + 0.25)
+	for j in 5:
+		var th := lerpf(float(atk["th"]), trail_th, (j + 1) / 5.0)
+		draw_line(HEAD_POS, beam_end(th), Color(C_UNPARRY, 0.08 * (1.0 - j / 5.0)), 24.0)
+	draw_circle(end, 60.0 * fl, Color(C_UNPARRY, 0.35))
+	draw_circle(end, 26.0, Color(C_UNPARRY_CORE, 0.9))
 
 
 ## 탄 = 패리할 수 있는 것 → 금색. 용암 덩어리는 붉은 겉불 + 금색 심

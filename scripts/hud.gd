@@ -81,6 +81,12 @@ func _draw() -> void:
 
 		else:
 			draw_arc(c, 8.0, 0.0, TAU, 20, Color(0.7, 0.7, 0.75, 0.5), 2.0)
+	# 차지 쿨다운: 다시 차지할 수 있을 때까지 주황 링이 차오른다
+	var cc := Vector2(86 + Player.GAUGE_MAX * 24 + 10, 94)
+	if pl.charge_cd > 0.0:
+		draw_arc(cc, 7.0, -PI * 0.5, -PI * 0.5 + TAU * (1.0 - pl.charge_cd / Player.CHARGE_COOLDOWN), 20, Color(1.0, 0.55, 0.2, 0.6), 2.5)
+	else:
+		draw_circle(cc, 5.0, Color(1.0, 0.55, 0.2, 0.9))
 
 	_draw_target_marker(s, boss)
 

@@ -15,9 +15,8 @@ const CAM_ZOOM := 0.72             # 기본 줌아웃 (튕겨 올라가도 표�
 const AIM_ZOOM := 0.82             # 방향 지정 중엔 물러나 표적을 넓게 본다
 const CHARGE_ZOOM := 0.85            # 차징 중에만 물러난다
 const AIM_SLOW := 0.08             # 방향 지정 중 월드 시간 배율
-const PERFECT_SLOW := 0.5          # PERFECT 패리 돌진 중 시간 배율 (타격 판정이 끝날 때까지)
-const PERFECT_SLOW_EASE := 0.15    # 슬로우가 풀리는 시간
-const LIVES := 3
+const DASH_SLOW := 0.5             # 패리 돌진 중 월드 시간 배율 (적중·종료 즉시 원래 속도). 플레이어는 항상 실시간
+const LIVES := 5                   # 피격 −1, 용암 −1
 const RESPAWN_DELAY := 1.3         # 용암에 빠진 뒤 재출격까지
 const RESPAWN_INVULN := 1.5
 const PLAT_SINK_TIME := 1.0        # 발사 후 발판이 가라앉는 시간
@@ -41,7 +40,6 @@ var run_time := 0.0
 var lives := LIVES
 var dead_t := 0.0
 var respawn_t := 0.0
-var slow_k := 1.0                  # PERFECT 슬로우 배율 (부드럽게 변함)
 var plat_on := true                # 발판 위에 설 수 있는가
 var plat_sink := 0.0               # 0 = 떠 있음, 1 = 가라앉음
 var plat_dir := 0.0                # +1 가라앉는 중, -1 떠오르는 중
@@ -112,7 +110,6 @@ func reset_run() -> void:
 	lives = LIVES
 	hitstop = 0.0
 	slowmo = 0.0
-	slow_k = 1.0
 	_raise_platform(true)
 	player.reset(spawn, spawn_on_platform)
 	hud.clear_banner()
@@ -168,19 +165,15 @@ func _physics_process(delta: float) -> void:
 		player.aim_left -= delta          # 방향 지정 시간은 실시간
 		if player.aim_left <= 0.0:
 			player.launch_parry_dash()
-	# PERFECT 패리 돌진: 타격 판정이 끝날 때까지 슬로우, 끝나면 부드럽게 풀림
-	var slow_target := PERFECT_SLOW if player.perfect_dash else 1.0
-	slow_k = move_toward(slow_k, slow_target, delta / PERFECT_SLOW_EASE * (1.0 - PERFECT_SLOW))
-	if player.perfect_dash:
-		slow_k = PERFECT_SLOW
+	# 슬로우는 월드에만: 방향 지정 중, 그리고 패리 돌진이 적중하거나 끝날 때까지
 	var dt := delta
 	if player.aim_phase:
 		dt *= AIM_SLOW
 	elif slowmo > 0.0:
 		slowmo -= delta
 		dt *= 0.3
-	else:
-		dt *= slow_k
+	elif player.dash_kind == "power":
+		dt *= DASH_SLOW
 	if state == State.PLAY:
 		run_time += dt
 	_update_platform(dt)
@@ -191,7 +184,7 @@ func _physics_process(delta: float) -> void:
 		if player.aim_phase else Player.CHARGE_SPEED * Player.CHARGE_DASH_TIME
 	boss.step(dt, player.position)
 	_drain_boss_events()
-	player.step(dt)
+	player.step(delta)
 	if state == State.PLAY:
 		_check_attacks()
 	elif state == State.RESPAWN:
@@ -233,6 +226,10 @@ func _update_camera(delta: float) -> void:
 
 func _check_attacks() -> void:
 	var p: Vector2 = player.position
+	var beam_push: Vector2 = boss.beam_hit(p, Player.RADIUS)   # 패리 불가: 회피 돌진(무적)으로만 피한다
+	if beam_push != Vector2.ZERO and not player.is_immune():
+		hurt_player(beam_push)
+		return
 	var reach: float = player.parry_reach()
 	for hb in boss.hitboxes(p):
 		if not boss.overlaps(hb, p, reach):
@@ -249,8 +246,8 @@ func _check_attacks() -> void:
 			return
 
 
-## 피격 = 스턴 (HP 없음). 잠시 조작을 잃고 추락 → 용암 위험
-func hurt_player(push: Vector2) -> void:
+## 피격 = 목숨 −1 + 스턴. 잠시 조작을 잃고 추락 → 용암 위험
+func hurt_player(push: Vector2, damage := true) -> void:
 	var p: Vector2 = player.position
 	player.on_hurt(push)
 	hitstop = 0.07
@@ -258,14 +255,20 @@ func hurt_player(push: Vector2) -> void:
 	hud.flash(0.25, Color(0.9, 0.1, 0.1))
 	fx.burst(p, 14, Color(0.9, 0.15, 0.15), 500.0)
 	sfx.play("hurt")
+	if damage:
+		lives -= 1
+		if lives <= 0:
+			player.frozen = true
+			fx.burst(p, 40, Color(0.9, 0.2, 0.15), 900.0, 0.8, 5.0)
+			_die()
 
 
-## 표적(부위·갑옷·심장)에 공격 돌진이 아닐 때 닿음 → 스턴
+## 표적(부위·갑옷·심장)에 공격 돌진이 아닐 때 닿음 → 튕겨남·스턴만 (피해 없음)
 func touch_hurt(hit: Dictionary, pos: Vector2) -> void:
 	var push: Vector2 = pos - boss.hit_center(hit)
 	if push.length() < 0.1:
 		push = Vector2.UP
-	hurt_player(push)
+	hurt_player(push, false)
 
 
 func _parry_feedback(p: Vector2, perfect: bool, hb: Dictionary) -> void:
@@ -304,6 +307,11 @@ func _drain_boss_events() -> void:
 				sfx.play("stomp", 2.0)
 				fx.burst(pos, 30, Color(1.0, 0.45, 0.15, 0.9), 700.0, 0.7, 5.0, 1200.0, Vector2.UP, PI * 0.4)
 				fx.ring(pos, Color(1.0, 0.5, 0.2, 0.6), 360.0, 0.35, 6.0)
+			"beam":                             # 패리 불가 레이저 발사
+				shake = maxf(shake, 16.0)
+				sfx.play("dash", 6.0, 0.0)
+				sfx.play("break", -4.0, 0.0)
+				hud.flash(0.12, Color(0.6, 0.1, 0.4))
 			"erupt":
 				sfx.play("bolt", -6.0)
 				shake = maxf(shake, 5.0)
@@ -409,6 +417,11 @@ func _respawn() -> void:
 	player.reset(SPAWN, true)
 	player.invuln = RESPAWN_INVULN
 	sfx.play("land", 0.0)
+
+
+## 패리 돌진 종료(적중 또는 빗나감): 패리로 밀려난 팔은 바로 제자리로
+func on_power_dash_end() -> void:
+	boss.release_stagger()
 
 
 func on_parry_launch(pos: Vector2, dir: Vector2) -> void:

@@ -18,8 +18,9 @@ const DASH_COOLDOWN := 0.1
 const CHARGE_TIME := 0.6         # 좌클릭을 이만큼 누르면 차지 완료 → 떼면 공격 돌진 (짧게 떼면 회피)
 const CHARGE_HOVER := 0.15       # 이 시간 이상 누르면 차지 자세(공중 정지)로 들어간다
 const CHARGE_AUTO := 0.5         # 차지 완료 후 이 시간이 지나면 자동 발사
-const CHARGE_SPEED := 2400.0     # 차지 돌진: 사거리 720px
-const CHARGE_DASH_TIME := 0.3
+const CHARGE_SPEED := 3600.0     # 차지 돌진: 빠르게 꽂힌다. 사거리 약 790px
+const CHARGE_DASH_TIME := 0.22
+const CHARGE_COOLDOWN := 1.5     # 차지 돌진 후 다시 차지할 수 있을 때까지 (그동안 좌클릭 = 즉시 회피)
 const CHARGE_DAMAGE := 1
 const CHARGE_GRACE := 0.5        # 차지 돌진이 빗나가 끝난 직후 무적
 const GAUGE_MAX := 3             # 회피 1칸, 차지 1칸, 패리 성공 시 가득. 자연 회복 없음
@@ -31,9 +32,9 @@ const PARRY_RELEASE_CD := 0.25   # 중간에 뗐을 때 재입력 대기
 const PARRY_REACH := 30.0        # 패리 판정은 몸보다 이만큼 넓다
 const AIM_TIME := 0.84           # 패리 성공 후 방향을 정하는 슬로우 시간(실시간 초)
 const AIM_TIME_PERFECT := 1.2
-const PARRY_DASH_SPEED := 2400.0 # 패리 돌진: 주력 공격
-const PARRY_DASH_SPEED_PERFECT := 2700.0
-const PARRY_DASH_TIME := 0.3
+const PARRY_DASH_SPEED := 3600.0 # 패리 돌진: 주력 공격. 월드가 느려져도 플레이어는 실시간
+const PARRY_DASH_SPEED_PERFECT := 4000.0
+const PARRY_DASH_TIME := 0.22
 const POWER_DAMAGE := 3
 const POWER_RADIUS := 8.0        # 패리 돌진은 타격 범위도 넓다
 const POWER_GRACE := 0.7
@@ -42,7 +43,7 @@ const BOUNCE_SIDE := 250.0       # 들어온 방향의 반대쪽으로 튕기는
 const BOUNCE_STEER := 750.0      # 튕길 때 마우스 좌우 방향으로 더하는 가로 속도 (좌우 조종)
 const BOUNCE_THRUST := 2.0       # 튕겨나는 동안 좌우 추진 배율
 const STRIKE_SHIELD := 0.9       # 직격 후 튕겨나는 동안 무적 시간
-const STUN_TIME := 0.6           # 피격(공격/표적 접촉) → 조작 불가
+const STUN_TIME := 0.9           # 피격(공격/표적 접촉) → 조작 불가
 const STUN_INVULN := 0.4         # 스턴이 끝난 뒤 추가 무적
 const HURT_PUSH := 500.0
 const HURT_POP := 380.0          # 맞으면 살짝 솟구친다
@@ -71,7 +72,8 @@ var on_platform := false
 var dash_t := 0.0
 var dash_kind := ""              # "evade" | "charge" | "power"
 var dash_total := EVADE_TIME
-var perfect_dash := false        # PERFECT 패리 돌진 중 (슬로우모션)
+var perfect_dash := false        # PERFECT 패리 돌진
+var charge_cd := 0.0             # 차지 쿨다운
 var charging := false            # 좌클릭 누르는 중
 var charge_t := 0.0
 var charged_notified := false
@@ -108,6 +110,7 @@ func reset(pos: Vector2, platform := false) -> void:
 	charge_t = 0.0
 	bouncing = false
 	dash_cd = 0.0
+	charge_cd = 0.0
 	parry_active = false
 	parry_held = false
 	parry_cd = 0.0
@@ -151,6 +154,9 @@ func press_dash() -> void:
 		return
 	if charging or not can_dash():
 		return
+	if charge_cd > 0.0:                 # 차지 쿨다운 중엔 바로 회피
+		try_dash()
+		return
 	gauge -= 1
 	charging = true
 	charge_t = 0.0
@@ -188,6 +194,7 @@ func _dash(kind: String) -> void:
 	if kind == "charge":
 		spd = CHARGE_SPEED
 		dash_total = CHARGE_DASH_TIME
+		charge_cd = CHARGE_COOLDOWN
 	dash_t = dash_total
 	dash_cd = dash_total + DASH_COOLDOWN
 	vel = aim * spd
@@ -223,7 +230,7 @@ func on_parry_success(perfect: bool) -> void:
 	parry_active = false
 	parry_cd = 0.0
 	dash_t = 0.0
-	dash_kind = ""
+	_end_dash()
 	on_platform = false
 	launch_t = 0.0
 	vel = Vector2.ZERO
@@ -278,6 +285,7 @@ func step(dt: float) -> void:
 		return
 
 	dash_cd = maxf(0.0, dash_cd - dt)
+	charge_cd = maxf(0.0, charge_cd - dt)
 	parry_cd = maxf(0.0, parry_cd - dt)
 	invuln = maxf(0.0, invuln - dt)
 	shield_t = maxf(0.0, shield_t - dt)
@@ -320,8 +328,7 @@ func step(dt: float) -> void:
 			if grace > 0.0:                   # 무적 여유는 패리 돌진/차지 돌진만
 				shield_max = grace
 				shield_t = grace
-			dash_kind = ""
-			perfect_dash = false
+			_end_dash()
 	elif launch_t > 0.0:
 		pass                                  # 발사 직후: 중력 없이 곧게 솟는다
 	else:
@@ -401,12 +408,21 @@ func _move(dt: float) -> void:
 			on_platform = true
 			vel = Vector2.ZERO
 			dash_t = 0.0
-			dash_kind = ""
+			_end_dash()
 			return
 		# 용암
 		if position.y > -RADIUS * 0.3:
 			main.on_lava(position)
 			return
+
+
+## 공격 돌진 종료(적중·빗나감 모두). 패리 돌진이 끝나면 슬로우가 풀리고 밀려난 팔이 돌아간다
+func _end_dash() -> void:
+	var was_power := dash_kind == "power"
+	dash_kind = ""
+	perfect_dash = false
+	if was_power:
+		main.on_power_dash_end()
 
 
 func _on_strike(hit: Dictionary) -> void:
@@ -418,8 +434,7 @@ func _on_strike(hit: Dictionary) -> void:
 	gauge = mini(GAUGE_MAX, gauge + 1)           # 타격 성공 → 돌진 연료 1칸 환급
 	main.on_strike(hit, POWER_DAMAGE if power else CHARGE_DAMAGE, position, dir, power)
 	dash_t = 0.0
-	dash_kind = ""
-	perfect_dash = false
+	_end_dash()
 	bouncing = true
 	shield_t = STRIKE_SHIELD                     # 튕겨나는 동안 무적
 	shield_max = STRIKE_SHIELD
