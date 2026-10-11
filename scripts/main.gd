@@ -10,14 +10,20 @@ const Hud := preload("res://scripts/hud.gd")
 const Sfx := preload("res://scripts/sfx.gd")
 const PauseMenu := preload("res://scripts/pause_menu.gd")
 
-const SPAWN := Vector2(650, -9)
+const SPAWN := Vector2(650, -52)   # 시작 발판 위 (Player.PLAT_CENTER - 반지름)
 const CAM_ZOOM := 0.72             # 기본 줌아웃 (튕겨 올라가도 표적이 시야에 남도록)
 const AIM_ZOOM := 0.82             # 방향 지정 중엔 물러나 표적을 넓게 본다
 const CHARGE_ZOOM := 0.85            # 차징 중에만 물러난다
 const AIM_SLOW := 0.08             # 방향 지정 중 월드 시간 배율
-const FALL_MIN_HEIGHT := 350.0     # 이 높이 이상에서 바닥에 떨어지면 '추락'
+const PERFECT_SLOW := 0.5          # PERFECT 패리 돌진 중 시간 배율 (타격 판정이 끝날 때까지)
+const PERFECT_SLOW_EASE := 0.15    # 슬로우가 풀리는 시간
+const LIVES := 3
+const RESPAWN_DELAY := 1.3         # 용암에 빠진 뒤 재출격까지
+const RESPAWN_INVULN := 1.5
+const PLAT_SINK_TIME := 1.0        # 발사 후 발판이 가라앉는 시간
+const PLAT_RISE_TIME := 0.6
 
-enum State { PLAY, WON, DEAD }
+enum State { PLAY, WON, DEAD, RESPAWN }
 
 var player
 var boss
@@ -32,9 +38,16 @@ var hitstop := 0.0
 var slowmo := 0.0
 var shake := 0.0
 var run_time := 0.0
-var falls := 0
+var lives := LIVES
 var dead_t := 0.0
+var respawn_t := 0.0
+var slow_k := 1.0                  # PERFECT 슬로우 배율 (부드럽게 변함)
+var plat_on := true                # 발판 위에 설 수 있는가
+var plat_sink := 0.0               # 0 = 떠 있음, 1 = 가라앉음
+var plat_dir := 0.0                # +1 가라앉는 중, -1 떠오르는 중
+var lava                           # 바닥(용암·발판) 노드
 var spawn := SPAWN
+var spawn_on_platform := true
 
 
 func _ready() -> void:
@@ -45,6 +58,7 @@ func _ready() -> void:
 			var xy := a.trim_prefix("--spawn=").split(",")
 			if xy.size() == 2:
 				spawn = Vector2(xy[0].to_float(), xy[1].to_float())
+				spawn_on_platform = false
 
 	var bg_layer := CanvasLayer.new()
 	bg_layer.layer = -10
@@ -52,7 +66,8 @@ func _ready() -> void:
 	bg = Background.new()
 	bg_layer.add_child(bg)
 
-	add_child(Ground.new())
+	lava = Ground.new()
+	add_child(lava)
 	boss = Boss.new()
 	add_child(boss)
 	player = Player.new()
@@ -91,16 +106,25 @@ func _ready() -> void:
 
 func reset_run() -> void:
 	boss.reset()
-	player.reset(spawn)
 	fx.clear()
 	state = State.PLAY
 	run_time = 0.0
-	falls = 0
+	lives = LIVES
 	hitstop = 0.0
 	slowmo = 0.0
+	slow_k = 1.0
+	_raise_platform(true)
+	player.reset(spawn, spawn_on_platform)
 	hud.clear_banner()
 	cam.position = player.position + Vector2(0, -80)
 	cam.reset_smoothing()
+
+
+## 발판을 띄운다 (instant: 바로 / 아니면 용암에서 솟아오르는 연출)
+func _raise_platform(instant: bool) -> void:
+	plat_on = true
+	plat_dir = -1.0
+	plat_sink = 0.0 if instant else 1.0
 
 
 func _unhandled_input(e: InputEvent) -> void:
@@ -112,9 +136,9 @@ func _unhandled_input(e: InputEvent) -> void:
 				if player.aim_phase:
 					player.launch_parry_dash()
 				else:
-					player.charge_start()      # 누르고 있으면 차지, 떼면 돌진
+					player.press_dash()        # 발판 위면 발사. 짧게 떼면 회피, 꾹 눌러 차지하면 공격
 			else:
-				player.charge_release()
+				player.release_dash()
 		elif e.button_index == MOUSE_BUTTON_RIGHT:
 			_parry_input(e.pressed)
 	elif e is InputEventKey and not e.echo:
@@ -144,25 +168,52 @@ func _physics_process(delta: float) -> void:
 		player.aim_left -= delta          # 방향 지정 시간은 실시간
 		if player.aim_left <= 0.0:
 			player.launch_parry_dash()
+	# PERFECT 패리 돌진: 타격 판정이 끝날 때까지 슬로우, 끝나면 부드럽게 풀림
+	var slow_target := PERFECT_SLOW if player.perfect_dash else 1.0
+	slow_k = move_toward(slow_k, slow_target, delta / PERFECT_SLOW_EASE * (1.0 - PERFECT_SLOW))
+	if player.perfect_dash:
+		slow_k = PERFECT_SLOW
 	var dt := delta
 	if player.aim_phase:
 		dt *= AIM_SLOW
 	elif slowmo > 0.0:
 		slowmo -= delta
 		dt *= 0.3
+	else:
+		dt *= slow_k
 	if state == State.PLAY:
 		run_time += dt
-	boss.strike_glow = player.dash_t > 0.0
+	_update_platform(dt)
+	boss.strike_glow = player.is_attacking()
+	boss.focus_glow = 1.0 if (player.aim_phase or player.is_charged()) else 0.0
+	boss.focus_from = player.position
+	boss.focus_reach = (Player.PARRY_DASH_SPEED_PERFECT if player.aim_perfect else Player.PARRY_DASH_SPEED) * Player.PARRY_DASH_TIME \
+		if player.aim_phase else Player.CHARGE_SPEED * Player.CHARGE_DASH_TIME
 	boss.step(dt, player.position)
 	_drain_boss_events()
 	player.step(dt)
 	if state == State.PLAY:
 		_check_attacks()
+	elif state == State.RESPAWN:
+		respawn_t -= delta
+		if respawn_t <= 0.0:
+			_respawn()
 	elif state == State.DEAD:
 		dead_t -= delta
 		if dead_t <= 0.0:
 			reset_run()
 	fx.step(dt)
+
+
+func _update_platform(dt: float) -> void:
+	if plat_dir > 0.0:
+		plat_sink = minf(1.0, plat_sink + dt / PLAT_SINK_TIME)
+	elif plat_dir < 0.0:
+		plat_sink = maxf(0.0, plat_sink - dt / PLAT_RISE_TIME)
+	lava.plat_center = Player.PLAT_CENTER
+	lava.plat_half = Player.PLAT_HALF
+	lava.plat_sink = plat_sink
+	lava.plat_crack = clampf(plat_sink * 3.0, 0.0, 1.0) if plat_dir > 0.0 else 0.0
 
 
 func _update_camera(delta: float) -> void:
@@ -198,6 +249,7 @@ func _check_attacks() -> void:
 			return
 
 
+## 피격 = 스턴 (HP 없음). 잠시 조작을 잃고 추락 → 용암 위험
 func hurt_player(push: Vector2) -> void:
 	var p: Vector2 = player.position
 	player.on_hurt(push)
@@ -206,11 +258,9 @@ func hurt_player(push: Vector2) -> void:
 	hud.flash(0.25, Color(0.9, 0.1, 0.1))
 	fx.burst(p, 14, Color(0.9, 0.15, 0.15), 500.0)
 	sfx.play("hurt")
-	if player.hp <= 0:
-		_die()
 
 
-## 갑옷/심장에 돌진 중이 아닐 때 닿음 → 피해
+## 표적(부위·갑옷·심장)에 공격 돌진이 아닐 때 닿음 → 스턴
 func touch_hurt(hit: Dictionary, pos: Vector2) -> void:
 	var push: Vector2 = pos - boss.hit_center(hit)
 	if push.length() < 0.1:
@@ -249,11 +299,14 @@ func _drain_boss_events() -> void:
 	for ev in boss.events:
 		var pos: Vector2 = ev["pos"]
 		match ev["type"]:
-			"stomp":
+			"stomp":                            # 발 구르기 → 용암이 튄다
 				shake = maxf(shake, 14.0)
 				sfx.play("stomp", 2.0)
-				fx.burst(pos, 30, Color(0.55, 0.57, 0.6, 0.8), 600.0, 0.7, 5.0, 900.0, Vector2.UP, PI * 0.45)
-				fx.ring(pos, Color(0.8, 0.8, 0.8, 0.6), 420.0, 0.35, 6.0)
+				fx.burst(pos, 30, Color(1.0, 0.45, 0.15, 0.9), 700.0, 0.7, 5.0, 1200.0, Vector2.UP, PI * 0.4)
+				fx.ring(pos, Color(1.0, 0.5, 0.2, 0.6), 360.0, 0.35, 6.0)
+			"erupt":
+				sfx.play("bolt", -6.0)
+				shake = maxf(shake, 5.0)
 			"swing":
 				shake = maxf(shake, 10.0)
 				sfx.play("dash", 4.0, 0.0)
@@ -293,18 +346,69 @@ func _drain_boss_events() -> void:
 
 
 # ── player.gd 에서 호출 ───────────────────────────────
-func on_dash(pos: Vector2, dir: Vector2, level := 1) -> void:
-	sfx.play("dash", -6.0 + 2.0 * level)
-	fx.burst(pos, 8 + 6 * level, Color(0.9, 0.9, 0.95, 0.7), 300.0 + 150.0 * level, 0.25 + 0.05 * level, 2.0 + 0.5 * level, 0.0, -dir, 0.5)
-	if level > 1:
-		shake = maxf(shake, 5.0 * level)
-		fx.ring(pos, Color(1.0, 0.6, 0.3), 100.0 + 40.0 * level, 0.3, 5.0)
+## kind: "evade"(회피, 청백·가볍게) / "charge"(공격, 주황·묵직하게)
+func on_dash(pos: Vector2, dir: Vector2, kind := "evade") -> void:
+	if kind == "charge":
+		sfx.play("dash", 2.0)
+		shake = maxf(shake, 8.0)
+		fx.burst(pos, 22, Color(1.0, 0.6, 0.3, 0.9), 700.0, 0.35, 3.0, 0.0, -dir, 0.5)
+		fx.ring(pos, Color(1.0, 0.6, 0.3), 160.0, 0.3, 5.0)
+	else:
+		sfx.play("dash", -6.0)
+		fx.burst(pos, 12, Color(0.6, 0.85, 1.0, 0.6), 420.0, 0.25, 2.0, 0.0, -dir, 0.5)
 
 
-func on_charge_tick(pos: Vector2, level: int) -> void:
-	sfx.play("bolt", -2.0)
-	shake = maxf(shake, 3.0 + level)
-	fx.ring(pos, Color(1.0, 0.7, 0.35), 70.0 + 18.0 * level, 0.25, 4.0)
+## 차지 완료
+func on_charged(pos: Vector2) -> void:
+	sfx.play("bolt", -2.0, 0.0)
+	shake = maxf(shake, 4.0)
+	fx.ring(pos, Color(1.0, 0.6, 0.3), 90.0, 0.25, 4.0)
+
+
+## 스턴에서 회복: 다시 조종할 수 있다는 신호
+func on_stun_recover(pos: Vector2) -> void:
+	sfx.play("land", -2.0, 0.0)
+	fx.ring(pos, Color(0.85, 0.95, 1.0), 70.0, 0.25, 4.0)
+
+
+## 발판에서 첫 돌진 = 발사. 발판은 금이 가며 가라앉는다
+func on_launch(pos: Vector2) -> void:
+	plat_on = false
+	plat_dir = 1.0
+	shake = maxf(shake, 14.0)
+	sfx.play("perfect", -4.0, 0.0)
+	sfx.play("dash", 4.0, 0.0)
+	fx.burst(pos + Vector2(0, 20), 40, Color(1.0, 0.6, 0.3), 900.0, 0.6, 4.0, 900.0, Vector2.DOWN, 0.9)
+	fx.ring(pos, Color(0.85, 0.95, 1.0), 200.0, 0.35, 6.0)
+
+
+## 용암에 빠짐: 목숨 하나를 잃고 시작 발판에서 재출격 (부순 부위는 그대로)
+func on_lava(pos: Vector2) -> void:
+	if state != State.PLAY:
+		return
+	player.frozen = true
+	player.visible = false
+	lives -= 1
+	shake = 20.0
+	hitstop = 0.1
+	sfx.play("stomp", 2.0)
+	sfx.play("break", 0.0)
+	fx.burst(Vector2(pos.x, -10), 50, Color(1.0, 0.45, 0.15), 900.0, 0.9, 5.0, 1400.0, Vector2.UP, 0.7)
+	fx.ring(Vector2(pos.x, -10), Color(1.0, 0.5, 0.2), 160.0, 0.4, 6.0)
+	hud.flash(0.3, Color(1.0, 0.3, 0.1))
+	if lives <= 0:
+		_die()
+	else:
+		state = State.RESPAWN
+		respawn_t = RESPAWN_DELAY
+
+
+func _respawn() -> void:
+	state = State.PLAY
+	_raise_platform(false)
+	player.reset(SPAWN, true)
+	player.invuln = RESPAWN_INVULN
+	sfx.play("land", 0.0)
 
 
 func on_parry_launch(pos: Vector2, dir: Vector2) -> void:
@@ -372,19 +476,10 @@ func on_heart_pierced(pos: Vector2) -> void:
 	fx.ring(pos, Color(1, 0.9, 0.7), 500.0, 0.8, 10.0)
 	sfx.play("perfect", 4.0, 0.0)
 	sfx.play("win", 0.0, 0.0)
-	hud.banner("심장 관통", "%.1f초 · 추락 %d회 · R: 다시" % [run_time, falls])
-
-
-func on_landed(peak_y: float) -> void:
-	sfx.play("land", -6.0)
-	fx.burst(player.position + Vector2(0, 8), 10, Color(0.55, 0.57, 0.6, 0.7), 260.0, 0.4, 3.0, 600.0, Vector2.UP, PI * 0.4)
-	if peak_y < -FALL_MIN_HEIGHT and state == State.PLAY:
-		falls += 1
-		shake = maxf(shake, 6.0)
+	hud.banner("심장 관통", "%.1f초 · 남은 목숨 %d · R: 다시" % [run_time, lives])
 
 
 func _die() -> void:
 	state = State.DEAD
-	dead_t = 2.2
-	slowmo = 0.6
+	dead_t = 2.5
 	hud.banner("부서졌다", "잠시 후 재시작 (R: 즉시)")

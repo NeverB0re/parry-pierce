@@ -42,27 +42,36 @@ const PART_R := [55.0, 55.0, 70.0, 70.0]
 const OPEN_TIME := 1.6                      # 가슴이 열리는 연출 시간
 
 # ── 공격 튜닝 ──────────────────────────────────────────
-const LOW_ZONE_Y := -650.0           # 이보다 아래(바닥 근처)면 내려찍기 위주
-const STOMP_LIFT_TIME := 0.9
+const LOW_ZONE_Y := -900.0           # 이보다 아래(용암 근처)면 용암 분출 위주
+const STOMP_LIFT_TIME := 0.7         # 용암 분출: 발을 들어(경고) 구르면 용암이 솟는다
 const STOMP_LIFT_H := 420.0
 const STOMP_SLAM_TIME := 0.14
-const WAVE_SPEED := 850.0
-const WAVE_H := 70.0
-const WAVE_HALF := 45.0
+const ERUPT_SPOTS := 4               # 분출 지점 수 (하나는 플레이어 바로 아래)
+const ERUPT_GLOBS := 4               # 지점마다 솟는 용암 덩어리 수
+const ERUPT_GAP := 0.1               # 덩어리 사이 간격
+const GLOB_G := 600.0                # 용암 덩어리 중력
+const GLOB_OVERSHOOT := 150.0        # 플레이어 높이보다 이만큼 위까지 솟는다
 const SWING_L := 1180.0              # 팔 전체를 곧게 뻗어 휩쓰는 반경
 const SWING_WIND := 1.0              # 경고(휩쓸 부채꼴이 표시된다)
 const SWING_TIME := 0.65
 const SWING_HOLD := 0.25
 const SWING_SPAN := 2.6              # 휩쓰는 각도(라디안, 약 150도)
+const ELBOW_AT := 0.55               # 휩쓰는 동안 팔꿈치는 어깨~주먹 선의 이 지점에 고정 (곧은 팔)
+const RECOIL_ANGLE := 0.5            # 패리당하면 휩쓸던 반대쪽으로 이만큼(라디안) 밀려난다
+const RECOIL_TIME := 0.7
+const STAGGER_TIME := 1.0            # 밀려난 뒤 팔이 멈춰 관절이 드러나는 시간
 const FIST_R := 105.0
-const BOLT_SPEED := 400.0
+const BOLT_SPEED := 480.0
 const BOLT_SPEEDUP := 0.1            # 부위 하나 부술 때마다 탄 속도 +10%
 const BOLT_SPEEDUP_CORE := 0.15      # 최종 페이즈 추가 가속
-const BOLT_WARMUP := 0.6             # 발사 직후 느리게 출발해 점점 빨라진다(반응 시간)
+const BOLT_WARMUP := 0.3             # 발사 직후 50% 속도에서 출발해 이 시간 동안 100%까지
+const BOLT_WARMUP_FLOOR := 0.5
 const VOLLEY_CHARGE := 1.0
+const VOLLEY_INTERVAL := 0.42
 const BURST_CHARGE := 1.3
+const BURST_SPEED := Vector2(264.0, 408.0)
 const BOLT_R := 16.0
-const ATTACK_GAP := Vector2(1.2, 2.2)   # 공격 사이 쉬는 시간
+const ATTACK_GAP := Vector2(1.0, 1.8)   # 공격 사이 쉬는 시간
 
 # ── 색 ─────────────────────────────────────────────────
 const C_BODY := Color(0.075, 0.08, 0.10)
@@ -75,6 +84,8 @@ const C_CAVITY := Color(0.10, 0.03, 0.04)
 const C_HEART := Color(1.0, 0.42, 0.22)
 const C_EYE := Color(1.0, 0.78, 0.42)
 const C_WARN := Color(1.0, 0.3, 0.25)
+const C_PARRY := Color(1.0, 0.88, 0.35)          # 패리할 수 있는 것 = 금색 (탄, 휩쓰는 팔)
+const C_LAVA := Color(1.0, 0.35, 0.12)
 
 var phase := 1
 var open_t := 0.0
@@ -84,15 +95,16 @@ var plates: Array[int] = []
 var plate_flash: Array[float] = []
 var feet: Array[Vector2] = []
 var fists: Array[Vector2] = []
-var arm_prefer: Array[Vector2] = []  # 팔꿈치가 굽는 쪽
 var debris: Array[Dictionary] = []   # 부서져 떨어진 부위
 var atk: Dictionary = {}
 var bolts: Array[Dictionary] = []
-var waves: Array[Dictionary] = []
 var next_t := 2.5
 var eye_glow := 0.0
 var cannon_glow: Array[float] = [0.0, 0.0]   # 발사 전 포구가 달아오르는 정도
-var strike_glow := false             # 플레이어가 돌진 중 = 타격점이 드러난다
+var strike_glow := false             # 플레이어가 공격 돌진 중 = 타격점이 드러난다
+var focus_glow := 0.0                # 방향 지정·차지 중: 노릴 수 있는 표적 강조 (0~1)
+var focus_from := Vector2.ZERO       # 강조 기준 위치(플레이어)
+var focus_reach := 0.0               # 이 거리 안의 표적은 더 밝게
 var dead := false
 var death_t := 0.0
 var t := 0.0
@@ -121,13 +133,9 @@ func reset() -> void:
 	fists.clear()
 	fists.append(FIST_IDLE[0])
 	fists.append(FIST_IDLE[1])
-	arm_prefer.clear()
-	arm_prefer.append(Vector2(-1.0, 0.35))
-	arm_prefer.append(Vector2(1.0, 0.35))
 	debris.clear()
 	atk = {}
 	bolts.clear()
-	waves.clear()
 	next_t = 2.5
 	eye_glow = 0.0
 	cannon_glow = [0.0, 0.0]
@@ -310,7 +318,31 @@ func knee_of(i: int) -> Vector2:
 func elbow_of(a: int) -> Vector2:
 	if not part_alive(2 + a):              # 부서진 팔: 위팔만 축 늘어져 있다
 		return SHOULDERS[a] + Vector2((1.0 if a == 1 else -1.0) * 90.0, 430.0)
-	return _joint(SHOULDERS[a], fists[a], ARM_SEG, arm_prefer[a])
+	var bent := _arm_bent(a)
+	if atk.get("kind", "") == "swing" and atk.get("arm", -1) == a:
+		var straight: Vector2 = SHOULDERS[a].lerp(fists[a], ELBOW_AT)   # 휩쓰는 동안은 곧은 팔 → 관절 위치를 예측 가능
+		var tt: float = atk["t"]
+		match atk["phase"]:
+			"wind":
+				return bent.lerp(straight, minf(1.0, tt / 0.3))
+			"return":
+				return straight.lerp(bent, minf(1.0, tt / 0.4))
+		return straight
+	return bent
+
+
+## 팔꿈치: 항상 팔 진행 방향의 같은 쪽(바깥)으로 굽힌다 → 팔이 돌아도 관절이 반대편으로 튀지 않는다
+func _arm_bent(a: int) -> Vector2:
+	var sh: Vector2 = SHOULDERS[a]
+	var d := fists[a] - sh
+	var half := d.length() * 0.5
+	var h := sqrt(maxf(0.0, ARM_SEG * ARM_SEG - half * half))
+	var perp := d.orthogonal().normalized() * (1.0 if a == 1 else -1.0)
+	return sh + d * 0.5 + perp * h
+
+
+func is_staggered(a: int) -> bool:
+	return atk.get("kind", "") == "swing" and atk.get("arm", -1) == a and atk["phase"] == "stagger"
 
 
 ## 두 마디 관절 위치. prefer 쪽으로 굽힌다.
@@ -330,14 +362,6 @@ func hitboxes(ppos: Vector2) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	if dead:
 		return out
-	if atk.get("kind", "") == "stomp" and atk["phase"] == "slam":
-		var i: int = atk["foot"]
-		out.append({"id": "foot", "rect": foot_rect(i), "pos": feet[i],
-			"push": Vector2(signf(ppos.x - feet[i].x) * 0.6, -1.0).normalized()})
-	for w in waves:
-		var wx: float = w["x"]
-		out.append({"id": "wave", "rect": Rect2(wx - WAVE_HALF, -WAVE_H, WAVE_HALF * 2.0, WAVE_H), "pos": Vector2(wx, -WAVE_H * 0.5),
-			"push": Vector2(float(w["dir"]) * 0.45, -1.0).normalized(), "wave": w})
 	if atk.get("kind", "") == "swing" and atk["phase"] == "swing":
 		var a: int = atk["arm"]
 		var sh: Vector2 = SHOULDERS[a]
@@ -382,10 +406,6 @@ func overlaps(hb: Dictionary, p: Vector2, r: float) -> bool:
 
 func on_parried(hb: Dictionary) -> void:
 	match hb["id"]:
-		"foot":
-			atk["phase"] = "recoil"; atk["t"] = 0.0; atk["from"] = feet[int(atk["foot"])]
-		"wave":
-			waves.erase(hb["wave"])
 		"arm":
 			atk["phase"] = "recoil"; atk["t"] = 0.0; atk["th_from"] = atk["th"]
 		"bolt":
@@ -395,8 +415,6 @@ func on_parried(hb: Dictionary) -> void:
 func on_hit_player(hb: Dictionary) -> void:
 	if hb["id"] == "bolt":
 		bolts.erase(hb["bolt"])
-	elif hb["id"] == "wave":
-		waves.erase(hb["wave"])
 
 
 func die() -> void:
@@ -404,7 +422,6 @@ func die() -> void:
 	death_t = 0.0
 	atk = {}
 	bolts.clear()
-	waves.clear()
 
 
 # ── 진행 ───────────────────────────────────────────────
@@ -428,7 +445,6 @@ func step(dt: float, ppos: Vector2) -> void:
 	for i in 2:
 		cannon_glow[i] = move_toward(cannon_glow[i], 0.0, dt * 2.0)
 	_step_bolts(dt)
-	_step_waves(dt)
 	if atk.is_empty():
 		next_t -= dt
 		if next_t <= 0.0:
@@ -436,7 +452,7 @@ func step(dt: float, ppos: Vector2) -> void:
 	else:
 		atk["t"] = float(atk["t"]) + dt
 		match atk["kind"]:
-			"stomp": _step_stomp(dt, ppos)
+			"erupt": _step_erupt(ppos)
 			"swing": _step_swing(dt, ppos)
 			"volley": _step_volley(ppos)
 			"burst": _step_burst()
@@ -445,8 +461,6 @@ func step(dt: float, ppos: Vector2) -> void:
 
 func _finish() -> void:
 	atk = {}
-	arm_prefer[0] = Vector2(-1.0, 0.35)
-	arm_prefer[1] = Vector2(1.0, 0.35)
 	if part_alive(2) == false:
 		fists[0] = FIST_IDLE[0]
 	if part_alive(3) == false:
@@ -458,23 +472,22 @@ func _choose(ppos: Vector2) -> void:
 	var roll := randf()
 	var can_shoot := phase == 3 or part_alive(0) or part_alive(1)
 	var arm := _swing_arm(ppos)
-	if ppos.y > LOW_ZONE_Y:
-		if roll < 0.65 or not can_shoot:
-			_start_stomp(ppos)
-		elif roll < 0.85:
-			atk = {"kind": "volley", "t": 0.0, "shots": 0}
-		else:
-			atk = {"kind": "burst", "t": 0.0}
-	elif arm >= 0 and (roll < 0.5 or not can_shoot):
+	if ppos.y > LOW_ZONE_Y and roll < 0.6:      # 용암 근처: 아래에서 솟는 탄막 위주
+		_start_erupt(ppos)
+		return
+	if roll < 0.22:
+		_start_erupt(ppos)
+		return
+	if arm >= 0 and (roll < 0.6 or not can_shoot):
 		atk = {"kind": "swing", "phase": "wind", "t": 0.0, "arm": arm}
 		_aim_swing(arm, ppos)
 	elif can_shoot:
-		if roll < 0.75:
+		if roll < 0.82:
 			atk = {"kind": "volley", "t": 0.0, "shots": 0}
 		else:
 			atk = {"kind": "burst", "t": 0.0}
 	else:
-		next_t = 0.5
+		_start_erupt(ppos)
 		return
 	_setup_origin(ppos)
 
@@ -511,18 +524,47 @@ func _set_glow(c: int, v: float) -> void:
 		cannon_glow[c] = v
 
 
-func _start_stomp(ppos: Vector2) -> void:
+## 용암 분출: 발을 들었다 구르면 용암 표면 여러 곳(하나는 플레이어 바로 아래)에서 덩어리가 솟구친다
+func _start_erupt(ppos: Vector2) -> void:
 	var i := 1 if ppos.x >= 0.0 else 0
-	atk = {"kind": "stomp", "phase": "lift", "t": 0.0, "foot": i, "from": feet[i], "tx": _foot_x(i, ppos.x)}
+	var spots: Array[float] = [clampf(ppos.x, -1080.0, 1080.0)]
+	while spots.size() < ERUPT_SPOTS:
+		var x := randf_range(-1080.0, 1080.0)
+		var ok := true
+		for sx in spots:
+			if absf(sx - x) < 220.0:
+				ok = false
+		if ok:
+			spots.append(x)
+	var h := clampf(-ppos.y, 300.0, 2800.0) + GLOB_OVERSHOOT
+	atk = {"kind": "erupt", "t": 0.0, "foot": i, "spots": spots, "h": h, "speed": sqrt(2.0 * GLOB_G * h), "fired": 0, "slammed": false}
 
 
-func _foot_x(i: int, x: float) -> float:
-	var rx: float = FOOT_REST[i].x
-	return clampf(x, rx - 150.0, rx + 150.0)
-
-
-func _set_prefer(a: int, th: float, s: float) -> void:
-	arm_prefer[a] = -Vector2(-s * sin(th), cos(th))   # 팔꿈치는 휘두르는 방향의 뒤쪽으로 굽는다
+func _step_erupt(_ppos: Vector2) -> void:
+	var i: int = atk["foot"]
+	var tt: float = atk["t"]
+	var rest: Vector2 = FOOT_REST[i]
+	var slam_at := STOMP_LIFT_TIME + STOMP_SLAM_TIME
+	if tt < STOMP_LIFT_TIME:
+		feet[i] = rest.lerp(rest + Vector2(0, -STOMP_LIFT_H), smoothstep(0.0, 1.0, tt / STOMP_LIFT_TIME))
+		return
+	if tt < slam_at:
+		var k := (tt - STOMP_LIFT_TIME) / STOMP_SLAM_TIME
+		feet[i].y = lerpf(-STOMP_LIFT_H, 0.0, k * k)
+		return
+	feet[i] = rest
+	if not atk["slammed"]:
+		atk["slammed"] = true
+		events.append({"type": "stomp", "pos": rest})
+	var fired: int = atk["fired"]
+	if fired < ERUPT_GLOBS and tt >= slam_at + fired * ERUPT_GAP:
+		for x in atk["spots"]:
+			var v := Vector2(randf_range(-40.0, 40.0), -float(atk["speed"]) * randf_range(0.92, 1.0))
+			bolts.append({"pos": Vector2(x, -12.0), "vel": v, "life": 9.0, "age": BOLT_WARMUP, "g": GLOB_G, "lava": true})
+		events.append({"type": "erupt", "pos": Vector2(float(atk["spots"][0]), 0.0)})
+		atk["fired"] = fired + 1
+	elif fired >= ERUPT_GLOBS and tt >= slam_at + ERUPT_GLOBS * ERUPT_GAP + 0.3:
+		_finish()
 
 
 ## 플레이어 방향을 가운데 두고 SWING_SPAN 만큼 휩쓰는 각도 범위를 정한다 (팔 방향 = (s*cos, sin))
@@ -542,55 +584,10 @@ func _arm_fist(a: int, th: float) -> Vector2:
 	return SHOULDERS[a] + Vector2(s * cos(th), sin(th)) * SWING_L
 
 
-func _step_stomp(dt: float, ppos: Vector2) -> void:
-	var i: int = atk["foot"]
-	var rest_x: float = FOOT_REST[i].x
-	var tt: float = atk["t"]
-	match atk["phase"]:
-		"lift":
-			if tt < STOMP_LIFT_TIME * 0.7:
-				atk["tx"] = _foot_x(i, ppos.x)
-			var k := smoothstep(0.0, 1.0, tt / STOMP_LIFT_TIME)
-			var from: Vector2 = atk["from"]
-			feet[i] = from.lerp(Vector2(float(atk["tx"]), -STOMP_LIFT_H), k)
-			if tt >= STOMP_LIFT_TIME:
-				atk["phase"] = "hold"; atk["t"] = 0.0
-		"hold":
-			feet[i].y = -STOMP_LIFT_H + sin(tt * 60.0) * 4.0
-			if tt >= 0.12:
-				atk["phase"] = "slam"; atk["t"] = 0.0; atk["from"] = feet[i]
-		"slam":
-			var k := minf(1.0, tt / STOMP_SLAM_TIME)
-			var from: Vector2 = atk["from"]
-			feet[i].y = lerpf(from.y, 0.0, k * k)
-			if k >= 1.0:
-				feet[i].y = 0.0
-				var x := feet[i].x
-				waves.append({"x": x - 120.0, "dir": -1})
-				waves.append({"x": x + 120.0, "dir": 1})
-				events.append({"type": "stomp", "pos": Vector2(x, 0)})
-				atk["phase"] = "land"; atk["t"] = 0.0
-		"land":
-			feet[i].x = move_toward(feet[i].x, rest_x, 260.0 * dt)
-			if tt >= 0.6:
-				_finish()
-		"recoil":
-			var from: Vector2 = atk["from"]
-			feet[i].x = move_toward(feet[i].x, rest_x, 200.0 * dt)
-			if tt < 0.25:
-				feet[i].y = lerpf(from.y, from.y - 240.0, ease(tt / 0.25, 0.4))
-			else:
-				var k := minf(1.0, (tt - 0.25) / 0.7)
-				feet[i].y = lerpf(from.y - 240.0, 0.0, smoothstep(0.0, 1.0, k))
-				if k >= 1.0:
-					feet[i] = FOOT_REST[i]
-					_finish()
-
-
-## 팔 전체를 곧게 뻗어 부채꼴로 휩쓰는 큰 공격. 팔 어디에 닿아도 피해 → 패리하거나 돌진(무적)으로 뚫는다
+## 팔 전체를 곧게 뻗어 부채꼴로 휩쓰는 큰 공격. 팔 어디에 닿아도 피해 → 패리하거나 회피 돌진(무적)으로 빠져나간다
+## 패리당하면 휩쓸던 반대쪽으로 천천히 밀려난 뒤 잠시 멈춰 팔꿈치 관절이 드러난다
 func _step_swing(dt: float, ppos: Vector2) -> void:
 	var a: int = atk["arm"]
-	var s := 1.0 if a == 1 else -1.0
 	var tt: float = atk["t"]
 	var th0: float = atk["th0"]
 	var th1: float = atk["th1"]
@@ -601,7 +598,6 @@ func _step_swing(dt: float, ppos: Vector2) -> void:
 			var wind_th := th0 - 0.35 * sin(minf(1.0, tt / SWING_WIND) * PI)   # 휘두르기 전 살짝 뒤로 젖힘
 			atk["th"] = wind_th
 			fists[a] = fists[a].lerp(_arm_fist(a, wind_th), minf(1.0, dt * 6.0))
-			_set_prefer(a, wind_th, s)
 			if tt >= SWING_WIND:
 				atk["phase"] = "swing"; atk["t"] = 0.0
 				events.append({"type": "swing", "pos": fists[a]})
@@ -610,23 +606,24 @@ func _step_swing(dt: float, ppos: Vector2) -> void:
 			var th := lerpf(th0, th1, k * k * (3.0 - 2.0 * k) * 0.35 + k * 0.65)   # 거의 등속, 시작만 살짝 느리게
 			atk["th"] = th
 			fists[a] = _arm_fist(a, th)
-			_set_prefer(a, th, s)
 			if k >= 1.0:
 				atk["phase"] = "hold"; atk["t"] = 0.0
 		"hold":
 			if tt >= SWING_HOLD:
 				atk["phase"] = "return"; atk["t"] = 0.0
 		"recoil":
-			var k := minf(1.0, tt / 0.4)
-			var th := lerpf(float(atk["th_from"]), th0 - 0.6, ease(k, 0.4))
+			var k := minf(1.0, tt / RECOIL_TIME)
+			var th := float(atk["th_from"]) - RECOIL_ANGLE * (1.0 - (1.0 - k) * (1.0 - k))   # 감속하며 반대쪽으로
 			atk["th"] = th
 			fists[a] = _arm_fist(a, th)
-			_set_prefer(a, th, s)
 			if k >= 1.0:
+				atk["phase"] = "stagger"; atk["t"] = 0.0
+		"stagger":
+			if tt >= STAGGER_TIME:
 				atk["phase"] = "return"; atk["t"] = 0.0
-		"return":
-			fists[a] = fists[a].lerp(FIST_IDLE[a], minf(1.0, dt * 4.0))
-			if tt >= 0.9:
+		"return":                                  # 천천히 제자리로 (팔꿈치가 튀지 않게)
+			fists[a] = fists[a].lerp(FIST_IDLE[a], minf(1.0, dt * 3.0))
+			if tt >= 1.4:
 				fists[a] = FIST_IDLE[a]
 				_finish()
 
@@ -640,7 +637,7 @@ func _step_volley(ppos: Vector2) -> void:
 		atk["aim"] = (ppos - org).angle()          # 조준선이 플레이어를 따라간다
 		return
 	var shots: int = atk["shots"]
-	if tt >= VOLLEY_CHARGE + shots * 0.5:
+	if tt >= VOLLEY_CHARGE + shots * VOLLEY_INTERVAL:
 		var base := (ppos - org).angle()
 		atk["aim"] = base
 		for k in range(-2, 3):
@@ -661,7 +658,7 @@ func _step_burst() -> void:
 		return
 	for i in 18:
 		var ang := TAU * i / 18.0 + randf_range(-0.15, 0.15)
-		bolts.append({"pos": org, "vel": Vector2.from_angle(ang) * randf_range(220.0, 340.0) * bolt_mult(), "life": 9.0, "age": 0.0})
+		bolts.append({"pos": org, "vel": Vector2.from_angle(ang) * randf_range(BURST_SPEED.x, BURST_SPEED.y) * bolt_mult(), "life": 9.0, "age": 0.0})
 	events.append({"type": "bolt", "pos": org})
 	_set_glow(c, 1.0)
 	_finish()
@@ -671,21 +668,16 @@ func _step_bolts(dt: float) -> void:
 	for b in bolts.duplicate():
 		var p: Vector2 = b["pos"]
 		var v: Vector2 = b["vel"]
+		if b.has("g"):                           # 용암 덩어리: 포물선
+			v.y += float(b["g"]) * dt
+			b["vel"] = v
 		b["age"] = float(b["age"]) + dt
-		p += v * lerpf(0.2, 1.0, minf(1.0, float(b["age"]) / BOLT_WARMUP)) * dt
+		p += v * lerpf(BOLT_WARMUP_FLOOR, 1.0, minf(1.0, float(b["age"]) / BOLT_WARMUP)) * dt
 		b["pos"] = p
 		b["life"] = float(b["life"]) - dt
 		if b["life"] <= 0.0 or p.y > -6.0 or p.x < -1250.0 or p.x > 1250.0 or p.y < -3400.0:
 			bolts.erase(b)
 			events.append({"type": "bolt_pop", "pos": p})
-
-
-func _step_waves(dt: float) -> void:
-	for w in waves.duplicate():
-		w["x"] = float(w["x"]) + float(w["dir"]) * WAVE_SPEED * dt
-		if absf(w["x"]) > 1250.0:
-			waves.erase(w)
-
 
 func _step_debris(dt: float) -> void:
 	for d in debris:
@@ -719,7 +711,6 @@ func _draw() -> void:
 	_draw_part_marks()
 	_draw_debris()
 	_draw_telegraphs()
-	_draw_waves()
 	_draw_bolts()
 
 
@@ -823,8 +814,9 @@ func _draw_grid() -> void:
 	var rim := _heart_outline(30.0)
 	rim.append(rim[0])
 	draw_polyline(rim, Color(C_RIM, 0.6), 4.0)
-	var edge_col := Color(1.0, 0.85, 0.5) if strike_glow else C_PLATE_EDGE
-	var edge_w := 3.0 if strike_glow else 2.0
+	var lit := strike_glow or focus_glow > 0.0     # 공격 돌진 중이거나 방향 지정·차지 중이면 표적이 드러난다
+	var edge_col := Color(1.0, 0.85, 0.5) if lit else C_PLATE_EDGE
+	var edge_w := 3.0 if lit else 2.0
 	for r in GRID_N:
 		for c in GRID_N:
 			if not in_mask(c, r):
@@ -844,7 +836,7 @@ func _draw_grid() -> void:
 			var col: Color = PLATE_COL[ring]
 			col = col.lerp(col * 0.55, 1.0 - float(hp) / maxhp)
 			col = col.lerp(Color.WHITE, plate_flash[i])
-			if strike_glow:
+			if lit:
 				col = col.lerp(Color(1.0, 0.85, 0.5), 0.25)
 			var inner := rc.grow(-2.0)
 			draw_rect(inner, col)
@@ -862,7 +854,10 @@ func _draw_grid() -> void:
 		draw_arc(hc, HEART_R + k * 450.0, 0.0, TAU, 48, Color(1, 0.9, 0.7, 1.0 - k), 6.0)
 		return
 	var pr := HEART_R * (1.0 + 0.12 * beat)
-	draw_circle(hc, pr * (2.4 if strike_glow else 1.7), Color(C_HEART, 0.1 + 0.08 * beat + (0.12 if strike_glow else 0.0)))
+	if focus_glow > 0.0:
+		var in_reach := hc.distance_to(focus_from) <= focus_reach
+		draw_circle(hc, pr * 4.0, Color(C_HEART, focus_glow * (0.22 if in_reach else 0.1) * (0.6 + 0.4 * beat)))
+	draw_circle(hc, pr * (2.4 if lit else 1.7), Color(C_HEART, 0.1 + 0.08 * beat + (0.12 if lit else 0.0)))
 	draw_circle(hc, pr, C_HEART)
 	draw_circle(hc + Vector2(-6, -6), pr * 0.45, Color(1.0, 0.85, 0.6))
 
@@ -883,6 +878,11 @@ func _draw_arms() -> void:
 			for j in 3:
 				var y := f.y - 40.0 + j * 40.0
 				draw_line(Vector2(f.x - 55, y), Vector2(f.x + 55, y), Color(C_RIM, 0.35), 3.0)
+			if atk.get("kind", "") == "swing" and atk.get("arm", -1) == a and atk["phase"] == "swing":
+				# 휩쓰는 팔 = 패리할 수 있는 것 → 금색 테두리
+				draw_line(sh, el, Color(C_PARRY, 0.7), 5.0)
+				draw_line(el, f, Color(C_PARRY, 0.7), 5.0)
+				draw_arc(f, FIST_R + 4.0, 0.0, TAU, 24, Color(C_PARRY, 0.8), 5.0)
 		else:
 			_draw_stump(el, (el - sh).normalized(), 60.0)
 		draw_circle(sh, 140.0, C_BODY_DARK)
@@ -922,6 +922,13 @@ func _draw_part_marks() -> void:
 			continue
 		var p := part_pos(i)
 		var r: float = PART_R[i]
+		if focus_glow > 0.0:                    # 방향 지정·차지 중: 노릴 수 있는 표적 강조 (사거리 안이면 더 밝게)
+			var in_reach := p.distance_to(focus_from) <= focus_reach
+			draw_circle(p, r * 1.7, Color(C_HEART, focus_glow * (0.3 if in_reach else 0.12) * (0.6 + 0.4 * pulse)))
+			if in_reach:
+				draw_arc(p, r * 1.7, 0.0, TAU, 32, Color(1.0, 0.85, 0.55, focus_glow * 0.8), 3.0)
+		if i >= 2 and is_staggered(i - 2):      # 패리당해 멈춘 팔: 관절이 크게 빛난다
+			draw_circle(p, r * 1.3 + 8.0 * pulse, Color(1.0, 0.75, 0.4, 0.35))
 		var core := Color(C_HEART, 0.85).lerp(Color.WHITE, part_flash[i])
 		draw_circle(p, r * 0.45 + 4.0 * pulse, Color(C_HEART, 0.18 + 0.12 * pulse + (0.15 if strike_glow else 0.0)))
 		draw_circle(p, r * 0.28, core)
@@ -970,16 +977,21 @@ func _draw_head() -> void:
 
 
 func _draw_telegraphs() -> void:
-	if atk.get("kind", "") == "stomp" and (atk["phase"] == "lift" or atk["phase"] == "hold"):
-		var i: int = atk["foot"]
-		var cx := feet[i].x
-		var k := clampf(-feet[i].y / STOMP_LIFT_H, 0.0, 1.0)
-		var pts := PackedVector2Array()
-		for j in 24:
-			var a := TAU * j / 24.0
-			pts.append(Vector2(cx + cos(a) * 180.0, -4.0 + sin(a) * 14.0))
-		draw_colored_polygon(pts, Color(0, 0, 0, 0.45 * k))
-		draw_line(Vector2(-1150, -2), Vector2(1150, -2), Color(C_WARN, 0.35 * k), 3.0)
+	if atk.get("kind", "") == "erupt" and int(atk["fired"]) < ERUPT_GLOBS:
+		# 용암 분출 경고: 분출 지점의 용암이 부글거리고, 솟을 높이까지 희미한 기둥
+		var k := clampf(float(atk["t"]) / (STOMP_LIFT_TIME + STOMP_SLAM_TIME), 0.0, 1.0)
+		var h: float = atk["h"]
+		for x in atk["spots"]:
+			var sx: float = x
+			var bub := PackedVector2Array()
+			for j in 20:
+				var a := TAU * j / 20.0
+				bub.append(Vector2(sx + cos(a) * (40.0 + 50.0 * k), -6.0 + sin(a) * (8.0 + 6.0 * k)))
+			draw_colored_polygon(bub, Color(C_LAVA, 0.35 + 0.4 * k))
+			draw_line(Vector2(sx, -10.0), Vector2(sx, -h), Color(C_WARN, 0.05 + 0.15 * k), 26.0)
+			for j in 3:
+				var bx := sx + sin(t * 9.0 + j * 2.1) * 35.0
+				draw_circle(Vector2(bx, -10.0 - fmod(t * 120.0 + j * 30.0, 50.0)), 6.0, Color(1.0, 0.6, 0.25, 0.7 * k))
 	if atk.get("kind", "") == "volley" and float(atk["t"]) < VOLLEY_CHARGE + 0.5:
 		var c: int = atk["cannon"]
 		var org: Vector2 = atk["origin"]
@@ -1017,20 +1029,13 @@ func _draw_telegraphs() -> void:
 			draw_colored_polygon(PackedVector2Array([at + tangent * 40.0, at - tangent * 12.0 + radial * 26.0, at - tangent * 12.0 - radial * 26.0]), Color(1, 0.9, 0.7, 0.3 + 0.45 * k))
 
 
-func _draw_waves() -> void:
-	for w in waves:
-		var x: float = w["x"]
-		var d := float(w["dir"])
-		var crest := PackedVector2Array([Vector2(x - d * 90, 0), Vector2(x - d * 20, -WAVE_H), Vector2(x + d * 30, -WAVE_H * 0.5), Vector2(x + d * 45, 0)])
-		draw_colored_polygon(crest, Color(0.85, 0.85, 0.8, 0.75))
-		draw_line(Vector2(x - d * 260, -4), Vector2(x - d * 90, -4), Color(C_WARN, 0.5), 5.0)
-
-
+## 탄 = 패리할 수 있는 것 → 금색. 용암 덩어리는 붉은 겉불 + 금색 심
 func _draw_bolts() -> void:
 	for b in bolts:
 		var p: Vector2 = b["pos"]
 		var v: Vector2 = b["vel"]
-		draw_line(p, p - v.normalized() * 50.0, Color(C_EYE, 0.35), 10.0)
-		draw_circle(p, BOLT_R * 1.8, Color(C_EYE, 0.2))
-		draw_circle(p, BOLT_R, C_EYE)
+		var outer := C_LAVA if b.has("lava") else C_PARRY
+		draw_line(p, p - v.normalized() * 50.0, Color(outer, 0.35), 10.0)
+		draw_circle(p, BOLT_R * 1.8, Color(outer, 0.22))
+		draw_circle(p, BOLT_R, C_PARRY)
 		draw_circle(p, BOLT_R * 0.5, Color(1, 1, 0.9))

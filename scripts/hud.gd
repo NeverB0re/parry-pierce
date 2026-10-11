@@ -49,13 +49,20 @@ func _draw() -> void:
 	var pl = main.player
 	var boss = main.boss
 
-	# 체력 가면
-	for i in Player.HP_MAX:
+	# 용암 경고: 낮을수록 화면 아래가 붉게 물든다
+	var heat := clampf(1.0 + pl.position.y / 500.0, 0.0, 1.0)
+	if heat > 0.0:
+		var hc := Color(1.0, 0.25, 0.05, 0.45 * heat)
+		var hz := Color(1.0, 0.25, 0.05, 0.0)
+		draw_polygon(PackedVector2Array([Vector2(0, s.y * 0.45), Vector2(s.x, s.y * 0.45), s, Vector2(0, s.y)]), PackedColorArray([hz, hz, hc, hc]))
+
+	# 목숨 (가면)
+	for i in main.LIVES:
 		var o := Vector2(46 + i * 46, 46)
 		var mask := PackedVector2Array([o + Vector2(-14, -10), o + Vector2(-18, -26), o + Vector2(-6, -16), o + Vector2(0, -18),
 			o + Vector2(6, -16), o + Vector2(18, -26), o + Vector2(14, -10), o + Vector2(14, 8), o + Vector2(6, 18),
 			o + Vector2(-6, 18), o + Vector2(-14, 8)])
-		if i < pl.hp:
+		if i < main.lives:
 			draw_colored_polygon(mask, Color(0.93, 0.92, 0.88))
 			draw_circle(o + Vector2(-6, 0), 4.0, Color(0.05, 0.05, 0.08))
 			draw_circle(o + Vector2(6, 0), 4.0, Color(0.05, 0.05, 0.08))
@@ -71,9 +78,7 @@ func _draw() -> void:
 		if i < pl.gauge:
 			draw_circle(c, 8.0, Color(1.0, 0.75, 0.45))
 			draw_circle(c, 4.0, Color(1.0, 0.95, 0.85))
-		elif pl.charging and i < pl.gauge + pl.charge_level:   # 차지에 소모 중인 칸
-			var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.02)
-			draw_circle(c, 8.0, Color(1.0, 0.3, 0.15, 0.6 + 0.4 * pulse))
+
 		else:
 			draw_arc(c, 8.0, 0.0, TAU, 20, Color(0.7, 0.7, 0.75, 0.5), 2.0)
 
@@ -81,7 +86,7 @@ func _draw() -> void:
 
 	# 상태 정보
 	var left: String = ("부위 %d" % boss.parts_left()) if boss.phase == 1 else ("갑옷 %d" % boss.plates_left())
-	_text(Vector2(28, 140), "%s   추락 %d   %.1fs" % [left, main.falls, main.run_time], 15, Color(0.75, 0.77, 0.82, 0.7))
+	_text(Vector2(28, 140), "%s   %.1fs" % [left, main.run_time], 15, Color(0.75, 0.77, 0.82, 0.7))
 
 	# 배너
 	if banner_title != "":
@@ -100,7 +105,7 @@ func _draw() -> void:
 		draw_rect(Rect2(bx, s.y * 0.7, bw * frac, 8), Color(0.8, 0.92, 1.0, 0.95))
 
 	# 조작
-	_text(Vector2(28, s.y - 24), "마우스: 방향   좌클릭: 돌진(꾹=차지)   우클릭/Space 꾹: 패리 (성공 → 슬로우 → 방향 → 돌진)   R: 재시작   Esc: 메뉴", 15, Color(0.75, 0.77, 0.82, 0.55))
+	_text(Vector2(28, s.y - 24), "마우스: 방향(위=활공)   좌클릭: 회피 돌진 / 꾹: 차지 공격   우클릭·Space 꾹: 패리 → 슬로우 조준 → 패리 돌진   R: 재시작   Esc: 메뉴", 15, Color(0.75, 0.77, 0.82, 0.55))
 
 	if flash_a > 0.0:
 		draw_rect(Rect2(Vector2.ZERO, s), Color(flash_c, flash_a))
