@@ -617,12 +617,14 @@ func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, kind := "d
 			fx.rays_burst(contact, 8, Color(1.0, 0.7, 0.35), 320.0, 0.3, 5.0)
 			fx.ring(contact, Color(1.0, 0.65, 0.3), 150.0, 0.3, 7.0)
 			fx.burst(contact, 18, Color(1.0, 0.7, 0.35), 900.0, 0.4, 3.0, 0.0, -dir, 1.1)
-		_:
-			hitstop = maxf(hitstop, 0.04)
-			shake = maxf(shake, 5.0)
-			sfx.play("armor", -4.0)
-			fx.burst(contact, 8, Color(0.85, 0.92, 1.0), 500.0, 0.25, 2.5, 0.0, -dir, 1.0)
-			fx.ring(contact, Color(0.85, 0.92, 1.0), 60.0, 0.18, 3.0)
+		_:                                     # 일반 돌진: 피해가 들어가고 있다는 확실한 피드백 (파편·불꽃·작은 링·플래시)
+			hitstop = maxf(hitstop, 0.07)
+			shake = maxf(shake, 9.0)
+			hud.flash(0.05, Color(0.85, 0.93, 1.0))
+			sfx.play("armor", 0.0)
+			fx.burst(contact, 14, Color(0.9, 0.95, 1.0), 800.0, 0.35, 3.0, 0.0, -dir, 1.1)
+			fx.rays_burst(contact, 6, Color(0.85, 0.93, 1.0), 260.0, 0.25, 4.0)
+			fx.ring(contact, Color(0.85, 0.92, 1.0), 100.0, 0.22, 4.0)
 
 
 ## 코어 파괴 = 승리

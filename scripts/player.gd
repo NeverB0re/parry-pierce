@@ -47,8 +47,9 @@ const POWER_DAMAGE := 12
 const POWER_DAMAGE_PERFECT := 16
 const POWER_RADIUS := 8.0        # 패리 돌진은 타격 범위도 넓다
 const POWER_GRACE := 0.7
-# 직격 후: 맞은 면에 대해 입사각 = 반사각으로 튕긴다 (모든 방향)
+# 직격 후: 맞은 면에 대해 입사각 = 반사각으로 튕기되, 마우스 방향으로 일부 틀어진다
 const BOUNCE_SPEED := 1350.0     # 튕겨나는 속도 (패리 돌진은 ×1.15)
+const BOUNCE_STEER := 0.4        # 반사 방향을 마우스(스틱) 방향 쪽으로 이 비율만큼 돌린다 (0 = 순수 반사)
 const ASSIST_CONE := 0.42            # 에임 어시스트: 표적 가장자리에서 이 각도(약 24도) 안이면 표적 중심으로 달라붙는다
 const ASSIST_CONE_TOUCH := 0.70      # 터치(스틱은 민감하므로 더 넓게, 약 40도)
 const ASSIST_SLACK := 60.0           # 사거리 여유
@@ -418,7 +419,6 @@ func step(dt: float) -> void:
 		dash_t -= dt
 		if dash_t <= 0.0:
 			vel *= DASH_KEEP
-			vel.y = maxf(vel.y, 0.0)              # 위쪽 관성은 남기지 않는다 (연속 돌진으로 높이를 공짜로 벌지 않게)
 			var grace := POWER_GRACE if dash_kind == "power" else (CHARGE_GRACE if dash_kind == "charge" else 0.0)
 			if grace > 0.0:                   # 무적 여유는 패리 돌진/차지 돌진만
 				shield_max = grace
@@ -565,7 +565,11 @@ func bounce_off(dir: Vector2, n: Vector2, power := false) -> void:
 	var out := dir
 	if dir.dot(n) < 0.0:
 		out = dir - 2.0 * dir.dot(n) * n
-	vel = out.normalized() * BOUNCE_SPEED * (1.15 if power else 1.0)
+	out = out.normalized()
+	var m: Vector2 = main.aim_offset(position)    # 조준 보조가 아니라 실제 마우스(스틱) 방향
+	if m.length() > AIM_DEADZONE:
+		out = out.slerp(m.normalized(), BOUNCE_STEER).normalized()
+	vel = out * BOUNCE_SPEED * (1.15 if power else 1.0)
 
 
 ## 에임 어시스트: 사거리 안에서 조준선이 표적 가장자리 일정 각도(PC 24도, 터치 40도) 이내면 표적 중심으로 달라붙는다.
