@@ -384,6 +384,12 @@ func on_stun_recover(pos: Vector2) -> void:
 	fx.ring(pos, Color(0.85, 0.95, 1.0), 70.0, 0.25, 4.0)
 
 
+## 게이지가 바닥난 뒤 1칸 재생
+func on_gauge_regen(pos: Vector2) -> void:
+	sfx.play("bolt", -8.0, 0.0)
+	fx.ring(pos, Color(1.0, 0.75, 0.45), 80.0, 0.3, 4.0)
+
+
 ## 발판에서 첫 돌진 = 발사. 발판은 금이 가며 가라앉는다
 func on_launch(pos: Vector2) -> void:
 	plat_on = false

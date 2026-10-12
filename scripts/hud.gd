@@ -81,6 +81,8 @@ func _draw() -> void:
 
 		else:
 			draw_arc(c, 8.0, 0.0, TAU, 20, Color(0.7, 0.7, 0.75, 0.5), 2.0)
+			if i == 0 and pl.gauge == 0 and pl.regen_t > 0.0:   # 재생 진행 (1칸까지)
+				draw_arc(c, 8.0, -PI * 0.5, -PI * 0.5 + TAU * clampf(pl.regen_t / Player.GAUGE_REGEN_TIME, 0.0, 1.0), 20, Color(1.0, 0.75, 0.45, 0.95), 3.0)
 
 	_draw_target_marker(s, boss)
 	if not boss.dead and boss.atk.get("kind", "") == "beam" and s.x >= 300.0:   # 레이저 중 머리가 화면 밖이면 방향 표시

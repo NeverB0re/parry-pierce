@@ -28,6 +28,7 @@ const PERFECT_EVADE_GRAZE := 16.0   # 퍼펙트 회피로 인정하는 근접 �
 const PERFECT_EVADE_INVULN := 0.8   # 퍼펙트 회피 성공 시 추가 무적 (회피 직후 다른 곳에 맞는 일 방지)
 const EVADE_BUFF_MULT := 3          # 퍼펙트 회피 버프: 다음 차지 공격 피해 배율 (차지 시간도 절반)
 const PARRY_BUFFER := 0.15          # 패리 쿨다운 중 누른 입력을 이만큼 기억
+const GAUGE_REGEN_TIME := 4.0    # 게이지가 0일 때만 이 시간이 지나면 1칸까지 천천히 재생 (그 이상은 패리로만)
 const GAUGE_MAX := 3             # 회피 1칸, 차지 1칸, 패리 성공 시 가득. 자연 회복 없음
 const PERFECT_WINDOW := 0.07     # 패리 누른 뒤 이 시간 안에 막으면 PERFECT
 const PARRY_MIN := 0.12          # 짧게 눌러도 이 시간만큼은 패리 유지
@@ -79,6 +80,7 @@ var dash_kind := ""              # "evade" | "charge" | "power"
 var dash_total := EVADE_TIME
 var perfect_dash := false        # PERFECT 패리 돌진
 var charge_cd := 0.0             # 차지 쿨다운
+var regen_t := 0.0               # 게이지 0일 때 재생 진행
 var evade_window := 0.0          # 퍼펙트 회피 판정이 남은 시간
 var evade_perfected := false     # 이번 회피에서 이미 성공
 var buffed := false              # 퍼펙트 회피 버프: 다음 차지 공격 피해 3배, 차지 시간 절반
@@ -122,6 +124,7 @@ func reset(pos: Vector2, platform := false) -> void:
 	dash_cd = 0.0
 	charge_cd = 0.0
 	evade_window = 0.0
+	regen_t = 0.0
 	evade_perfected = false
 	buffed = false
 	queued_press = false
@@ -333,6 +336,14 @@ func step(dt: float) -> void:
 	dash_cd = maxf(0.0, dash_cd - dt)
 	charge_cd = maxf(0.0, charge_cd - dt)
 	evade_window = maxf(0.0, evade_window - dt)
+	if gauge > 0:
+		regen_t = 0.0
+	elif not charging and dash_t <= 0.0:       # 바닥나면 1칸까지만 천천히 되살아난다
+		regen_t += dt
+		if regen_t >= GAUGE_REGEN_TIME:
+			regen_t = 0.0
+			gauge = 1
+			main.on_gauge_regen(position)
 	parry_cd = maxf(0.0, parry_cd - dt)
 	invuln = maxf(0.0, invuln - dt)
 	shield_t = maxf(0.0, shield_t - dt)
@@ -504,7 +515,8 @@ func _on_strike(hit: Dictionary) -> void:
 	bouncing = true
 	shield_t = STRIKE_SHIELD                     # 튕겨나는 동안 무적
 	shield_max = STRIKE_SHIELD
-	parry_cd = 0.0                               # 튕겨나오는 즉시 패리를 시도할 수 있다
+	parry_cd = 0.0                               # 튕겨나오는 즉시 패리·회피 등 모든 조작이 가능
+	dash_cd = 0.0
 	parry_queue = 0.0
 	# 들어온 방향(좌/우)을 유지하며 약 50도로 뜬다. 거의 수직으로 들어왔으면 마우스 쪽으로
 	var sx := signf(dir.x) if absf(dir.x) > 0.2 else (signf(aim.x) if absf(aim.x) > 0.1 else (1.0 if randf() < 0.5 else -1.0))
