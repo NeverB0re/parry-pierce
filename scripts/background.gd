@@ -48,11 +48,6 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(_on_resized)
 
 
-## 배경은 1280×720 기준 좌표로 그리고 CanvasLayer 배율로 실제 화면(640×360 도트)에 맞춘다
-func _vs() -> Vector2:
-	return get_viewport_rect().size / get_canvas_transform().get_scale()
-
-
 func _layer_node() -> Node2D:
 	var n := Node2D.new()
 	add_child(n)
@@ -66,7 +61,7 @@ func _on_resized() -> void:
 
 func _process(delta: float) -> void:
 	t += delta
-	var s := _vs()
+	var s := get_viewport_rect().size
 	sky_high.modulate.a = clampf(-cam.y / 2800.0, 0.0, 1.0)   # 높이 올라갈수록 밝은 푸른 안개
 	far.position = -cam * 0.15 + s * 0.5
 	mid.position = -cam * 0.35 + s * 0.5
@@ -76,7 +71,7 @@ func _process(delta: float) -> void:
 
 ## 하늘 그라데이션(낮은 팔레트 위에 높은 팔레트를 알파로 겹침) + 빛줄기
 func _draw_sky(n: Node2D, high: bool) -> void:
-	var s := _vs()
+	var s := get_viewport_rect().size
 	var top := Color(0.24, 0.29, 0.35) if high else Color(0.17, 0.21, 0.27)
 	var bot := Color(0.14, 0.17, 0.22) if high else Color(0.08, 0.10, 0.13)
 	n.draw_polygon(PackedVector2Array([Vector2.ZERO, Vector2(s.x, 0), s, Vector2(0, s.y)]),
@@ -132,7 +127,7 @@ func _draw_near(n: Node2D) -> void:
 
 ## 떠다니는 먼지 (화면 순환): 작은 사각형으로 그려 호출 비용을 줄인다
 func _draw_dust(n: Node2D) -> void:
-	var s := _vs()
+	var s := get_viewport_rect().size
 	for m in motes:
 		var px := fposmod(m.x * (s.x + 100) - cam.x * 0.7 * m.z + sin(t * 0.5 + m.y * 9.0) * 20.0, s.x + 100) - 50
 		var py := fposmod(m.y * (s.y + 100) - cam.y * 0.7 * m.z - t * 14.0 * m.z, s.y + 100) - 50

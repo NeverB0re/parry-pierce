@@ -25,18 +25,9 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
 
-## 버튼 크기는 1280×720 기준 좌표. 실제 화면(640×360 도트)에 맞춰 그리기·입력을 함께 배율 조정한다
-func _k() -> float:
-	return get_viewport_rect().size.y / 720.0
-
-
-func _vs() -> Vector2:
-	return get_viewport_rect().size / _k()
-
-
 ## 패리/차지: 오른쪽 아래, 엄지가 가장 편한 자리
 func parry_center() -> Vector2:
-	var s := _vs()
+	var s := get_viewport_rect().size
 	return Vector2(s.x - MARGIN - BTN_PARRY_R - 16.0, s.y - LIFT - BTN_PARRY_R)
 
 
@@ -47,7 +38,7 @@ func dash_center() -> Vector2:
 
 
 func pause_center() -> Vector2:
-	return Vector2(_vs().x - MARGIN - 20.0, MARGIN + 20.0)
+	return Vector2(get_viewport_rect().size.x - MARGIN - 20.0, MARGIN + 20.0)
 
 
 func _input(e: InputEvent) -> void:
@@ -55,16 +46,16 @@ func _input(e: InputEvent) -> void:
 		return
 	if e is InputEventScreenTouch:
 		if e.pressed:
-			_down(e.index, e.position / _k())
+			_down(e.index, e.position)
 		else:
 			_up(e.index)
 	elif e is InputEventScreenDrag:
 		if fingers.get(e.index, "") == "stick":
-			_drag(e.position / _k())
+			_drag(e.position)
 
 
 func _down(idx: int, pos: Vector2) -> void:
-	var s := _vs()
+	var s := get_viewport_rect().size
 	if pos.distance_to(pause_center()) < 52.0:
 		fingers[idx] = "pause"
 		main.touch_pause()
@@ -117,7 +108,6 @@ func _process(_dt: float) -> void:
 func _draw() -> void:
 	if get_tree().paused:
 		return
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2(_k(), _k()))
 	var pl = main.player
 	# 스틱
 	if fingers.values().has("stick"):
@@ -125,7 +115,7 @@ func _draw() -> void:
 		draw_arc(stick_origin, STICK_R, 0.0, TAU, 40, Color(1, 1, 1, 0.3), 3.0)
 		draw_circle(stick_origin + stick * STICK_R, 44.0, Color(0.7, 0.92, 1.0, 0.45))
 	else:
-		var s := _vs()
+		var s := get_viewport_rect().size
 		var hint := Vector2(MARGIN + STICK_R + 40.0, s.y - LIFT - STICK_R * 0.8)
 		draw_arc(hint, STICK_R * 0.8, 0.0, TAU, 40, Color(1, 1, 1, 0.12), 3.0)
 		draw_circle(hint, 30.0, Color(1, 1, 1, 0.08))
