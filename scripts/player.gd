@@ -23,6 +23,9 @@ const CHARGE_DASH_TIME := 0.22
 const CHARGE_COOLDOWN := 1.5     # 차지 돌진 후 다시 차지할 수 있을 때까지 (그동안 좌클릭 = 즉시 회피)
 const CHARGE_DAMAGE := 1
 const CHARGE_GRACE := 0.5        # 차지 돌진이 빗나가 끝난 직후 무적
+const PERFECT_EVADE_WINDOW := 0.12  # 회피 돌진 직후 이 시간 동안만 퍼펙트 회피 판정 (회피 전체는 0.28초)
+const PERFECT_EVADE_GRAZE := 16.0   # 퍼펙트 회피로 인정하는 근접 여유 (몸 반지름에 더함)
+const EVADE_BUFF_MULT := 2          # 퍼펙트 회피 후 다음 공격 피해 배율
 const GAUGE_MAX := 3             # 회피 1칸, 차지 1칸, 패리 성공 시 가득. 자연 회복 없음
 const PERFECT_WINDOW := 0.07     # 패리 누른 뒤 이 시간 안에 막으면 PERFECT
 const PARRY_MIN := 0.12          # 짧게 눌러도 이 시간만큼은 패리 유지
@@ -74,6 +77,9 @@ var dash_kind := ""              # "evade" | "charge" | "power"
 var dash_total := EVADE_TIME
 var perfect_dash := false        # PERFECT 패리 돌진
 var charge_cd := 0.0             # 차지 쿨다운
+var evade_window := 0.0          # 퍼펙트 회피 판정이 남은 시간
+var evade_perfected := false     # 이번 회피에서 이미 성공
+var buffed := false              # 퍼펙트 회피 버프: 다음 공격 피해 2배
 var charging := false            # 좌클릭 누르는 중
 var charge_t := 0.0
 var charged_notified := false
@@ -111,6 +117,9 @@ func reset(pos: Vector2, platform := false) -> void:
 	bouncing = false
 	dash_cd = 0.0
 	charge_cd = 0.0
+	evade_window = 0.0
+	evade_perfected = false
+	buffed = false
 	parry_active = false
 	parry_held = false
 	parry_cd = 0.0
@@ -197,6 +206,8 @@ func _dash(kind: String) -> void:
 		charge_cd = CHARGE_COOLDOWN
 	dash_t = dash_total
 	dash_cd = dash_total + DASH_COOLDOWN
+	evade_window = PERFECT_EVADE_WINDOW if kind == "evade" else 0.0
+	evade_perfected = false
 	vel = aim * spd
 	bouncing = false
 	main.on_dash(position, aim, kind)
@@ -256,9 +267,24 @@ func launch_parry_dash() -> void:
 	main.on_parry_launch(position, aim)
 
 
+## 회피 직후 짧은 순간에 공격이 스친 상태인가 (main.gd 가 공격 판정과 겹치는지 검사)
+func can_perfect_evade() -> bool:
+	return dash_kind == "evade" and dash_t > 0.0 and evade_window > 0.0 and not evade_perfected
+
+
+## 퍼펙트 회피 성공: 연료 1칸 환급 + 다음 공격 피해 2배
+func on_perfect_evade() -> void:
+	evade_perfected = true
+	gauge = mini(GAUGE_MAX, gauge + 1)
+	buffed = true
+	main.on_perfect_evade(position)
+
+
 ## 피격: 잠시 조작 불가(스턴), 살짝 솟구친 뒤 추락
 func on_hurt(push: Vector2) -> void:
 	cancel_charge()
+	buffed = false
+	evade_window = 0.0
 	var sx := signf(push.x) if absf(push.x) > 0.05 else (1.0 if randf() < 0.5 else -1.0)
 	vel = Vector2(sx * HURT_PUSH, -HURT_POP)
 	stun = STUN_TIME
@@ -286,6 +312,7 @@ func step(dt: float) -> void:
 
 	dash_cd = maxf(0.0, dash_cd - dt)
 	charge_cd = maxf(0.0, charge_cd - dt)
+	evade_window = maxf(0.0, evade_window - dt)
 	parry_cd = maxf(0.0, parry_cd - dt)
 	invuln = maxf(0.0, invuln - dt)
 	shield_t = maxf(0.0, shield_t - dt)
@@ -432,7 +459,12 @@ func _on_strike(hit: Dictionary) -> void:
 	var dir := vel.normalized()
 	var power := dash_kind == "power"
 	gauge = mini(GAUGE_MAX, gauge + 1)           # 타격 성공 → 돌진 연료 1칸 환급
-	main.on_strike(hit, POWER_DAMAGE if power else CHARGE_DAMAGE, position, dir, power)
+	var dmg := POWER_DAMAGE if power else CHARGE_DAMAGE
+	var was_buffed := buffed
+	if buffed:                                   # 퍼펙트 회피 버프: 이번 공격 피해 2배
+		dmg *= EVADE_BUFF_MULT
+		buffed = false
+	main.on_strike(hit, dmg, position, dir, power, was_buffed)
 	dash_t = 0.0
 	_end_dash()
 	bouncing = true
@@ -526,6 +558,15 @@ func _draw() -> void:
 		for k in [3, 6, 9, 12]:
 			if k < trail.size():
 				_draw_rocket(trail[k] - position, facing, Color(C_EVADE, 0.28 - k * 0.018))
+
+	# 퍼펙트 회피 버프: 다음 공격이 강화됐음을 알리는 청백 오라
+	if buffed:
+		var bp := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.02)
+		draw_circle(Vector2.ZERO, 26.0, Color(0.7, 0.95, 1.0, 0.12 + 0.1 * bp))
+		draw_arc(Vector2.ZERO, 30.0 + 3.0 * bp, 0.0, TAU, 32, Color(0.8, 0.97, 1.0, 0.55 + 0.35 * bp), 2.5)
+		for k in 3:
+			var ba := Time.get_ticks_msec() * 0.006 + k * TAU / 3.0
+			draw_circle(Vector2(cos(ba), sin(ba)) * 34.0, 2.6, Color(1, 1, 1, 0.9))
 
 	# 무적 보호막 (발사·공격 돌진·직격 후·돌진 여유)
 	if shield_t > 0.0 or attack or launch_t > 0.0:

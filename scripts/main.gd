@@ -226,12 +226,17 @@ func _update_camera(delta: float) -> void:
 
 func _check_attacks() -> void:
 	var p: Vector2 = player.position
+	var graze: float = Player.RADIUS + Player.PERFECT_EVADE_GRAZE
+	if player.can_perfect_evade() and boss.beam_hit(p, graze) != Vector2.ZERO:
+		player.on_perfect_evade()                       # 회피 직후 레이저가 스침
 	var beam_push: Vector2 = boss.beam_hit(p, Player.RADIUS)   # 패리 불가: 회피 돌진(무적)으로만 피한다
 	if beam_push != Vector2.ZERO and not player.is_immune():
 		hurt_player(beam_push)
 		return
 	var reach: float = player.parry_reach()
 	for hb in boss.hitboxes(p):
+		if player.can_perfect_evade() and boss.overlaps(hb, p, graze):
+			player.on_perfect_evade()                   # 회피 직후 공격이 스침 → 퍼펙트 회피
 		if not boss.overlaps(hb, p, reach):
 			continue
 		if player.parry_active:
@@ -419,6 +424,19 @@ func _respawn() -> void:
 	sfx.play("land", 0.0)
 
 
+## 퍼펙트 회피 성공: 아주 짧은 슬로우 + 청백 이펙트 (연료 환급·버프는 player.gd)
+func on_perfect_evade(pos: Vector2) -> void:
+	slowmo = maxf(slowmo, 0.2)
+	shake = maxf(shake, 8.0)
+	hud.flash(0.14, Color(0.7, 0.95, 1.0))
+	sfx.play("parry", -4.0, 0.0)
+	sfx.play("perfect", -6.0, 0.0)
+	fx.ring(pos, Color(0.8, 0.97, 1.0), 170.0, 0.35, 6.0)
+	fx.ring(pos, Color(0.5, 0.8, 1.0), 100.0, 0.25, 4.0)
+	fx.rays_burst(pos, 12, Color(0.85, 0.98, 1.0), 380.0, 0.35, 5.0)
+	fx.burst(pos, 18, Color(0.8, 0.97, 1.0), 800.0, 0.4, 3.0)
+
+
 ## 패리 돌진 종료(적중 또는 빗나감): 패리로 밀려난 팔은 바로 제자리로
 func on_power_dash_end() -> void:
 	boss.release_stagger()
@@ -432,8 +450,14 @@ func on_parry_launch(pos: Vector2, dir: Vector2) -> void:
 	fx.ring(pos, Color(0.8, 0.92, 1.0), 160.0, 0.3, 6.0)
 
 
-func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, power := false) -> void:
+func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, power := false, buffed := false) -> void:
 	var contact := pos + dir * Player.RADIUS
+	if buffed:                                 # 퍼펙트 회피 버프가 실린 일격
+		shake = maxf(shake, 20.0)
+		sfx.play("perfect", -2.0, 0.0)
+		fx.ring(contact, Color(0.75, 0.96, 1.0), 240.0, 0.35, 8.0)
+		fx.rays_burst(contact, 10, Color(0.8, 0.97, 1.0), 420.0, 0.35, 6.0)
+		fx.burst(contact, 22, Color(0.8, 0.97, 1.0), 1100.0, 0.5, 3.5, 0.0, -dir, 1.0)
 	var idx: int = hit["idx"]
 	if hit["kind"] == "part":                  # 페이즈 1: 포대/팔꿈치 부위 타격
 		if not boss.damage_part(idx, dmg):

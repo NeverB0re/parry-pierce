@@ -646,7 +646,7 @@ func swing_area(a: int, th0: float, th1: float) -> PackedVector2Array:
 	var wedge := PackedVector2Array([sh])
 	for j in 25:
 		var th := lerpf(th0, th1, j / 24.0)
-		wedge.append(sh + Vector2(s * cos(th), sin(th)) * (SWING_L + FIST_R))
+		wedge.append(sh + Vector2(s * cos(th), sin(th)) * ((SWING_L + FIST_R) / cos(SWING_SPAN / 48.0)))   # 현 근사가 판정 안쪽으로 파고들지 않게 약간 바깥
 	pieces.append(wedge)
 	for ti in 2:
 		var th := th0 if ti == 0 else th1
@@ -657,8 +657,8 @@ func swing_area(a: int, th0: float, th1: float) -> PackedVector2Array:
 		pieces.append(PackedVector2Array([sh + n * UPPER_W, el + n * UPPER_W, el - n * UPPER_W, sh - n * UPPER_W]))
 		pieces.append(PackedVector2Array([el + n * FORE_W, fist + n * FORE_W, fist - n * FORE_W, el - n * FORE_W]))
 		var circ := PackedVector2Array()
-		for j in 20:
-			circ.append(fist + Vector2.from_angle(TAU * j / 20.0) * FIST_R)
+		for j in 24:
+			circ.append(fist + Vector2.from_angle(TAU * j / 24.0) * FIST_R / cos(PI / 24.0))
 		pieces.append(circ)
 	var cur := pieces[0]
 	for k in range(1, pieces.size()):
