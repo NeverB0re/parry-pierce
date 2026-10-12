@@ -10,6 +10,8 @@ const Hud := preload("res://scripts/hud.gd")
 const Sfx := preload("res://scripts/sfx.gd")
 const PauseMenu := preload("res://scripts/pause_menu.gd")
 const Tutorial := preload("res://scripts/tutorial.gd")
+const Telemetry := preload("res://scripts/telemetry.gd")
+const Debug := preload("res://scripts/debug.gd")
 const TouchControls := preload("res://scripts/touch_controls.gd")
 const Quality := preload("res://scripts/quality.gd")
 
@@ -38,6 +40,8 @@ var cam: Camera2D
 var touch_ui                          # 모바일 터치 조작 (없으면 마우스·키보드)
 var menu
 var tutorial                          # 튜토리얼 팝업
+var tele                              # 플레이 기록 (user://telemetry)
+var debug                             # 개발용 디버그 (F1~F6)
 
 var state := State.PLAY
 var hitstop := 0.0
@@ -123,6 +127,11 @@ func _ready() -> void:
 	tutorial.enabled = DisplayServer.get_name() != "headless" and not OS.get_cmdline_user_args().has("--notutorial")
 	add_child(tutorial)
 	menu.tutorial = tutorial
+	tele = Telemetry.new()
+	tele.enabled = DisplayServer.get_name() != "headless"
+	debug = Debug.new()
+	debug.main = self
+	add_child(debug)
 	if touch_mode:
 		var touch_layer := CanvasLayer.new()
 		touch_layer.layer = 20
@@ -135,6 +144,9 @@ func _ready() -> void:
 
 
 func reset_run() -> void:
+	if tele != null:
+		tele.finish("restart", run_time, lives, _tele_extra())
+		tele.begin()
 	boss.reset()
 	fx.clear()
 	state = State.PLAY
@@ -222,6 +234,12 @@ func _parry_input(pressed: bool) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	var t0 := Time.get_ticks_usec()
+	_physics_body(delta)
+	debug.record_physics(Time.get_ticks_usec() - t0)
+
+
+func _physics_body(delta: float) -> void:
 	hud.step(delta)
 	_update_camera(delta)
 	if hitstop > 0.0:
@@ -232,14 +250,9 @@ func _physics_process(delta: float) -> void:
 		if player.aim_left <= 0.0:
 			player.launch_parry_dash()
 	# 슬로우는 월드에만: 방향 지정 중, 그리고 패리 돌진이 적중하거나 끝날 때까지
-	var dt := delta
-	if player.aim_phase:
-		dt *= AIM_SLOW
-	elif slowmo > 0.0:
+	var dt := delta * world_scale()
+	if not player.aim_phase and slowmo > 0.0:
 		slowmo -= delta
-		dt *= 0.3
-	elif player.dash_kind == "power":
-		dt *= DASH_SLOW
 	if state == State.PLAY:
 		run_time += dt
 	_update_platform(dt)
@@ -248,7 +261,7 @@ func _physics_process(delta: float) -> void:
 	boss.focus_from = player.position
 	boss.focus_reach = (Player.PARRY_DASH_SPEED_PERFECT if player.aim_perfect else Player.PARRY_DASH_SPEED) * Player.PARRY_DASH_TIME \
 		if player.aim_phase else Player.CHARGE_SPEED * Player.CHARGE_DASH_TIME
-	boss.hold_attacks = player.on_platform       # 시작·부활 직후 날아오르기 전에는 공격이 시작되지 않는다
+	boss.hold_attacks = player.on_platform or debug.freeze   # 시작·부활 직후 날아오르기 전에는 공격이 시작되지 않는다 (F3: 디버그 정지)
 	boss.step(dt, player.position)
 	_tutorial_triggers()
 	_drain_boss_events()
@@ -275,6 +288,27 @@ func _tutorial_triggers() -> void:
 		tutorial.request(["charge"])
 	elif kd == "beam":
 		tutorial.request(["unparry"])
+
+
+func _tele_extra() -> Dictionary:
+	return {"phase": boss.phase, "part_hp": boss.part_hp.duplicate(), "armor_hp": boss.armor_hp}
+
+
+func _exit_tree() -> void:
+	if tele != null:
+		tele.finish("quit", run_time, lives, _tele_extra())
+
+
+## 지금 월드 시간 배율 (조준 슬로우 0.08 / 연출 슬로우 0.3 / 리버스 드라이브 0.5 / 평소 1).
+## 플레이어는 실시간으로 움직이지만, 동조 버프처럼 "월드 시간"을 따르는 값은 이 배율로 줄어든다
+func world_scale() -> float:
+	if player.aim_phase:
+		return AIM_SLOW
+	if slowmo > 0.0:
+		return 0.3
+	if player.dash_kind == "power":
+		return DASH_SLOW
+	return 1.0
 
 
 func _update_platform(dt: float) -> void:
@@ -318,7 +352,7 @@ func _check_attacks() -> void:
 		player.try_evade_reward(true)                   # 패리 불가 레이저를 돌진 직후 스침 = 강한 퍼펙트 회피 (4배)
 	var beam_push: Vector2 = boss.beam_hit(p, Player.RADIUS)   # 패리 불가: 돌진 무적으로만 피한다
 	if beam_push != Vector2.ZERO and not player.is_immune():
-		hurt_player(beam_push)
+		hurt_player(beam_push, "beam")
 		return
 	var reach: float = player.parry_reach()
 	for hb in boss.hitboxes(p):
@@ -341,7 +375,10 @@ func _check_attacks() -> void:
 			_parry_feedback(p, perfect, hb)
 			return
 		if not player.is_immune() and boss.overlaps(hb, p, Player.RADIUS):
-			hurt_player(hb["push"])
+			var cause: String = hb["id"]
+			if cause == "bolt" and Dictionary(hb["bolt"]).has("lava"):
+				cause = "lava_glob"
+			hurt_player(hb["push"], cause)
 			boss.on_hit_player(hb)
 			return
 
@@ -380,6 +417,7 @@ func _clash(hb: Dictionary, p: Vector2) -> void:
 	var contact: Vector2 = hb["pos"]
 	var dir: Vector2 = player.vel.normalized()
 	var dmg: int = player.clash_damage()
+	tele.hit("intercept", dmg)
 	boss.on_parried(hb)                          # 휩쓸던 반대쪽으로 밀려나 잠시 멈춘다 (관절 노출)
 	player.bounce_off(dir, "charge")
 	var at := p.lerp(contact, 0.4)
@@ -402,7 +440,10 @@ func _clash(hb: Dictionary, p: Vector2) -> void:
 
 
 ## 피격 = 목숨 −1 + 스턴. 잠시 조작을 잃고 추락 → 용암 위험
-func hurt_player(push: Vector2, damage := true) -> void:
+func hurt_player(push: Vector2, cause := "attack", damage := true) -> void:
+	if debug.god:
+		return
+	tele.hurt_by(cause)
 	var p: Vector2 = player.position
 	player.on_hurt(push)
 	hitstop = 0.07
@@ -419,6 +460,7 @@ func hurt_player(push: Vector2, damage := true) -> void:
 
 
 func _parry_feedback(p: Vector2, perfect: bool, hb: Dictionary) -> void:
+	tele.add("parry_perfect" if perfect else "parry")
 	var hp_pos: Vector2 = hb["pos"]
 	var contact := p.lerp(hp_pos, 0.25) if not hb.has("rect") else p
 	_buzz(70 if perfect else 40)
@@ -448,6 +490,7 @@ func _parry_feedback(p: Vector2, perfect: bool, hb: Dictionary) -> void:
 
 ## 팔을 그냥 패리: 피해는 막았지만 보상은 없다 → 짧고 가벼운 연출
 func _parry_push_feedback(at: Vector2) -> void:
+	tele.add("parry_push")
 	_buzz(30)
 	hitstop = maxf(hitstop, 0.06)
 	shake = maxf(shake, 8.0)
@@ -483,6 +526,7 @@ func _drain_boss_events() -> void:
 			"bolt_pop":
 				fx.burst(pos, 8, Color(1.0, 0.78, 0.42), 300.0, 0.3)
 			"part_break":                       # 부위 파괴: 크게 터지고 떨어져 나간다
+				tele.mark("part_break", run_time)
 				hitstop = 0.16
 				shake = 22.0
 				sfx.play("break", 4.0)
@@ -509,6 +553,7 @@ func _drain_boss_events() -> void:
 				fx.ring(pos, Color(1.0, 0.65, 0.35), 200.0, 0.4, 6.0)
 				hud.flash(0.1, Color(1.0, 0.75, 0.5))
 			"armor_break":                      # 껍질이 완전히 부서짐: 코어가 드러난다 (한 발 더 필요)
+				tele.mark("armor_break", run_time)
 				hitstop = maxf(hitstop, 0.25)
 				shake = maxf(shake, 30.0)
 				sfx.play("break", 6.0)
@@ -526,6 +571,7 @@ func _drain_boss_events() -> void:
 				sfx.play("land", 2.0)
 				fx.burst(pos, 20, Color(0.55, 0.57, 0.6, 0.8), 500.0, 0.6, 5.0, 900.0, Vector2.UP, PI * 0.45)
 			"core_open":                        # 모든 부위 파괴 → 가슴이 열린다
+				tele.mark("core_open", run_time)
 				hitstop = 0.25
 				shake = 26.0
 				sfx.play("stomp", 4.0)
@@ -581,6 +627,11 @@ func on_launch(pos: Vector2) -> void:
 func on_lava(pos: Vector2) -> void:
 	if state != State.PLAY:
 		return
+	if debug.god:                             # 디버그 무적: 빠지지 않고 튀어 오른다
+		player.position.y = -60.0
+		player.vel.y = -1400.0
+		return
+	tele.hurt_by("lava_fall")
 	player.frozen = true
 	player.visible = false
 	lives -= 1
@@ -609,6 +660,7 @@ func _respawn() -> void:
 ## 퍼펙트 회피: 일반은 과하지 않게(짧은 슬로우, 옅은 틴트, 얇은 링 하나).
 ## strong(패리 불가 공격을 피함)은 확실히 더 크게 — 긴 슬로우, 금빛·청록 이중 링, 입자
 func on_perfect_evade(pos: Vector2, strong := false) -> void:
+	tele.add("perfect_evade_strong" if strong else "perfect_evade")
 	var mint := Color(0.5, 1.0, 0.88)
 	if not strong:
 		slowmo = maxf(slowmo, 0.25)
@@ -646,6 +698,9 @@ func on_parry_launch(pos: Vector2, dir: Vector2) -> void:
 ## 돌진 적중. kind: "dash"(피해 1, 가볍게) / "charge"(3, 주황) / "power"(패리 돌진 12·16, 크게)
 func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, kind := "dash", buffed := false, strong := false) -> void:
 	var contact := pos + dir * Player.RADIUS
+	tele.hit(kind, dmg)
+	if buffed:
+		tele.add("sync_strong_hit" if strong else "sync_hit")
 	if strong:                                 # 패리 불가 공격을 퍼펙트 회피한 4배 일격: 퍼펙트 패리에 준하는 임팩트
 		_perfect_impact(contact, dir)
 	elif buffed:                               # 퍼펙트 회피 버프가 실린 차지 일격
@@ -694,6 +749,8 @@ func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, kind := "d
 
 ## 코어 파괴 = 승리
 func _core_destroyed(pos: Vector2) -> void:
+	tele.mark("core", run_time)
+	tele.finish("win", run_time, lives, _tele_extra())
 	state = State.WON
 	player.frozen = true
 	player.vel = Vector2.ZERO
@@ -711,6 +768,7 @@ func _core_destroyed(pos: Vector2) -> void:
 
 
 func _die() -> void:
+	tele.finish("dead", run_time, lives, _tele_extra())
 	state = State.DEAD
 	dead_t = 2.5
 	hud.banner("기체 손실", "잠시 후 재시작 (R: 즉시)")

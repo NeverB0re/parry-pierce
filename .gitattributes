@@ -1,0 +1,8 @@
+# 줄바꿈은 저장소·작업 폴더 모두 LF (Godot 기본). 바이너리는 변환하지 않는다
+* text=auto eol=lf
+*.png binary
+*.ttf binary
+*.psd binary
+*.exe binary
+*.apk binary
+*.pck binary

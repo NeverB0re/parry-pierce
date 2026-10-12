@@ -47,33 +47,53 @@ func ring(pos: Vector2, color: Color, max_r: float, life := 0.35, width := 4.0, 
 	rings.append({"pos": pos, "color": color, "max_r": max_r, "life": life, "max": life, "width": width, "inward": inward})
 
 
+const MAX_PARTS := 900                 # 입자 상한: 큰 연출이 겹쳐도 프레임이 무너지지 않게 (넘치면 오래된 것부터 버린다)
+
+
 func step(dt: float) -> void:
-	for p in parts.duplicate():
-		p["life"] = float(p["life"]) - dt
-		if p["life"] <= 0.0:
-			parts.erase(p)
-			continue
-		var v: Vector2 = p["vel"]
-		v.y += float(p["grav"]) * dt
-		v *= 1.0 - 2.5 * dt
-		p["vel"] = v
-		p["pos"] = (p["pos"] as Vector2) + v * dt
-	for r in rings.duplicate():
-		r["life"] = float(r["life"]) - dt
-		if r["life"] <= 0.0:
-			rings.erase(r)
-	for r in rays.duplicate():
-		r["life"] = float(r["life"]) - dt
-		if r["life"] <= 0.0:
-			rays.erase(r)
-	for sp in sprites.duplicate():
+	# 배열을 복사하지 않고 뒤에서부터 돌며, 지울 때는 맨 끝 요소와 바꿔 지운다 (순서는 그리기에 영향 없음)
+	var i := parts.size() - 1
+	while i >= 0:
+		var p: Dictionary = parts[i]
+		var l := float(p["life"]) - dt
+		if l <= 0.0:
+			parts[i] = parts[parts.size() - 1]
+			parts.pop_back()
+		else:
+			p["life"] = l
+			var v: Vector2 = p["vel"]
+			v.y += float(p["grav"]) * dt
+			v *= 1.0 - 2.5 * dt
+			p["vel"] = v
+			p["pos"] = (p["pos"] as Vector2) + v * dt
+		i -= 1
+	if parts.size() > MAX_PARTS:
+		parts = parts.slice(parts.size() - MAX_PARTS)
+	_tick(rings, dt)
+	_tick(rays, dt)
+	i = sprites.size() - 1
+	while i >= 0:
+		var sp: Dictionary = sprites[i]
 		if float(sp["delay"]) > 0.0:
 			sp["delay"] = float(sp["delay"]) - dt
-			continue
-		sp["life"] = float(sp["life"]) - dt
-		if sp["life"] <= 0.0:
-			sprites.erase(sp)
+		else:
+			sp["life"] = float(sp["life"]) - dt
+			if float(sp["life"]) <= 0.0:
+				sprites.remove_at(i)              # 스프라이트는 순서(겹침)가 보이므로 순서를 유지한다 (개수가 적다)
+		i -= 1
 	queue_redraw()
+
+
+static func _tick(arr: Array[Dictionary], dt: float) -> void:
+	var i := arr.size() - 1
+	while i >= 0:
+		var l := float(arr[i]["life"]) - dt
+		if l <= 0.0:
+			arr[i] = arr[arr.size() - 1]
+			arr.pop_back()
+		else:
+			arr[i]["life"] = l
+		i -= 1
 
 
 func _draw() -> void:

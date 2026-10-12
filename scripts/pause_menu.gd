@@ -42,6 +42,9 @@ func _ready() -> void:
 		restart_requested.emit()
 		resume())
 	_button(box, "조작법", func() -> void: _show_help(true))
+	_button(box, "플레이 기록 폴더 열기", func() -> void:
+		DirAccess.make_dir_recursive_absolute("user://telemetry")
+		OS.shell_open(ProjectSettings.globalize_path("user://telemetry")))
 	_button(box, "종료", func() -> void: get_tree().quit())
 
 	help_box = VBoxContainer.new()

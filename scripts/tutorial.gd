@@ -143,12 +143,14 @@ func _open_next(first: bool) -> void:
 	btn.text = "다음 (Enter)" if not queue.is_empty() else "계속하기 (Enter)"
 	stage.set("kind", current)
 	stage.set("t", 0.0)
+	stage.set_process(true)
 	visible = true
 	btn.grab_focus()
 
 
 func _close() -> void:
 	visible = false
+	stage.set_process(false)                  # 닫혀 있는 동안은 애니메이션을 돌리지 않는다
 	current = ""
 	queue.clear()
 	get_tree().paused = was_paused
@@ -203,6 +205,7 @@ func _build_ui() -> void:
 	stage.process_mode = Node.PROCESS_MODE_ALWAYS
 	stage.custom_minimum_size = Vector2(700, 260)
 	stage.clip_contents = true
+	stage.set_process(false)
 	box.add_child(stage)
 
 	desc_l = Label.new()

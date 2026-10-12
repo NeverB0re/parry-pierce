@@ -32,6 +32,7 @@ const PERFECT_EVADE_GRAZE := 16.0   # 퍼펙트 회피로 인정하는 근접 �
 const PERFECT_EVADE_INVULN := 0.8   # 퍼펙트 회피 성공 시 추가 무적 (회피 직후 다른 곳에 맞는 일 방지)
 const EVADE_BUFF_MULT := 2          # 퍼펙트 회피 버프: 다음 차지 공격 피해 배율 (차지 시간도 절반)
 const EVADE_BUFF_MULT_STRONG := 4   # 패리 불가 공격(레이저)을 퍼펙트 회피하면 4배
+const SYNC_TIME := 4.0              # 동조(퍼펙트 회피 버프) 지속 시간. 다시 얻으면 갱신. 월드 시간 기준(슬로우 중엔 느리게 줄어듦)
 const PARRY_BUFFER := 0.15          # 패리 쿨다운 중 누른 입력을 이만큼 기억
 const PARRY_PUSH := 1100.0          # 휩쓰는 팔을 그냥 패리하면: 피해 없이 반대쪽으로 튕겨나기만 한다
 const PARRY_PUSH_SHIELD := 0.5
@@ -96,6 +97,7 @@ var assist_r := 0.0
 var dash_held := false           # 좌클릭을 누르고 있는 중 (스턴 중 선입력 판단용)
 var buffed := false              # 퍼펙트 회피 버프: 다음 차지 공격 피해 2배, 차지 시간 절반
 var buff_strong := false         # 패리 불가 공격을 퍼펙트 회피해 얻은 강한 버프 (4배)
+var buff_t := 0.0                # 동조 남은 시간
 var last_hit_strong := false     # 방금 일격이 강한 버프를 소모했는가 (main.gd 가 이펙트에 사용)
 var queued_press := false        # 스턴 중 누른 좌클릭: 회복하면 차지 시작
 var pending_kind := ""           # 쿨다운 중에 뗀 돌진: 쿨다운이 끝나는 즉시 나간다
@@ -146,6 +148,7 @@ func reset(pos: Vector2, platform := false) -> void:
 	dash_held = false
 	buffed = false
 	buff_strong = false
+	buff_t = 0.0
 	queued_press = false
 	pending_kind = ""
 	parry_queue = 0.0
@@ -341,6 +344,7 @@ func try_evade_reward(strong := false) -> void:
 	evade_rewarded = true
 	buffed = true
 	buff_strong = buff_strong or strong            # 이미 강한 버프가 있으면 약한 회피로 내려가지 않는다
+	buff_t = SYNC_TIME                             # 다시 얻으면 지속 시간 갱신
 	invuln = maxf(invuln, PERFECT_EVADE_INVULN * (1.5 if strong else 1.0))   # 성공 직후 다른 공격에 맞지 않도록 무적 연장
 	dash_cd = dash_t                               # 이 돌진이 끝나는 즉시 다시 돌진할 수 있다
 	main.on_perfect_evade(position, strong)
@@ -349,8 +353,7 @@ func try_evade_reward(strong := false) -> void:
 ## 피격: 잠시 조작 불가(스턴), 살짝 솟구친 뒤 추락
 func on_hurt(push: Vector2) -> void:
 	cancel_charge()
-	buffed = false
-	buff_strong = false
+	_clear_buff()
 	queued_press = dash_held                       # 누르고 있었다면 스턴이 끝나자마자 모으기 시작
 	evade_window = 0.0
 	var sx := signf(push.x) if absf(push.x) > 0.05 else (1.0 if randf() < 0.5 else -1.0)
@@ -370,6 +373,10 @@ func step(dt: float) -> void:
 	if frozen:
 		queue_redraw()
 		return
+	if buffed:                                    # 동조 지속 시간: 월드 시간으로 줄어든다 (슬로우 중엔 느리게)
+		buff_t -= dt * main.world_scale()
+		if buff_t <= 0.0 and not (dash_t > 0.0 and dash_kind == "charge"):   # 끝날 무렵 시전한 차지 강습은 끝날 때까지 유지
+			_clear_buff()
 	var m: Vector2 = main.aim_offset(position)
 	assist_lock = false
 	if m.length() > AIM_DEADZONE:
@@ -562,8 +569,7 @@ func _on_strike(hit: Dictionary) -> void:
 	var was_buffed := buffed and kind == "charge"
 	last_hit_strong = was_buffed and buff_strong
 	if was_buffed:                               # 퍼펙트 회피 버프는 차지 공격 한 번에 소모된다
-		buffed = false
-		buff_strong = false
+		_clear_buff()
 	main.on_strike(hit, dmg, position, dir, kind, was_buffed, last_hit_strong)
 	if frozen:
 		return
@@ -571,12 +577,18 @@ func _on_strike(hit: Dictionary) -> void:
 
 
 ## 받아치기: 휩쓰는 팔에 차지 돌진이 부딪힘 → 피해량 반환 (버프가 있으면 2배, 소모)
+## 요격에는 강한 버프(4배)가 걸리지 않는다. 동조가 있으면 일반 배율(2배)만 적용하고 소모한다
 func clash_damage() -> int:
-	var dmg := CLASH_DAMAGE * _buff_mult()
-	last_hit_strong = buffed and buff_strong
+	var dmg := CLASH_DAMAGE * (EVADE_BUFF_MULT if buffed else 1)
+	last_hit_strong = false
+	_clear_buff()
+	return dmg
+
+
+func _clear_buff() -> void:
 	buffed = false
 	buff_strong = false
-	return dmg
+	buff_t = 0.0
 
 
 ## 직격 후 위로 솟구친다 (차지·패리 돌진일수록 조금 더 높이). 좌우는 마우스(스틱)로 조종
@@ -730,14 +742,15 @@ func _draw() -> void:
 
 	# 퍼펙트 회피 버프: 다음 공격이 강화됐음을 알리는 청백 오라. 패리 불가 공격을 피해 얻은 강한 버프(4배)는
 	# 금빛 이중 링 + 회전하는 불꽃 입자 + 위로 솟는 빛으로 확연히 다르게 보인다
-	if buffed and not buff_strong:
+	var fade_ok := buff_t > 1.0 or dash_t > 0.0 or int(Time.get_ticks_msec() / 90) % 2 == 0   # 마지막 1초는 깜빡인다
+	if buffed and not buff_strong and fade_ok:
 		var bp := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.02)
 		draw_circle(Vector2.ZERO, 26.0, Color(0.7, 0.95, 1.0, 0.12 + 0.1 * bp))
 		draw_arc(Vector2.ZERO, 30.0 + 3.0 * bp, 0.0, TAU, 32, Color(0.8, 0.97, 1.0, 0.55 + 0.35 * bp), 2.5)
 		for k in 3:
 			var ba := Time.get_ticks_msec() * 0.006 + k * TAU / 3.0
 			draw_circle(Vector2(cos(ba), sin(ba)) * 34.0, 2.6, Color(1, 1, 1, 0.9))
-	elif buffed:
+	elif buffed and fade_ok:
 		var tms := Time.get_ticks_msec()
 		var sp := 0.5 + 0.5 * sin(tms * 0.03)
 		draw_circle(Vector2.ZERO, 46.0 + 4.0 * sp, Color(1.0, 0.85, 0.4, 0.14 + 0.1 * sp))

@@ -135,9 +135,36 @@ var t := 0.0
 var events: Array[Dictionary] = []   # main.gd 가 매 프레임 꺼내 처리 (흔들림/사운드)
 
 
+var _bolt_tex: Texture2D              # 탄 그림 (금빛 번짐 + 금색 몸 + 흰 심) — 원 3개를 매번 그리는 대신 텍스처 한 장
+var _lava_tex: Texture2D              # 용융물 덩어리 (붉은 번짐)
+var _shell_inner := PackedVector2Array()   # 심장 근육 안쪽 윤곽 (한 번만 계산)
+var _swing_cache := {}                # 팔 예고 범위 캐시 (위치가 고정된 뒤엔 다시 계산하지 않는다)
+
+
 func _ready() -> void:
 	_build_shell()
+	_bolt_tex = _make_bolt_tex(C_PARRY)
+	_lava_tex = _make_bolt_tex(C_LAVA)
 	reset()
+
+
+## 탄 텍스처: 반지름 비율 0.55 까지 금색 몸, 0.28 까지 흰 심, 바깥은 옅은 번짐 (그리는 크기 = BOLT_R × 3.6)
+static func _make_bolt_tex(outer: Color) -> Texture2D:
+	var n := 64
+	var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
+	var c := (n - 1) * 0.5
+	for y in n:
+		for x in n:
+			var d := Vector2(x - c, y - c).length() / (n * 0.5)
+			var col := Color(0, 0, 0, 0)
+			if d <= 0.28:
+				col = Color(1, 1, 0.9)
+			elif d <= 0.555:
+				col = C_PARRY
+			elif d <= 1.0:
+				col = Color(outer, 0.22)
+			img.set_pixel(x, y, col)
+	return ImageTexture.create_from_image(img)
 
 
 ## 심장 외곽선과 불규칙한 강철 판(보로노이 조각 + 들쭉날쭉한 변), 패임·균열선을 한 번만 만든다
@@ -154,6 +181,9 @@ func _build_shell() -> void:
 			sm.append(a.lerp(b, 0.75))
 		pts = sm
 	shell_poly = pts
+	_shell_inner.clear()
+	for q in shell_poly:
+		_shell_inner.append(HEART_POS + (q - HEART_POS) * 0.86)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 11
 	var sites: Array[Vector2] = []
@@ -207,7 +237,9 @@ func _build_shell() -> void:
 			line.append(cr)
 		if line.size() >= 2:
 			cracks.append(line)
-		plates.append({"poly": local, "cen": cen, "th": rng.randf_range(0.12, 0.96), "off": Vector2(rng.randf_range(-1, 1), rng.randf_range(-1, 1)),
+		var closed := local.duplicate()
+		closed.append(local[0])
+		plates.append({"poly": local, "outline": closed, "cen": cen, "th": rng.randf_range(0.12, 0.96), "off": Vector2(rng.randf_range(-1, 1), rng.randf_range(-1, 1)),
 			"rot": rng.randf_range(-1.0, 1.0), "crumple": crumple, "cracks": cracks, "gone": false, "rivet": local[0].lerp(Vector2.ZERO, 0.55)})
 
 
@@ -850,6 +882,19 @@ func _aim_swing(a: int, ppos: Vector2) -> void:
 
 
 ## 휩쓸기가 실제로 닿는 영역 (판정과 동일: 위팔/아래팔/주먹이 th0~th1 을 쓸고 지나가는 합집합)
+## 같은 팔·각도면 계산을 재사용한다 (예고 중 매 프레임 다각형 합치기를 하지 않게)
+func swing_area_cached(a: int, th0: float, th1: float) -> PackedVector2Array:
+	var key := Vector3(a, snappedf(th0, 0.001), snappedf(th1, 0.001))
+	var hit = _swing_cache.get(key)
+	if hit != null:
+		return hit
+	if _swing_cache.size() > 8:
+		_swing_cache.clear()
+	var area := swing_area(a, th0, th1)
+	_swing_cache[key] = area
+	return area
+
+
 func swing_area(a: int, th0: float, th1: float) -> PackedVector2Array:
 	var s := 1.0 if a == 1 else -1.0
 	var sh: Vector2 = SHOULDERS[a]
@@ -1161,10 +1206,7 @@ func _draw_core() -> void:
 		return
 	# 심장 근육 (안쪽): 두 겹 + 중격선 + 혈관
 	draw_colored_polygon(shell_poly, Color(0.2, 0.04, 0.06))
-	var inner := PackedVector2Array()
-	for q in shell_poly:
-		inner.append(hc + (q - hc) * 0.86)
-	draw_colored_polygon(inner, Color(0.32, 0.06, 0.08).lerp(Color(0.5, 0.1, 0.08), f * 0.6))
+	draw_colored_polygon(_shell_inner, Color(0.32, 0.06, 0.08).lerp(Color(0.5, 0.1, 0.08), f * 0.6))
 	draw_polyline(PackedVector2Array([hc + Vector2(-40, 230), hc + Vector2(-70, 120), hc + Vector2(-60, 10), hc + Vector2(-72, -118)]), Color(0.12, 0.02, 0.03, 0.8), 5.0)
 	draw_polyline(PackedVector2Array([hc + Vector2(30, 200), hc + Vector2(80, 110), hc + Vector2(120, 20), hc + Vector2(150, -60)]), Color(0.55, 0.1, 0.12, 0.7), 3.0)
 	draw_polyline(PackedVector2Array([hc + Vector2(-30, -240), hc + Vector2(-10, -170), hc + Vector2(30, -110)]), Color(0.55, 0.1, 0.12, 0.7), 4.0)
@@ -1203,9 +1245,7 @@ func _draw_core() -> void:
 		draw_set_transform(cen + shift, ang)
 		var poly: PackedVector2Array = pl["poly"]
 		draw_colored_polygon(poly, col)
-		var ol := poly.duplicate()
-		ol.append(poly[0])
-		draw_polyline(ol, Color(1.0, 0.85, 0.5) if lit else (C_PLATE_EDGE if lv < 2 else Color(1.0, 0.45, 0.15, 0.5 + 0.4 * beat)), 3.0 if lv < 2 else 4.0)
+		draw_polyline(pl["outline"], Color(1.0, 0.85, 0.5) if lit else (C_PLATE_EDGE if lv < 2 else Color(1.0, 0.45, 0.15, 0.5 + 0.4 * beat)), 3.0 if lv < 2 else 4.0)
 		if lv == 0:
 			draw_circle(pl["rivet"], 4.0, C_STEEL_DARK)
 			draw_circle(pl["rivet"] + Vector2(-1, -1), 1.6, Color(0.72, 0.76, 0.82))
@@ -1430,7 +1470,7 @@ func _draw_telegraphs() -> void:
 		var ph: String = atk["phase"]
 		var th0: float = atk["th0"]
 		var th1: float = atk["th1"]
-		var area := swing_area(a, th0, th1)
+		var area := swing_area_cached(a, th0, th1)
 		var outline := area.duplicate()
 		outline.append(area[0])
 		if ph == "warn":
@@ -1505,11 +1545,23 @@ func _draw_beam() -> void:
 
 ## 탄 = 패리할 수 있는 것 → 금색. 용암 덩어리는 붉은 겉불 + 금색 심
 func _draw_bolts() -> void:
+	if bolts.is_empty():
+		return
+	var tails := PackedVector2Array()
+	var lava_tails := PackedVector2Array()
 	for b in bolts:
 		var p: Vector2 = b["pos"]
 		var v: Vector2 = b["vel"]
-		var outer := C_LAVA if b.has("lava") else C_PARRY
-		draw_line(p, p - v.normalized() * 50.0, Color(outer, 0.35), 10.0)
-		draw_circle(p, BOLT_R * 1.8, Color(outer, 0.22))
-		draw_circle(p, BOLT_R, C_PARRY)
-		draw_circle(p, BOLT_R * 0.5, Color(1, 1, 0.9))
+		var tail := p - v.normalized() * 50.0
+		if b.has("lava"):
+			lava_tails.append_array(PackedVector2Array([p, tail]))
+		else:
+			tails.append_array(PackedVector2Array([p, tail]))
+	if not tails.is_empty():
+		draw_multiline(tails, Color(C_PARRY, 0.35), 10.0)
+	if not lava_tails.is_empty():
+		draw_multiline(lava_tails, Color(C_LAVA, 0.35), 10.0)
+	var half := Vector2(BOLT_R, BOLT_R) * 1.8
+	for b in bolts:
+		var p: Vector2 = b["pos"]
+		draw_texture_rect(_lava_tex if b.has("lava") else _bolt_tex, Rect2(p - half, half * 2.0), false)
