@@ -1,9 +1,10 @@
 extends Control
-## 모바일 터치 조작: 왼쪽 플로팅 스틱(방향), 오른쪽 패리(꾹)/회피·차지 버튼, 우상단 일시정지.
+## 모바일 터치 조작: 왼쪽 플로팅 스틱(방향), 오른쪽 큰 패리/차지 버튼 + 바로 붙은 작은 회피 버튼, 우상단 일시정지.
 ## 모바일에서만(또는 --touch 로 시험할 때) main.gd 가 만든다. 마우스 조작은 그대로 유지된다.
 
-const BTN_PARRY_R := 94.0
-const BTN_DASH_R := 106.0            # 회피/차지를 더 자주 쓰므로 가장 크고 엄지가 닿기 쉬운 자리
+const BTN_PARRY_R := 122.0           # 패리/차지(누르고 있는 주력 버튼): 크게, 엄지가 가장 편한 자리
+const BTN_DASH_R := 78.0             # 회피: 작게, 패리 버튼 바로 옆에 붙여 엄지를 살짝 옮기면 닿는다
+const BTN_GAP := 6.0
 const STICK_R := 120.0               # 스틱 최대 반경
 const STICK_ZONE := 0.5              # 화면 왼쪽 이 비율 안에서 시작한 터치만 스틱
 const MARGIN := 60.0                 # 노치/가장자리 여유
@@ -24,16 +25,16 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
 
-## 회피/차지: 오른쪽 아래, 엄지가 가장 편한 자리
-func dash_center() -> Vector2:
-	var s := get_viewport_rect().size
-	return Vector2(s.x - MARGIN - BTN_DASH_R - 24.0, s.y - LIFT - BTN_DASH_R)
-
-
-## 패리: 회피 버튼의 왼쪽 위 (엄지를 살짝 올려 누른다)
+## 패리/차지: 오른쪽 아래, 엄지가 가장 편한 자리
 func parry_center() -> Vector2:
-	var d := dash_center()
-	return d + Vector2(-(BTN_DASH_R + BTN_PARRY_R) * 0.92 - 10.0, -(BTN_PARRY_R) * 0.9)
+	var s := get_viewport_rect().size
+	return Vector2(s.x - MARGIN - BTN_PARRY_R - 16.0, s.y - LIFT - BTN_PARRY_R)
+
+
+## 회피: 패리 버튼의 왼쪽 위에 거의 맞닿게
+func dash_center() -> Vector2:
+	var dir := Vector2(-0.8, -0.6)
+	return parry_center() + dir * (BTN_PARRY_R + BTN_DASH_R + BTN_GAP)
 
 
 func pause_center() -> Vector2:
@@ -58,14 +59,18 @@ func _down(idx: int, pos: Vector2) -> void:
 	if pos.distance_to(pause_center()) < 52.0:
 		fingers[idx] = "pause"
 		main.touch_pause()
-	elif pos.distance_to(parry_center()) < BTN_PARRY_R * 1.1:
-		fingers[idx] = "parry"
-		parry_down = true
-		main.touch_parry(true)
-	elif pos.distance_to(dash_center()) < BTN_DASH_R * 1.1:
-		fingers[idx] = "dash"
-		dash_down = true
-		main.touch_dash(true)
+	elif pos.distance_to(parry_center()) < BTN_PARRY_R * 1.1 or pos.distance_to(dash_center()) < BTN_DASH_R * 1.1:
+		# 두 버튼이 맞닿아 있으므로 더 가까운(반지름 대비) 쪽을 누른 것으로 본다
+		var pr := pos.distance_to(parry_center()) / BTN_PARRY_R
+		var dr := pos.distance_to(dash_center()) / BTN_DASH_R
+		if pr <= dr:
+			fingers[idx] = "parry"
+			parry_down = true
+			main.touch_parry(true)
+		else:
+			fingers[idx] = "dash"
+			dash_down = true
+			main.touch_dash(true)
 	elif pos.x < s.x * STICK_ZONE and not fingers.values().has("stick"):
 		fingers[idx] = "stick"
 		stick_origin = pos
@@ -114,23 +119,26 @@ func _draw() -> void:
 		var hint := Vector2(MARGIN + STICK_R + 40.0, s.y - LIFT - STICK_R * 0.8)
 		draw_arc(hint, STICK_R * 0.8, 0.0, TAU, 40, Color(1, 1, 1, 0.12), 3.0)
 		draw_circle(hint, 30.0, Color(1, 1, 1, 0.08))
-	# 패리: 금색
+	# 패리/차지(큰 버튼): 금색. 차지 쿨다운 중엔 바깥 링이 차오르고, 모으는 동안은 안쪽 호가 찬다
 	var pc := parry_center()
 	var pa := 0.5 if parry_down else 0.28
 	draw_circle(pc, BTN_PARRY_R, Color(1.0, 0.85, 0.35, pa * 0.5))
-	draw_arc(pc, BTN_PARRY_R, 0.0, TAU, 40, Color(1.0, 0.88, 0.4, pa + 0.25), 4.0)
-	draw_arc(pc, BTN_PARRY_R * 0.5, PI * 1.15, PI * 1.85, 16, Color(1.0, 0.92, 0.55, pa + 0.4), 6.0)
-	# 회피/차지: 청백(쿨다운 중엔 링이 차오른다)
+	draw_arc(pc, BTN_PARRY_R, 0.0, TAU, 48, Color(1.0, 0.88, 0.4, pa + 0.25), 4.0)
+	draw_arc(pc, BTN_PARRY_R * 0.5, PI * 1.15, PI * 1.85, 16, Color(1.0, 0.92, 0.55, pa + 0.4), 7.0)
+	if pl.charging and pl.charge_cd <= 0.0:
+		var fr := clampf(pl.charge_t / pl.charge_need(), 0.0, 1.0)
+		draw_arc(pc, BTN_PARRY_R * 0.78, -PI * 0.5, -PI * 0.5 + TAU * fr, 40, Color(1.0, 0.6, 0.2, 0.95), 6.0)
+	if pl.charge_cd > 0.0:
+		draw_arc(pc, BTN_PARRY_R + 9.0, -PI * 0.5, -PI * 0.5 + TAU * (1.0 - pl.charge_cd / pl.CHARGE_COOLDOWN), 48, Color(1.0, 0.55, 0.2, 0.9), 5.0)
+	# 회피(작은 버튼): 청백 화살표
 	var dc := dash_center()
 	var da := 0.5 if dash_down else 0.28
 	draw_circle(dc, BTN_DASH_R, Color(0.5, 0.85, 1.0, da * 0.5))
 	draw_arc(dc, BTN_DASH_R, 0.0, TAU, 40, Color(0.7, 0.92, 1.0, da + 0.25), 4.0)
 	var ar := Vector2(BTN_DASH_R * 0.42, 0.0)
-	draw_line(dc - ar, dc + ar, Color(0.85, 0.97, 1.0, da + 0.4), 6.0)
-	draw_line(dc + ar, dc + ar + Vector2(-16, -14), Color(0.85, 0.97, 1.0, da + 0.4), 6.0)
-	draw_line(dc + ar, dc + ar + Vector2(-16, 14), Color(0.85, 0.97, 1.0, da + 0.4), 6.0)
-	if pl.charge_cd > 0.0:
-		draw_arc(dc, BTN_DASH_R + 9.0, -PI * 0.5, -PI * 0.5 + TAU * (1.0 - pl.charge_cd / pl.CHARGE_COOLDOWN), 40, Color(1.0, 0.55, 0.2, 0.9), 5.0)
+	draw_line(dc - ar, dc + ar, Color(0.85, 0.97, 1.0, da + 0.4), 5.0)
+	draw_line(dc + ar, dc + ar + Vector2(-14, -12), Color(0.85, 0.97, 1.0, da + 0.4), 5.0)
+	draw_line(dc + ar, dc + ar + Vector2(-14, 12), Color(0.85, 0.97, 1.0, da + 0.4), 5.0)
 	# 일시정지
 	var qc := pause_center()
 	draw_circle(qc, 26.0, Color(1, 1, 1, 0.1))

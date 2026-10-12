@@ -63,7 +63,24 @@ func _draw() -> void:
 		while y > -4000.0:
 			draw_line(Vector2(edge, y), Vector2(edge - side * 40.0, y), Color(0.12, 0.13, 0.16), 4.0)
 			y -= 260.0
+	_draw_ceiling()
 	_draw_platform()
+
+
+## 천장: 이 높이를 넘어 올라갈 수 없다 (아랫면 y = -3080)
+func _draw_ceiling() -> void:
+	var y := -3080.0
+	draw_rect(Rect2(-1650, y - 600, 3300, 600), Color(0.035, 0.04, 0.05))
+	draw_line(Vector2(-1150, y), Vector2(1150, y), Color(0.32, 0.35, 0.42), 4.0)
+	draw_rect(Rect2(-1150, y - 14, 2300, 10), Color(0.1, 0.11, 0.14))
+	var x := -1100.0
+	var i := 0
+	while x < 1150.0:                  # 아래로 늘어진 돌 이빨 + 이음새
+		var h := 26.0 + float(i % 3) * 14.0
+		draw_colored_polygon(PackedVector2Array([Vector2(x - 24, y), Vector2(x + 24, y), Vector2(x, y + h)]), Color(0.1, 0.11, 0.14))
+		draw_line(Vector2(x + 110, y - 4), Vector2(x + 110, y - 90), Color(0.12, 0.13, 0.16), 4.0)
+		x += 220.0
+		i += 1
 
 
 ## 시작 발판: 발사 후 금이 가며 용암 속으로 가라앉는다 (재출격 때 다시 솟아오름)

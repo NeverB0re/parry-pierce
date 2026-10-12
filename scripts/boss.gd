@@ -460,7 +460,7 @@ func beam_end(th: float) -> Vector2:
 	if d.y > 0.001:
 		k = minf(k, (0.0 - HEAD_POS.y) / d.y)
 	elif d.y < -0.001:
-		k = minf(k, (-3300.0 - HEAD_POS.y) / d.y)
+		k = minf(k, (-3080.0 - HEAD_POS.y) / d.y)
 	return HEAD_POS + d * k
 
 
@@ -820,7 +820,7 @@ func _step_bolts(dt: float) -> void:
 		p += v * lerpf(BOLT_WARMUP_FLOOR, 1.0, minf(1.0, float(b["age"]) / BOLT_WARMUP)) * dt
 		b["pos"] = p
 		b["life"] = float(b["life"]) - dt
-		if b["life"] <= 0.0 or p.y > -6.0 or p.x < -1250.0 or p.x > 1250.0 or p.y < -3400.0:
+		if b["life"] <= 0.0 or p.y > -6.0 or p.x < -1250.0 or p.x > 1250.0 or p.y < -3100.0:
 			bolts.erase(b)
 			events.append({"type": "bolt_pop", "pos": p})
 

@@ -98,7 +98,7 @@ func _ready() -> void:
 	cam.zoom = Vector2(0.9, 0.9)
 	cam.limit_left = -1300
 	cam.limit_right = 1300
-	cam.limit_top = -3150
+	cam.limit_top = -3250
 	cam.limit_bottom = 90
 	add_child(cam)
 	cam.make_current()
@@ -159,12 +159,7 @@ func touch_dash(pressed: bool) -> void:
 	if state != State.PLAY:
 		return
 	if pressed:
-		if player.aim_phase:
-			player.launch_parry_dash()
-		else:
-			player.press_dash()
-	else:
-		player.release_dash()
+		_evade_input()
 
 
 func touch_parry(pressed: bool) -> void:
@@ -189,15 +184,9 @@ func _unhandled_input(e: InputEvent) -> void:
 		if state != State.PLAY:
 			return
 		if e.button_index == MOUSE_BUTTON_LEFT:
-			if e.pressed:
-				if player.aim_phase:
-					player.launch_parry_dash()
-				else:
-					player.press_dash()        # 발판 위면 발사. 짧게 떼면 회피, 꾹 눌러 차지하면 공격
-			else:
-				player.release_dash()
-		elif e.button_index == MOUSE_BUTTON_RIGHT:
-			_parry_input(e.pressed)
+			_parry_input(e.pressed)            # 패리 → (못 막으면) 차지. 발판 위면 발사
+		elif e.button_index == MOUSE_BUTTON_RIGHT and e.pressed:
+			_evade_input()
 	elif e is InputEventKey and not e.echo:
 		if e.keycode == KEY_SPACE and state == State.PLAY:
 			_parry_input(e.pressed)
@@ -205,14 +194,24 @@ func _unhandled_input(e: InputEvent) -> void:
 			reset_run()
 
 
-## 패리는 누르고 있는 동안 판정 유지. 성공 후 방향 지정 중에는 버튼을 떼면 돌진.
+## 패리/차지 버튼: 누르면 패리 판정 후 차지, 떼면 차지 발사. 성공 후 방향 지정 중에는 누르거나 떼면 돌진.
 func _parry_input(pressed: bool) -> void:
 	if pressed:
-		player.parry_press()
+		if player.aim_phase:
+			player.launch_parry_dash()
+		else:
+			player.parry_press()
 	else:
 		player.parry_release()
 		if player.aim_phase:
 			player.launch_parry_dash()
+
+
+func _evade_input() -> void:
+	if player.aim_phase:
+		player.launch_parry_dash()
+	else:
+		player.evade_press()
 
 
 func _physics_process(delta: float) -> void:
