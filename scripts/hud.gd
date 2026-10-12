@@ -102,7 +102,7 @@ func _draw() -> void:
 		_edge_arrow(s, (main.get_viewport().get_canvas_transform() * boss.HEAD_POS) / ui_k, Color(0.85, 0.2, 0.55))
 
 	# 상태 정보
-	var left: String = ("부위 %d" % boss.parts_left()) if boss.phase == 1 else "코어"
+	var left: String = ("외부 시스템 %d" % boss.parts_left()) if boss.phase == 1 else "동력 코어"
 	_text(Vector2(28, 100), "%s   %.1fs" % [left, main.run_time], 15, Color(0.75, 0.77, 0.82, 0.7))
 
 	# 배너
@@ -123,7 +123,7 @@ func _draw() -> void:
 
 	# 조작
 	if main.touch_ui == null:
-		_text(Vector2(28, s.y - 24), "마우스: 방향(위=활공)   좌클릭: 돌진 / 꾹: 차지 돌진 (팔이 멈춰 있거나 휘두를 때 부딪히면 저지·받아치기)   우클릭·Space 꾹: 패리 → 슬로우 조준 → 패리 돌진   R: 재시작   Esc: 메뉴", 15, Color(0.75, 0.77, 0.82, 0.55))
+		_text(Vector2(28, s.y - 24), "마우스: 방향(위=활공)   좌클릭: 돌진 / 꾹: 차지 강습 (팔이 멈춰 있거나 휘두를 때 부딪히면 요격)   우클릭·Space 꾹: 패리 → 슬로우 조준 → 리버스 드라이브   R: 재시작   Esc: 메뉴", 15, Color(0.75, 0.77, 0.82, 0.55))
 
 	if warp_t > 0.0:                          # 퍼펙트 회피: 청록 틴트 + 가장자리에서 모여드는 선
 		var wk := clampf(warp_t / warp_max, 0.0, 1.0)

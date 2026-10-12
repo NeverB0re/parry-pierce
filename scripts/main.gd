@@ -707,10 +707,10 @@ func _core_destroyed(pos: Vector2) -> void:
 	fx.ring(pos, Color(1, 0.9, 0.7), 500.0, 0.8, 10.0)
 	sfx.play("perfect", 4.0, 0.0)
 	sfx.play("win", 0.0, 0.0)
-	hud.banner("코어 파괴", "%.1f초 · 남은 목숨 %d · R: 다시" % [run_time, lives])
+	hud.banner("코어 에너지 확보", "%.1f초 · 남은 실드 셀 %d · R: 다시" % [run_time, lives])
 
 
 func _die() -> void:
 	state = State.DEAD
 	dead_t = 2.5
-	hud.banner("부서졌다", "잠시 후 재시작 (R: 즉시)")
+	hud.banner("기체 손실", "잠시 후 재시작 (R: 즉시)")
