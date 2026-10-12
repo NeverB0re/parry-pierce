@@ -44,9 +44,8 @@ const PARRY_DASH_TIME := 0.22
 const POWER_DAMAGE := 3
 const POWER_RADIUS := 8.0        # 패리 돌진은 타격 범위도 넓다
 const POWER_GRACE := 0.7
-const BOUNCE_SPEED := 1100.0     # 직격 후 튕겨나는 속도. 들어온 방향(좌/우)을 유지하며 위로 뜬다
-const BOUNCE_ANGLE := 0.87       # 수평 기준 약 50도 위로
-const BOUNCE_STEER := 300.0      # 튕길 때 마우스 좌우 방향으로 더하는 가로 속도 (좌우 조종)
+const BOUNCE_SPEED := 1100.0     # 직격 후 튕겨나는 속도. 입사각 = 반사각, 아래에서 위로 칠 때만 상향 보정
+const BOUNCE_UP_MIN := 0.35      # 아래에서 위로 공격했을 때 튕김의 최소 상향 성분(정규화) — 상향 보정
 const BOUNCE_THRUST := 2.0       # 튕겨나는 동안 좌우 추진 배율
 const STRIKE_SHIELD := 0.9       # 직격 후 튕겨나는 동안 무적 시간
 const STUN_TIME := 0.9           # 피격(공격/표적 접촉) → 조작 불가
@@ -518,10 +517,18 @@ func _on_strike(hit: Dictionary) -> void:
 	parry_cd = 0.0                               # 튕겨나오는 즉시 패리·회피 등 모든 조작이 가능
 	dash_cd = 0.0
 	parry_queue = 0.0
-	# 들어온 방향(좌/우)을 유지하며 약 50도로 뜬다. 거의 수직으로 들어왔으면 마우스 쪽으로
-	var sx := signf(dir.x) if absf(dir.x) > 0.2 else (signf(aim.x) if absf(aim.x) > 0.1 else (1.0 if randf() < 0.5 else -1.0))
+	# 입사각 = 반사각: 맞은 표면의 법선으로 반사. 아래에서 위로 칠 때만 상향 보정(반사하면 아래로 가므로 위로 뒤집는다)
+	var n: Vector2 = boss.hit_normal(hit, position)
+	if dir.dot(n) > 0.0:
+		n = -n
+	var out := dir.bounce(n)
+	if dir.y < -0.2:
+		out.y = minf(-absf(out.y), -BOUNCE_UP_MIN)
+		if absf(out.x) < 0.25:                    # 거의 수직이면 마우스 쪽으로 살짝
+			out.x += (signf(aim.x) if absf(aim.x) > 0.1 else (1.0 if randf() < 0.5 else -1.0)) * 0.25
+	out = out.normalized()
 	var k := 1.15 if power else 1.0
-	vel = Vector2(sx * cos(BOUNCE_ANGLE), -sin(BOUNCE_ANGLE)) * BOUNCE_SPEED * k + Vector2(aim.x * BOUNCE_STEER, 0.0)
+	vel = out * BOUNCE_SPEED * k
 
 
 # ── 그리기 ─────────────────────────────────────────────
