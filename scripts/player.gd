@@ -2,6 +2,8 @@ extends Node2D
 ## 플레이어: 작은 로켓. 머리는 평소 마우스 방향, 노즐 화염 길이가 추진 상태(활공/낙하)를 보여준다.
 ## 시뮬레이션은 main.gd 가 step() 으로 직접 호출한다(히트스톱/슬로모션 제어 때문).
 
+const Sprites := preload("res://scripts/sprites.gd")
+
 # ── 튜닝값 ─────────────────────────────────────────────
 const RADIUS := 12.0
 const GRAVITY := 900.0
@@ -47,9 +49,10 @@ const POWER_DAMAGE := 12
 const POWER_DAMAGE_PERFECT := 16
 const POWER_RADIUS := 8.0        # 패리 돌진은 타격 범위도 넓다
 const POWER_GRACE := 0.7
-# 직격 후: 맞은 면에 대해 입사각 = 반사각으로 튕기되, 마우스 방향으로 일부 틀어진다
-const BOUNCE_SPEED := 1350.0     # 튕겨나는 속도 (패리 돌진은 ×1.15)
-const BOUNCE_STEER := 0.4        # 반사 방향을 마우스(스틱) 방향 쪽으로 이 비율만큼 돌린다 (0 = 순수 반사)
+# 직격 후: v0.6 방식 — 위로 솟구치고, 들어온 반대쪽으로 약간 밀리며, 마우스 좌우로 조종한다
+const BOUNCE_UP := 900.0         # 솟구치는 속도 (v0.6은 1050 → 높이 약 25% 감소). 차지 ×1.1, 패리 돌진 ×1.25
+const BOUNCE_SIDE := 250.0       # 들어온 방향의 반대쪽으로 밀리는 가로 속도
+const BOUNCE_STEER := 750.0      # 튕길 때 마우스 좌우 방향으로 더하는 가로 속도 (좌우 조종)
 const ASSIST_CONE := 0.42            # 에임 어시스트: 표적 가장자리에서 이 각도(약 24도) 안이면 표적 중심으로 달라붙는다
 const ASSIST_CONE_TOUCH := 0.70      # 터치(스틱은 민감하므로 더 넓게, 약 40도)
 const ASSIST_SLACK := 60.0           # 사거리 여유
@@ -116,6 +119,12 @@ var facing := -PI * 0.5
 var trail: Array[Vector2] = []
 var parry_flash := 0.0
 var frozen := false              # 승리/용암 연출 중 정지
+var bank := 0.0                  # 기체 좌우 기울임 (회전 중 -1..1)
+var _ship_col := "b"             # 그릴 기체 색: 청(평소) / 적(차지·패리 돌진 중)
+
+
+func _ready() -> void:
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST      # 도트가 번지지 않게
 
 
 func reset(pos: Vector2, platform := false) -> void:
@@ -148,6 +157,7 @@ func reset(pos: Vector2, platform := false) -> void:
 	facing = -PI * 0.5
 	frozen = false
 	visible = true
+	bank = 0.0
 	trail.clear()
 	queue_redraw()
 
@@ -458,6 +468,8 @@ func step(dt: float) -> void:
 		var tdir := aim
 		if (dash_t > 0.0 or launch_t > 0.0 or bouncing) and vel.length() > 60.0:
 			tdir = vel.normalized()
+		var turn := wrapf(tdir.angle() - facing, -PI, PI)
+		bank = lerpf(bank, clampf(turn / 0.9, -1.0, 1.0), 1.0 - exp(-14.0 * dt))
 		facing = lerp_angle(facing, tdir.angle(), 1.0 - exp(-ROT_SPEED * dt))
 
 	trail.push_front(position)
@@ -479,15 +491,13 @@ func _move(dt: float) -> void:
 		# 차지 돌진이 휩쓰는 팔에 부딪히면 받아치기 (부위 타격보다 먼저)
 		if dash_kind == "charge" and dash_t > 0.0 and main.try_clash(position):
 			return
-		# 표적(부위·코어)은 상시 판정: 돌진 중이면 타격, 아니면 닿는 순간 피해 + 스턴
-		var hit: Dictionary = boss.strike_hit(position, RADIUS + (POWER_RADIUS if dash_kind == "power" else 0.0))
-		if not hit.is_empty():
-			if is_attacking():
+		# 표적(부위·코어)은 돌진 중에만 충돌한다. 그 밖에는 통과하며 접촉 피해도 없다 (피해는 적의 공격으로만)
+		if is_attacking():
+			var hit: Dictionary = boss.strike_hit(position, RADIUS + (POWER_RADIUS if dash_kind == "power" else 0.0))
+			if not hit.is_empty():
 				_on_strike(hit)
 				if frozen:
 					return
-			elif not is_immune():
-				main.touch_hurt(hit, position)
 		# 벽/천장
 		if position.x < WALL_L + RADIUS:
 			position.x = WALL_L + RADIUS
@@ -543,7 +553,7 @@ func _on_strike(hit: Dictionary) -> void:
 	main.on_strike(hit, dmg, position, dir, kind, was_buffed)
 	if frozen:
 		return
-	bounce_off(dir, hit["n"], kind == "power")
+	bounce_off(dir, kind)
 
 
 ## 받아치기: 휩쓰는 팔에 차지 돌진이 부딪힘 → 피해량 반환 (버프가 있으면 2배, 소모)
@@ -553,8 +563,8 @@ func clash_damage() -> int:
 	return dmg
 
 
-## 맞은 면(법선 n)에 대해 입사각 = 반사각으로 튕긴다
-func bounce_off(dir: Vector2, n: Vector2, power := false) -> void:
+## 직격 후 위로 솟구친다 (차지·패리 돌진일수록 조금 더 높이). 좌우는 마우스(스틱)로 조종
+func bounce_off(dir: Vector2, kind := "dash") -> void:
 	dash_t = 0.0
 	_end_dash()
 	bouncing = true
@@ -562,14 +572,12 @@ func bounce_off(dir: Vector2, n: Vector2, power := false) -> void:
 	shield_max = STRIKE_SHIELD
 	parry_cd = 0.0                               # 튕겨나오는 즉시 패리 가능 (돌진 쿨다운은 그대로)
 	parry_queue = 0.0
-	var out := dir
-	if dir.dot(n) < 0.0:
-		out = dir - 2.0 * dir.dot(n) * n
-	out = out.normalized()
-	var m: Vector2 = main.aim_offset(position)    # 조준 보조가 아니라 실제 마우스(스틱) 방향
+	var k := 1.25 if kind == "power" else (1.1 if kind == "charge" else 1.0)
+	var m: Vector2 = main.aim_offset(position)    # 조준 보조가 아니라 실제 마우스(스틱) 방향으로 좌우 조종
+	var steer := 0.0
 	if m.length() > AIM_DEADZONE:
-		out = out.slerp(m.normalized(), BOUNCE_STEER).normalized()
-	vel = out * BOUNCE_SPEED * (1.15 if power else 1.0)
+		steer = m.normalized().x
+	vel = Vector2(-dir.x * BOUNCE_SIDE + steer * BOUNCE_STEER, -BOUNCE_UP * k)
 
 
 ## 에임 어시스트: 사거리 안에서 조준선이 표적 가장자리 일정 각도(PC 24도, 터치 40도) 이내면 표적 중심으로 달라붙는다.
@@ -626,23 +634,18 @@ func _laser(dir: Vector2, reach: float, c: Color) -> void:
 	draw_arc(tip, 12.0, 0.0, TAU, 16, Color(c, 0.7), 2.0)
 
 
-## 로켓 본체 (기수 +x 방향, 길이 약 56px)
+## 기체 스프라이트 (64×64, 기수가 위쪽이라 +x 기준 각도에서 90도 더 돌린다)
+const SHIP_SIZE := 88.0           # 원본 64px 을 1.375배 (카메라 줌아웃을 감안한 크기)
+
+
 func _draw_rocket(off: Vector2, ang: float, tint: Color) -> void:
-	var body := [Vector2(30, 0), Vector2(16, -7), Vector2(-16, -7), Vector2(-21, -5), Vector2(-21, 5), Vector2(-16, 7), Vector2(16, 7)]
-	var nose := [Vector2(30, 0), Vector2(16, -7), Vector2(16, 7)]
-	var fin_a := [Vector2(-8, -7), Vector2(-25, -16), Vector2(-21, -7)]
-	var fin_b := [Vector2(-8, 7), Vector2(-25, 16), Vector2(-21, 7)]
-	for poly in [[fin_a, C_TRIM * 0.8], [fin_b, C_TRIM * 0.8], [body, C_BODY], [nose, C_TRIM]]:
-		var pts := PackedVector2Array()
-		for p in poly[0]:
-			pts.append(off + (p as Vector2).rotated(ang))
-		var c: Color = poly[1]
-		draw_colored_polygon(pts, Color(c.r * tint.r, c.g * tint.g, c.b * tint.b, tint.a))
-	draw_circle(off + Vector2(4, 0).rotated(ang), 3.6, Color(0.08, 0.1, 0.16, tint.a))
-	draw_circle(off + Vector2(4, 0).rotated(ang), 1.6, Color(C_TRIM, tint.a))
+	var tex := Sprites.ship(_ship_col, bank)
+	draw_set_transform(off, ang + PI * 0.5)
+	draw_texture_rect(tex, Rect2(Vector2(-SHIP_SIZE, -SHIP_SIZE) * 0.5, Vector2(SHIP_SIZE, SHIP_SIZE)), false, tint)
+	draw_set_transform(Vector2.ZERO, 0.0)
 
 
-## 노즐 화염: 마우스가 위일수록 길고 밝게(활공), 아래면 짧게 + 속도선(낙하)
+## 노즐 화염: 추진 상태에 따라 길이가 변한다 (활공 = 길고 밝게, 낙하 = 짧게 + 속도선)
 func _draw_flame(off: Vector2) -> void:
 	if stun > 0.0 or frozen:
 		return
@@ -659,13 +662,13 @@ func _draw_flame(off: Vector2) -> void:
 		power = 0.35 - 0.2 * aim.y
 	if dash_cd > 0.0 and dash_t <= 0.0:   # 돌진 쿨다운 중엔 화염이 약하다
 		power *= 0.6
-	var flen := (8.0 + 34.0 * power) * randf_range(0.85, 1.15)
-	var w := 4.0 + 4.0 * minf(power, 1.2)
-	var back := Vector2(-21, 0)
-	var outer := PackedVector2Array([off + (back + Vector2(0, -w)).rotated(facing), off + (back + Vector2(0, w)).rotated(facing), off + (back + Vector2(-flen, 0)).rotated(facing)])
-	var inner := PackedVector2Array([off + (back + Vector2(0, -w * 0.5)).rotated(facing), off + (back + Vector2(0, w * 0.5)).rotated(facing), off + (back + Vector2(-flen * 0.6, 0)).rotated(facing)])
-	draw_colored_polygon(outer, Color(1.0, 0.55, 0.2, 0.85))
-	draw_colored_polygon(inner, Color(1.0, 0.95, 0.7, 0.95))
+	var frame := int(Time.get_ticks_msec() / 55) % 5 + 1
+	var sc := SHIP_SIZE / 64.0 * (0.7 + 0.4 * minf(power, 1.4))     # 추진이 셀수록 화염이 커진다 (가로세로 같은 비율)
+	draw_set_transform(off, facing + PI * 0.5)
+	var nozzle := 12.0 * SHIP_SIZE / 64.0
+	var top := nozzle - 26.0 * sc        # 화염 그림의 시작(약 y 26)이 노즐에 오도록
+	draw_texture_rect(Sprites.exhaust(frame), Rect2(-32.0 * sc, top, 64.0 * sc, 64.0 * sc), false, Color(1, 1, 1, 0.55 + 0.4 * minf(power, 1.0)))
+	draw_set_transform(Vector2.ZERO, 0.0)
 	# 아래로 향해 낙하 중: 몸 주변 속도선
 	if aim.y > 0.3 and dash_t <= 0.0 and vel.y > 200.0:
 		var a := clampf((aim.y - 0.3) * 1.4, 0.0, 0.7)
@@ -711,12 +714,11 @@ func _draw() -> void:
 	if attack:
 		draw_circle(Vector2.ZERO, 26.0, Color(C_ATTACK, 0.3))
 
+	_ship_col = "r" if attack else "b"
 	_draw_flame(jitter)
 	var blink := invuln > 0.0 and stun <= 0.0 and int(invuln * 20.0) % 2 == 0
 	var alpha := 0.45 if evade else (0.35 if blink else 1.0)
 	var tint := Color(1, 1, 1, alpha)
-	if attack:
-		tint = Color(1.0, 0.85, 0.65, 1.0)
 	_draw_rocket(jitter, facing, tint)
 
 	# 스턴: 연기

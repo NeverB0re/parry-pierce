@@ -338,11 +338,9 @@ func _clash(hb: Dictionary, p: Vector2) -> void:
 	var a: int = boss.atk["arm"]
 	var contact: Vector2 = hb["pos"]
 	var dir: Vector2 = player.vel.normalized()
-	var n: Vector2 = p - contact
-	n = n.normalized() if n.length() > 0.1 else -dir
 	var dmg: int = player.clash_damage()
 	boss.on_parried(hb)                          # 휩쓸던 반대쪽으로 밀려나 잠시 멈춘다 (관절 노출)
-	player.bounce_off(dir, n)
+	player.bounce_off(dir, "charge")
 	var at := p.lerp(contact, 0.4)
 	boss.damage_part(2 + a, dmg)
 	_buzz(80)
@@ -356,6 +354,8 @@ func _clash(hb: Dictionary, p: Vector2) -> void:
 	fx.rays_burst(at, 16, Color(1.0, 0.9, 0.6), 500.0, 0.45, 7.0)
 	fx.ring(at, Color(1.0, 0.9, 0.6), 300.0, 0.45, 10.0)
 	fx.ring(at, Color(1.0, 0.55, 0.25), 180.0, 0.35, 7.0)
+	fx.sprite(at, 2, 380.0, 0.45)
+	fx.sprite(at, 1, 240.0, 0.4, false, Color.WHITE, 0.05)
 
 
 ## 피격 = 목숨 −1 + 스턴. 잠시 조작을 잃고 추락 → 용암 위험
@@ -375,14 +375,6 @@ func hurt_player(push: Vector2, damage := true) -> void:
 			_die()
 
 
-## 표적(부위·코어)에 돌진이 아닐 때 닿음 → 목숨 −1 + 스턴
-func touch_hurt(hit: Dictionary, pos: Vector2) -> void:
-	var push: Vector2 = pos - boss.hit_center(hit)
-	if push.length() < 0.1:
-		push = Vector2.UP
-	hurt_player(push)
-
-
 func _parry_feedback(p: Vector2, perfect: bool, hb: Dictionary) -> void:
 	var hp_pos: Vector2 = hb["pos"]
 	var contact := p.lerp(hp_pos, 0.25) if not hb.has("rect") else p
@@ -398,6 +390,8 @@ func _parry_feedback(p: Vector2, perfect: bool, hb: Dictionary) -> void:
 		fx.ring(contact, Color(1, 0.95, 0.8), 300.0, 0.5, 10.0)
 		fx.ring(contact, Color(1, 0.6, 0.3), 190.0, 0.4, 7.0)
 		fx.ring(contact, Color(0.7, 0.9, 1.0), 110.0, 0.3, 5.0)
+		fx.sprite(contact, 2, 420.0, 0.5)                       # 도트 폭발: 주황 링 + 불꽃
+		fx.sprite(contact, 1, 260.0, 0.45, false, Color.WHITE, 0.05)
 		sfx.play("perfect", 4.0)
 		sfx.play("parry", 0.0)
 	else:
@@ -408,6 +402,7 @@ func _parry_feedback(p: Vector2, perfect: bool, hb: Dictionary) -> void:
 		fx.rays_burst(contact, 12, Color(0.85, 0.92, 1.0), 380.0, 0.4, 6.0)
 		fx.ring(contact, Color(0.85, 0.92, 1.0), 200.0, 0.4, 8.0)
 		fx.ring(contact, Color(0.6, 0.75, 1.0), 120.0, 0.3, 5.0)
+		fx.sprite(contact, 2, 240.0, 0.4)
 		sfx.play("parry", 2.0)
 
 
@@ -456,6 +451,8 @@ func _drain_boss_events() -> void:
 				fx.burst(pos, 24, Color(0.6, 0.62, 0.68), 700.0, 1.0, 6.0, 1400.0)
 				fx.rays_burst(pos, 12, Color(1.0, 0.8, 0.5), 380.0, 0.4, 6.0)
 				fx.ring(pos, Color(1.0, 0.8, 0.55), 240.0, 0.4, 8.0)
+				fx.sprite(pos, 1, 420.0, 0.55)
+				fx.sprite(pos, 2, 300.0, 0.5, false, Color.WHITE, 0.08)
 				hud.flash(0.12, Color(1.0, 0.8, 0.6))
 			"part_stage":                       # 부위 손상 단계 상승: 불꽃·파편이 튄다
 				shake = maxf(shake, 10.0)
@@ -569,6 +566,8 @@ func on_perfect_evade(pos: Vector2) -> void:
 	fx.ring(pos, mint, 190.0, 0.4, 6.0, true)
 	fx.ring(pos, Color(0.7, 1.0, 0.95), 70.0, 0.5, 3.0)
 	fx.burst(pos, 14, Color(0.5, 1.0, 0.9), 500.0, 0.5, 2.5, 0.0, Vector2.ZERO, PI)
+	fx.sprite(pos, 3, 380.0, 0.4, true)                          # 도트 청록 링: 거꾸로 재생 = 안으로 모인다
+	fx.sprite(pos, 3, 200.0, 0.35, false, Color.WHITE, 0.4)       # 그리고 가볍게 터진다
 
 
 ## 패리 돌진 종료(적중 또는 빗나감): 패리로 밀려난 팔은 바로 제자리로
@@ -582,6 +581,7 @@ func on_parry_launch(pos: Vector2, dir: Vector2) -> void:
 	hud.flash(0.1, Color(0.8, 0.9, 1.0))
 	fx.burst(pos, 30, Color(0.8, 0.92, 1.0), 1300.0, 0.4, 3.0, 0.0, -dir, 0.5)
 	fx.ring(pos, Color(0.8, 0.92, 1.0), 160.0, 0.3, 6.0)
+	fx.sprite(pos, 2, 180.0, 0.3)
 
 
 ## 돌진 적중. kind: "dash"(피해 1, 가볍게) / "charge"(3, 주황) / "power"(패리 돌진 12·16, 크게)
@@ -609,6 +609,8 @@ func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, kind := "d
 			fx.burst(contact, 44, Color(1.0, 0.8, 0.5), 1400.0, 0.9, 5.0, 1200.0, -dir, 1.4)
 			fx.rays_burst(contact, 14, Color(1.0, 0.85, 0.6), 420.0, 0.4, 6.0)
 			fx.ring(contact, Color(1, 0.9, 0.7), 260.0, 0.4, 9.0)
+			fx.sprite(contact, 2, 360.0, 0.45)
+			fx.sprite(contact, 1, 240.0, 0.4, false, Color.WHITE, 0.04)
 		"charge":
 			hitstop = maxf(hitstop, 0.1)
 			shake = maxf(shake, 13.0)
@@ -617,6 +619,7 @@ func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, kind := "d
 			fx.rays_burst(contact, 8, Color(1.0, 0.7, 0.35), 320.0, 0.3, 5.0)
 			fx.ring(contact, Color(1.0, 0.65, 0.3), 150.0, 0.3, 7.0)
 			fx.burst(contact, 18, Color(1.0, 0.7, 0.35), 900.0, 0.4, 3.0, 0.0, -dir, 1.1)
+			fx.sprite(contact, 1, 200.0, 0.35)
 		_:                                     # 일반 돌진: 피해가 들어가고 있다는 확실한 피드백 (파편·불꽃·작은 링·플래시)
 			hitstop = maxf(hitstop, 0.07)
 			shake = maxf(shake, 9.0)
@@ -625,6 +628,7 @@ func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, kind := "d
 			fx.burst(contact, 14, Color(0.9, 0.95, 1.0), 800.0, 0.35, 3.0, 0.0, -dir, 1.1)
 			fx.rays_burst(contact, 6, Color(0.85, 0.93, 1.0), 260.0, 0.25, 4.0)
 			fx.ring(contact, Color(0.85, 0.92, 1.0), 100.0, 0.22, 4.0)
+			fx.sprite(contact, 1, 110.0, 0.28)
 
 
 ## 코어 파괴 = 승리

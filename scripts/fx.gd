@@ -1,15 +1,30 @@
 extends Node2D
 ## 불꽃/파편/충격파 링. 월드 좌표.
 
+const Sprites := preload("res://scripts/sprites.gd")
+
 var parts: Array[Dictionary] = []
 var rings: Array[Dictionary] = []
 var rays: Array[Dictionary] = []
+var sprites: Array[Dictionary] = []
+
+
+func _ready() -> void:
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST      # 도트가 번지지 않게
+	z_index = 4
 
 
 func clear() -> void:
 	parts.clear()
 	rings.clear()
 	rays.clear()
+	sprites.clear()
+
+
+## 도트 폭발 애니메이션. kind 1(주황 불꽃)/2(주황 링)/3(청록 링), size = 화면에서 보이는 지름(px).
+## reverse = 거꾸로 재생(안으로 모이는 연출, 퍼펙트 회피). 퍼펙트 패리·회피 등 큰 이벤트에 쓴다.
+func sprite(pos: Vector2, kind: int, size: float, life := 0.45, reverse := false, tint := Color.WHITE, delay := 0.0) -> void:
+	sprites.append({"pos": pos, "kind": kind, "size": size, "life": life, "max": life, "reverse": reverse, "tint": tint, "delay": delay})
 
 
 ## 중심에서 사방으로 뻗는 빛줄기
@@ -51,10 +66,28 @@ func step(dt: float) -> void:
 		r["life"] = float(r["life"]) - dt
 		if r["life"] <= 0.0:
 			rays.erase(r)
+	for sp in sprites.duplicate():
+		if float(sp["delay"]) > 0.0:
+			sp["delay"] = float(sp["delay"]) - dt
+			continue
+		sp["life"] = float(sp["life"]) - dt
+		if sp["life"] <= 0.0:
+			sprites.erase(sp)
 	queue_redraw()
 
 
 func _draw() -> void:
+	for sp in sprites:
+		if float(sp["delay"]) > 0.0:
+			continue
+		var k := 1.0 - float(sp["life"]) / float(sp["max"])
+		if sp["reverse"]:
+			k = 1.0 - k
+		var kind: int = sp["kind"]
+		var tex: Texture2D = Sprites.explosion(kind, int(k * Sprites.explosion_frames(kind)))
+		var sz: float = sp["size"]
+		var tint: Color = sp["tint"]
+		draw_texture_rect(tex, Rect2((sp["pos"] as Vector2) - Vector2(sz, sz) * 0.5, Vector2(sz, sz)), false, tint)
 	for p in parts:
 		var k := float(p["life"]) / float(p["max"])
 		var c: Color = p["color"]

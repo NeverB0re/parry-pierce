@@ -2,6 +2,7 @@ extends Control
 ## HUD: 체력 가면, 추진 게이지, 배너, 비네트, 화면 플래시.
 
 const Player := preload("res://scripts/player.gd")
+const Sprites := preload("res://scripts/sprites.gd")
 
 var main: Node
 var font: SystemFont
@@ -14,6 +15,7 @@ var warp_max := 0.45
 
 
 func _ready() -> void:
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	font = SystemFont.new()
@@ -163,48 +165,20 @@ func _edge_arrow(s: Vector2, sp: Vector2, col: Color) -> void:
 	draw_colored_polygon(PackedVector2Array([p + a, p - a * 0.6 + o, p - a * 0.2, p - a * 0.6 - o]), Color(col, 0.75 + 0.25 * pulse))
 
 
-## 목숨 아이콘: 플레이어 로켓(위를 보게). alive=false 면 쪼개져 흩어진 회색 비활성 잔해
-func _rk(p: Vector2, o: Vector2, off := Vector2.ZERO, rot := 0.0, pivot := Vector2.ZERO) -> Vector2:
-	var q := pivot + (p - pivot).rotated(rot) + off
-	return o + Vector2(q.y, -q.x) * 0.62
-
-
-func _rk_poly(pts: Array, o: Vector2, col: Color, off := Vector2.ZERO, rot := 0.0, pivot := Vector2.ZERO, edge := Color(0, 0, 0, 0)) -> void:
-	var out := PackedVector2Array()
-	for p in pts:
-		out.append(_rk(p as Vector2, o, off, rot, pivot))
-	draw_colored_polygon(out, col)
-	if edge.a > 0.0:
-		var closed := out.duplicate()
-		closed.append(out[0])
-		draw_polyline(closed, edge, 1.5)
-
-
+## 목숨 아이콘: 플레이어 기체 스프라이트. 잃은 목숨은 어둡게 식은 회색 + 금 간 모양
 func _draw_life(o: Vector2, alive: bool) -> void:
-	var body := [Vector2(30, 0), Vector2(16, -7), Vector2(-16, -7), Vector2(-21, -5), Vector2(-21, 5), Vector2(-16, 7), Vector2(16, 7)]
-	var nose := [Vector2(30, 0), Vector2(16, -7), Vector2(16, 7)]
-	var fin_a := [Vector2(-8, -7), Vector2(-25, -16), Vector2(-21, -7)]
-	var fin_b := [Vector2(-8, 7), Vector2(-25, 16), Vector2(-21, 7)]
+	var sz := Vector2(46, 46)
+	var r := Rect2(o - sz * 0.5, sz)
+	var tex := Sprites.ship("b", 0.0)
 	if alive:
-		var trim := Color(0.45, 0.8, 1.0)
-		_rk_poly(fin_a, o, trim * 0.8)
-		_rk_poly(fin_b, o, trim * 0.8)
-		_rk_poly(body, o, Color(0.93, 0.94, 0.96))
-		_rk_poly(nose, o, trim)
-		draw_circle(_rk(Vector2(4, 0), o), 2.4, Color(0.08, 0.1, 0.16))
+		draw_texture_rect(tex, r, false)
 		return
-	# 박살난 로켓: 코가 꺾여 떨어지고, 몸통은 들쭉날쭉하게 갈라지고, 날개 한쪽이 떨어져 나간다
-	var g1 := Color(0.36, 0.37, 0.41, 0.85)
-	var g2 := Color(0.27, 0.28, 0.32, 0.85)
-	var ed := Color(0.12, 0.12, 0.15, 0.9)
-	_rk_poly([Vector2(-8, -7), Vector2(-25, -16), Vector2(-21, -7)], o, g2, Vector2(-6, -8), -0.5, Vector2(-18, -10), ed)
-	_rk_poly([Vector2(-8, 7), Vector2(-15, 12), Vector2(-12, 7)], o, g2, Vector2.ZERO, 0.0, Vector2.ZERO, ed)
-	_rk_poly([Vector2(-21, -5), Vector2(-16, -7), Vector2(-1, -7), Vector2(-3, -3), Vector2(-8, 0), Vector2(-4, 4), Vector2(-9, 7), Vector2(-16, 7), Vector2(-21, 5)],
-		o, g1, Vector2(-3, 0), -0.12, Vector2(-10, 0), ed)
-	_rk_poly([Vector2(16, -7), Vector2(4, -7), Vector2(7, -3), Vector2(2, 1), Vector2(6, 4), Vector2(3, 7), Vector2(16, 7)], o, g2, Vector2(3, 3), 0.18, Vector2(10, 0), ed)
-	_rk_poly(nose, o, g1, Vector2(9, -6), 0.7, Vector2(20, 0), ed)
-	for d in [Vector2(-2, -12), Vector2(8, 13), Vector2(24, 10), Vector2(-14, 12)]:
-		draw_circle(_rk(d, o), 1.6, Color(0.4, 0.41, 0.45, 0.8))
+	draw_texture_rect(tex, r, false, Color(0.28, 0.29, 0.33, 0.8))
+	var ed := Color(0.05, 0.05, 0.07, 0.9)
+	draw_line(o + Vector2(-6, -18), o + Vector2(2, -4), ed, 2.0)
+	draw_line(o + Vector2(2, -4), o + Vector2(-4, 4), ed, 2.0)
+	draw_line(o + Vector2(-4, 4), o + Vector2(6, 16), ed, 2.0)
+	draw_line(o + Vector2(2, -4), o + Vector2(12, 0), ed, 2.0)
 
 
 func _draw_vignette(s: Vector2) -> void:
