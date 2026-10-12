@@ -81,7 +81,8 @@ var perfect_dash := false        # PERFECT 패리 돌진
 var charge_cd := 0.0             # 차지 쿨다운
 var regen_t := 0.0               # 게이지 0일 때 재생 진행
 var evade_window := 0.0          # 퍼펙트 회피 판정이 남은 시간
-var evade_perfected := false     # 이번 회피에서 이미 성공
+var evade_rewarded := false      # 이번 회피에서 이미 보상 받음 (퍼펙트 또는 일반)
+var dash_held := false           # 좌클릭을 누르고 있는 중 (스턴 중 선입력 판단용)
 var buffed := false              # 퍼펙트 회피 버프: 다음 차지 공격 피해 3배, 차지 시간 절반
 var queued_press := false        # 회피 도중 누른 좌클릭: 회피 무적이 끝나면 차지 시작
 var parry_queue := 0.0           # 패리 쿨다운 중 누른 입력 기억
@@ -124,7 +125,8 @@ func reset(pos: Vector2, platform := false) -> void:
 	charge_cd = 0.0
 	evade_window = 0.0
 	regen_t = 0.0
-	evade_perfected = false
+	evade_rewarded = false
+	dash_held = false
 	buffed = false
 	queued_press = false
 	parry_queue = 0.0
@@ -172,8 +174,12 @@ func can_dash() -> bool:
 
 ## 좌클릭 누름: 발판 위면 발사, 아니면 게이지 1칸 쓰고 차지 시작 (짧게 떼면 회피, 끝까지 모으면 공격)
 func press_dash() -> void:
+	dash_held = true
 	if on_platform and not frozen and stun <= 0.0:
 		_launch()
+		return
+	if stun > 0.0 and not frozen:
+		queued_press = true             # 추락(스턴) 중 선입력: 회복하자마자 차지 시작
 		return
 	if dash_t > 0.0 and dash_kind == "evade" and not frozen and stun <= 0.0 and gauge > 0:
 		queued_press = true             # 회피 무적이 끝나는 즉시 차지 시작 (기다리지 않아도 된다)
@@ -189,6 +195,7 @@ func press_dash() -> void:
 ## 좌클릭 뗌
 func release_dash() -> void:
 	queued_press = false
+	dash_held = false
 	if not charging:
 		return
 	var charged := is_charged()
@@ -223,7 +230,7 @@ func _dash(kind: String) -> void:
 	dash_t = dash_total
 	dash_cd = dash_total + DASH_COOLDOWN
 	evade_window = PERFECT_EVADE_WINDOW if kind == "evade" else 0.0
-	evade_perfected = false
+	evade_rewarded = false
 	vel = aim * spd
 	bouncing = false
 	main.on_dash(position, aim, kind)
@@ -288,24 +295,29 @@ func launch_parry_dash() -> void:
 
 
 ## 회피 직후 짧은 순간에 공격이 스친 상태인가 (main.gd 가 공격 판정과 겹치는지 검사)
-func can_perfect_evade() -> bool:
-	return dash_kind == "evade" and dash_t > 0.0 and evade_window > 0.0 and not evade_perfected
+func can_evade_reward() -> bool:
+	return dash_kind == "evade" and dash_t > 0.0 and not evade_rewarded
 
 
-## 퍼펙트 회피 성공: 연료 1칸 환급 + 다음 공격 피해 2배
-func on_perfect_evade() -> void:
-	evade_perfected = true
-	gauge = mini(GAUGE_MAX, gauge + 1)
-	buffed = true
-	invuln = maxf(invuln, PERFECT_EVADE_INVULN)    # 성공 직후 다른 공격에 맞지 않도록 무적 연장
-	main.on_perfect_evade(position)
+## 회피 성공 보상 (회피 한 번에 한 번).
+## 퍼펙트(회피 직후 짧은 순간): 게이지 2칸 + 차지 버프 + 무적 연장 / 일반(회피 무적으로 공격을 통과): 게이지 1칸
+func try_evade_reward() -> void:
+	evade_rewarded = true
+	if evade_window > 0.0:
+		gauge = mini(GAUGE_MAX, gauge + 2)
+		buffed = true
+		invuln = maxf(invuln, PERFECT_EVADE_INVULN)    # 성공 직후 다른 공격에 맞지 않도록 무적 연장
+		main.on_perfect_evade(position)
+	else:
+		gauge = mini(GAUGE_MAX, gauge + 1)
+		main.on_evade_dodge(position)
 
 
 ## 피격: 잠시 조작 불가(스턴), 살짝 솟구친 뒤 추락
 func on_hurt(push: Vector2) -> void:
 	cancel_charge()
 	buffed = false
-	queued_press = false
+	queued_press = dash_held                       # 누르고 있었다면 스턴이 끝나자마자 차지 시작
 	evade_window = 0.0
 	var sx := signf(push.x) if absf(push.x) > 0.05 else (1.0 if randf() < 0.5 else -1.0)
 	vel = Vector2(sx * HURT_PUSH, -HURT_POP)
@@ -355,6 +367,9 @@ func step(dt: float) -> void:
 		if stun <= 0.0:
 			stun = 0.0
 			main.on_stun_recover(position)
+			if queued_press and dash_held:
+				queued_press = false
+				press_dash()
 	if charging:
 		charge_t += dt
 		if charge_cd > 0.0:

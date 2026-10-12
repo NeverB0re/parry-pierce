@@ -227,16 +227,16 @@ func _update_camera(delta: float) -> void:
 func _check_attacks() -> void:
 	var p: Vector2 = player.position
 	var graze: float = Player.RADIUS + Player.PERFECT_EVADE_GRAZE
-	if player.can_perfect_evade() and boss.beam_hit(p, graze) != Vector2.ZERO:
-		player.on_perfect_evade()                       # 회피 직후 레이저가 스침
+	if player.can_evade_reward() and boss.beam_hit(p, graze) != Vector2.ZERO:
+		player.try_evade_reward()                       # 회피 중 레이저가 스침
 	var beam_push: Vector2 = boss.beam_hit(p, Player.RADIUS)   # 패리 불가: 회피 돌진(무적)으로만 피한다
 	if beam_push != Vector2.ZERO and not player.is_immune():
 		hurt_player(beam_push)
 		return
 	var reach: float = player.parry_reach()
 	for hb in boss.hitboxes(p):
-		if player.can_perfect_evade() and boss.overlaps(hb, p, graze):
-			player.on_perfect_evade()                   # 회피 직후 공격이 스침 → 퍼펙트 회피
+		if player.can_evade_reward() and boss.overlaps(hb, p, graze):
+			player.try_evade_reward()                   # 회피 중 공격이 스침 (직후면 퍼펙트)
 		if not boss.overlaps(hb, p, reach):
 			continue
 		if player.parry_active:
@@ -430,17 +430,26 @@ func _respawn() -> void:
 	sfx.play("land", 0.0)
 
 
-## 퍼펙트 회피 성공: 아주 짧은 슬로우 + 청백 이펙트 (연료 환급·버프는 player.gd)
+## 퍼펙트 회피: 패리(금·백, 바깥으로 터짐)와 구별되는 청록 '시간 정지' 연출 — 안으로 모이는 링, 화면 틴트·수렴선, 긴 슬로우
 func on_perfect_evade(pos: Vector2) -> void:
+	slowmo = maxf(slowmo, 0.45)
+	shake = maxf(shake, 5.0)
+	hud.warp(0.45)
+	sfx.play("bolt", 0.0, 0.0)
+	sfx.play("dash", -4.0, 0.0)
+	var mint := Color(0.35, 1.0, 0.85)
+	fx.ring(pos, mint, 300.0, 0.45, 8.0, true)
+	fx.ring(pos, mint, 190.0, 0.4, 6.0, true)
+	fx.ring(pos, Color(0.7, 1.0, 0.95), 70.0, 0.5, 3.0)
+	fx.burst(pos, 14, Color(0.5, 1.0, 0.9), 500.0, 0.5, 2.5, 0.0, Vector2.ZERO, PI)
+
+
+## 일반 회피 성공(회피 무적으로 공격을 통과): 짧은 슬로우와 가벼운 이펙트, 게이지 1칸 환급
+func on_evade_dodge(pos: Vector2) -> void:
 	slowmo = maxf(slowmo, 0.2)
-	shake = maxf(shake, 8.0)
-	hud.flash(0.14, Color(0.7, 0.95, 1.0))
-	sfx.play("parry", -4.0, 0.0)
-	sfx.play("perfect", -6.0, 0.0)
-	fx.ring(pos, Color(0.8, 0.97, 1.0), 170.0, 0.35, 6.0)
-	fx.ring(pos, Color(0.5, 0.8, 1.0), 100.0, 0.25, 4.0)
-	fx.rays_burst(pos, 12, Color(0.85, 0.98, 1.0), 380.0, 0.35, 5.0)
-	fx.burst(pos, 18, Color(0.8, 0.97, 1.0), 800.0, 0.4, 3.0)
+	sfx.play("dash", -8.0, 0.0)
+	fx.ring(pos, Color(0.5, 0.9, 1.0), 110.0, 0.3, 4.0, true)
+	fx.burst(pos, 8, Color(0.6, 0.9, 1.0), 400.0, 0.3, 2.0)
 
 
 ## 패리 돌진 종료(적중 또는 빗나감): 패리로 밀려난 팔은 바로 제자리로

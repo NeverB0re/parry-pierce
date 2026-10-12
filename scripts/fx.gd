@@ -28,8 +28,8 @@ func burst(pos: Vector2, n: int, color: Color, speed: float, life := 0.45, size 
 		parts.append({"pos": pos, "vel": v, "life": l, "max": l, "color": color, "size": size * randf_range(0.6, 1.2), "grav": grav})
 
 
-func ring(pos: Vector2, color: Color, max_r: float, life := 0.35, width := 4.0) -> void:
-	rings.append({"pos": pos, "color": color, "max_r": max_r, "life": life, "max": life, "width": width})
+func ring(pos: Vector2, color: Color, max_r: float, life := 0.35, width := 4.0, inward := false) -> void:
+	rings.append({"pos": pos, "color": color, "max_r": max_r, "life": life, "max": life, "width": width, "inward": inward})
 
 
 func step(dt: float) -> void:
@@ -73,5 +73,9 @@ func _draw() -> void:
 	for r in rings:
 		var k := 1.0 - float(r["life"]) / float(r["max"])
 		var c: Color = r["color"]
+		if r.get("inward", false):                  # 안으로 모이는 링 (퍼펙트 회피)
+			c.a *= 0.5 + 0.5 * k
+			draw_arc(r["pos"], lerpf(float(r["max_r"]), 8.0, ease(k, 0.6)), 0.0, TAU, 48, c, float(r["width"]) * (0.4 + 0.6 * k) + 1.0)
+			continue
 		c.a *= 1.0 - k
 		draw_arc(r["pos"], float(r["max_r"]) * ease(k, 0.35), 0.0, TAU, 48, c, float(r["width"]) * (1.0 - k) + 1.0)

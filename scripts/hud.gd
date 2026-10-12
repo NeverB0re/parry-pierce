@@ -9,6 +9,8 @@ var banner_title := ""
 var banner_sub := ""
 var flash_a := 0.0
 var flash_c := Color.WHITE
+var warp_t := 0.0                    # 퍼펙트 회피 '시간 정지' 틴트 남은 시간
+var warp_max := 0.45
 
 
 func _ready() -> void:
@@ -33,8 +35,14 @@ func flash(a: float, c := Color.WHITE) -> void:
 	flash_c = c
 
 
+func warp(t: float) -> void:
+	warp_t = t
+	warp_max = t
+
+
 func step(dt: float) -> void:
 	flash_a = maxf(0.0, flash_a - dt * 3.0)
+	warp_t = maxf(0.0, warp_t - dt)
 	queue_redraw()
 
 
@@ -110,6 +118,18 @@ func _draw() -> void:
 
 	# 조작
 	_text(Vector2(28, s.y - 24), "마우스: 방향(위=활공)   좌클릭: 회피 돌진 / 꾹: 차지 공격   우클릭·Space 꾹: 패리 → 슬로우 조준 → 패리 돌진   R: 재시작   Esc: 메뉴", 15, Color(0.75, 0.77, 0.82, 0.55))
+
+	if warp_t > 0.0:                          # 퍼펙트 회피: 청록 틴트 + 가장자리에서 모여드는 선
+		var wk := clampf(warp_t / warp_max, 0.0, 1.0)
+		draw_rect(Rect2(Vector2.ZERO, s), Color(0.1, 0.85, 0.75, 0.14 * wk))
+		var c := s * 0.5
+		for i in 28:
+			var a := TAU * i / 28.0 + 0.11
+			var d := Vector2.from_angle(a)
+			var edge := minf((s.x * 0.5) / maxf(absf(d.x), 0.001), (s.y * 0.5) / maxf(absf(d.y), 0.001))
+			var p1 := c + d * edge * (0.98 - 0.35 * (1.0 - wk))
+			var p0 := c + d * edge * (1.0 - 0.18 * wk - 0.0)
+			draw_line(p0, p1, Color(0.5, 1.0, 0.9, 0.55 * wk), 2.0)
 
 	if flash_a > 0.0:
 		draw_rect(Rect2(Vector2.ZERO, s), Color(flash_c, flash_a))
