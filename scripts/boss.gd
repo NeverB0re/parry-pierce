@@ -656,10 +656,9 @@ func swing_area(a: int, th0: float, th1: float) -> PackedVector2Array:
 		var fist := sh + d * SWING_L
 		pieces.append(PackedVector2Array([sh + n * UPPER_W, el + n * UPPER_W, el - n * UPPER_W, sh - n * UPPER_W]))
 		pieces.append(PackedVector2Array([el + n * FORE_W, fist + n * FORE_W, fist - n * FORE_W, el - n * FORE_W]))
-		var circ := PackedVector2Array()
-		for j in 24:
-			circ.append(fist + Vector2.from_angle(TAU * j / 24.0) * FIST_R / cos(PI / 24.0))
-		pieces.append(circ)
+		pieces.append(_disc(fist, FIST_R))
+		pieces.append(_disc(el, UPPER_W))              # 위팔 끝의 둥근 마감
+	pieces.append(_disc(sh, UPPER_W))                  # 어깨 쪽 둥근 마감
 	var cur := pieces[0]
 	for k in range(1, pieces.size()):
 		for r in Geometry2D.merge_polygons(cur, pieces[k]):
@@ -667,6 +666,14 @@ func swing_area(a: int, th0: float, th1: float) -> PackedVector2Array:
 				cur = r
 				break
 	return cur
+
+
+## 원을 바깥에 접하는 다각형으로 근사 (예고 영역이 판정을 빠뜨리지 않도록)
+static func _disc(c: Vector2, r: float) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for j in 24:
+		out.append(c + Vector2.from_angle(TAU * j / 24.0) * r / cos(PI / 24.0))
+	return out
 
 
 func _arm_fist(a: int, th: float) -> Vector2:
