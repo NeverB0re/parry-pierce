@@ -11,25 +11,27 @@ const DIVE_FALL := 1000.0        # 마우스를 아래로: 빨리 떨어진다
 const THRUST := 560.0            # 약한 무한 추진(좌우/하강)
 const AIR_DRAG := 0.9
 const PLATFORM_SPEED := 260.0
-const EVADE_SPEED := 2000.0      # 회피 돌진: 공격 판정 없음, 무적. 사거리 약 560px
-const EVADE_TIME := 0.28
-const DASH_KEEP := 0.5           # 돌진이 끝난 뒤 남기는 속도 비율
-const DASH_COOLDOWN := 0.1
-const CHARGE_TIME := 0.6         # 왼쪽 버튼을 이만큼 누르면 차지 완료 → 떼면 공격 돌진 (덜 모으고 떼면 취소)
+const DASH_SPEED := 2000.0       # 돌진: 무적 + 표적에 닿으면 피해 1. 사거리 약 560px. 자원 없이 쿨다운만
+const DASH_TIME := 0.28
+const DASH_KEEP := 0.5           # 돌진이 끝난 뒤 남기는 속도 비율 (위쪽 관성은 남기지 않는다)
+const DASH_COOLDOWN := 0.7       # 돌진 시작부터 다음 돌진까지 (차지 돌진도 같은 쿨다운)
+const DASH_BUFFER := 0.2         # 쿨다운이 이만큼 남았을 때 뗀 짧은 입력은 기억했다가 바로 돌진
+const DASH_DAMAGE := 1
+const CHARGE_TIME := 0.6         # 좌클릭을 이만큼 누르면 차지 완료 → 떼면 차지 돌진 (덜 모으고 떼면 일반 돌진)
 const CHARGE_HOVER := 0.15       # 이 시간 이상 누르면 차지 자세(공중 정지)로 들어간다
 const CHARGE_AUTO := 1.3         # 차지 완료 후 이 시간이 지나면 자동 발사
 const CHARGE_SPEED := 3600.0     # 차지 돌진: 빠르게 꽂힌다. 사거리 약 790px
 const CHARGE_DASH_TIME := 0.22
-const CHARGE_COOLDOWN := 1.5     # 차지 돌진 후 다시 차지할 수 있을 때까지 (그동안은 패리만 가능)
-const CHARGE_DAMAGE := 1
+const CHARGE_DAMAGE := 3
+const CLASH_DAMAGE := 8          # 휩쓰는 팔에 차지 돌진으로 부딪힘(받아치기) → 그 팔 관절에 즉시
 const CHARGE_GRACE := 0.5        # 차지 돌진이 빗나가 끝난 직후 무적
-const PERFECT_EVADE_WINDOW := 0.12  # 회피 돌진 직후 이 시간 동안만 퍼펙트 회피 판정 (회피 전체는 0.28초)
+const PERFECT_EVADE_WINDOW := 0.12  # 돌진 시작 후 이 시간 안에 공격이 스치면 퍼펙트 회피
 const PERFECT_EVADE_GRAZE := 16.0   # 퍼펙트 회피로 인정하는 근접 여유 (몸 반지름에 더함)
 const PERFECT_EVADE_INVULN := 0.8   # 퍼펙트 회피 성공 시 추가 무적 (회피 직후 다른 곳에 맞는 일 방지)
-const EVADE_BUFF_MULT := 3          # 퍼펙트 회피 버프: 다음 차지 공격 피해 배율 (차지 시간도 절반)
+const EVADE_BUFF_MULT := 2          # 퍼펙트 회피 버프: 다음 차지 공격 피해 배율 (차지 시간도 절반)
 const PARRY_BUFFER := 0.15          # 패리 쿨다운 중 누른 입력을 이만큼 기억
-const GAUGE_REGEN_TIME := 3.33   # 게이지가 0일 때만 이 시간이 지나면 1칸까지 천천히 재생 (그 이상은 패리로만)
-const GAUGE_MAX := 3             # 회피 1칸, 차지 1칸, 패리 성공 시 가득. 자연 회복 없음
+const PARRY_PUSH := 1100.0          # 휩쓰는 팔을 그냥 패리하면: 피해 없이 반대쪽으로 튕겨나기만 한다
+const PARRY_PUSH_SHIELD := 0.5
 const PERFECT_WINDOW := 0.07     # 패리 누른 뒤 이 시간 안에 막으면 PERFECT
 const PARRY_MIN := 0.12          # 짧게 눌러도 이 시간만큼은 패리 유지
 const PARRY_HOLD_MAX := 0.2      # 꾹 누르고 있을 때 패리 판정 최대 유지 시간
@@ -41,13 +43,12 @@ const AIM_TIME_PERFECT := 1.9
 const PARRY_DASH_SPEED := 3600.0 # 패리 돌진: 주력 공격. 월드가 느려져도 플레이어는 실시간
 const PARRY_DASH_SPEED_PERFECT := 4000.0
 const PARRY_DASH_TIME := 0.22
-const POWER_DAMAGE := 3
+const POWER_DAMAGE := 12
+const POWER_DAMAGE_PERFECT := 16
 const POWER_RADIUS := 8.0        # 패리 돌진은 타격 범위도 넓다
 const POWER_GRACE := 0.7
-# 직격 후: 들어온 방향(좌/우)을 유지하며 수평 기준 약 50도 위로 튕기고, 마우스 좌우로 약하게 조종한다
+# 직격 후: 맞은 면에 대해 입사각 = 반사각으로 튕긴다 (모든 방향)
 const BOUNCE_SPEED := 1350.0     # 튕겨나는 속도 (패리 돌진은 ×1.15)
-const BOUNCE_ANGLE := 0.87       # 수평 기준 약 50도 위로
-const BOUNCE_STEER := 300.0      # 튕길 때 마우스 좌우 방향으로 더하는 가로 속도
 const ASSIST_CONE := 0.42            # 에임 어시스트: 표적 가장자리에서 이 각도(약 24도) 안이면 표적 중심으로 달라붙는다
 const ASSIST_CONE_TOUCH := 0.70      # 터치(스틱은 민감하므로 더 넓게, 약 40도)
 const ASSIST_SLACK := 60.0           # 사거리 여유
@@ -57,7 +58,7 @@ const STUN_TIME := 0.9           # 피격(공격/표적 접촉) → 조작 불�
 const STUN_INVULN := 0.4         # 스턴이 끝난 뒤 추가 무적
 const HURT_PUSH := 500.0
 const HURT_POP := 380.0          # 맞으면 살짝 솟구친다
-const LAUNCH_SPEED := 1850.0     # 발판에서의 첫 돌진 = 발사 (게이지 소모 없음). 정점 약 y -2400 (어깨 높이)
+const LAUNCH_SPEED := 1850.0     # 발판에서의 첫 돌진 = 발사. 정점 약 y -2400 (어깨 높이)
 const LAUNCH_FLOAT := 0.25       # 발사 직후 중력 없음
 const LAUNCH_STEER := 0.25       # 발사 방향에 마우스 좌우가 반영되는 정도
 const ROT_SPEED := 12.0          # 머리가 마우스를 따라 도는 빠르기
@@ -77,24 +78,22 @@ var main: Node
 var boss: Node
 
 var vel := Vector2.ZERO
-var gauge := GAUGE_MAX
 var on_platform := false
 var dash_t := 0.0
-var dash_kind := ""              # "evade" | "charge" | "power"
-var dash_total := EVADE_TIME
+var dash_kind := ""              # "dash" | "charge" | "power"
+var dash_total := DASH_TIME
 var perfect_dash := false        # PERFECT 패리 돌진
-var charge_cd := 0.0             # 차지 쿨다운
-var regen_t := 0.0               # 게이지 0일 때 재생 진행
 var evade_window := 0.0          # 퍼펙트 회피 판정이 남은 시간
-var evade_rewarded := false      # 이번 회피에서 이미 보상 받음 (퍼펙트 또는 일반)
+var evade_rewarded := false      # 이번 돌진에서 이미 퍼펙트 회피 보상을 받음
 var assist_lock := false          # 에임 어시스트가 표적에 붙어 있음
 var assist_pos := Vector2.ZERO   # 붙은 표적 위치
 var assist_r := 0.0
-var dash_held := false           # 패리/차지 버튼을 누르고 있는 중 (스턴 중 선입력 판단용)
-var buffed := false              # 퍼펙트 회피 버프: 다음 차지 공격 피해 3배, 차지 시간 절반
-var queued_press := false        # 회피 도중·스턴 중 누른 입력: 가능해지면 차지 시작
+var dash_held := false           # 좌클릭을 누르고 있는 중 (스턴 중 선입력 판단용)
+var buffed := false              # 퍼펙트 회피 버프: 다음 차지 공격 피해 2배, 차지 시간 절반
+var queued_press := false        # 스턴 중 누른 좌클릭: 회복하면 차지 시작
+var pending_kind := ""           # 쿨다운 중에 뗀 돌진: 쿨다운이 끝나는 즉시 나간다
 var parry_queue := 0.0           # 패리 쿨다운 중 누른 입력 기억
-var charging := false            # 차지 모으는 중
+var charging := false            # 좌클릭 누르는 중 (짧게 떼면 돌진, 다 모으면 차지 돌진)
 var charge_t := 0.0
 var charged_notified := false
 var dash_cd := 0.0
@@ -121,7 +120,6 @@ var frozen := false              # 승리/용암 연출 중 정지
 func reset(pos: Vector2, platform := false) -> void:
 	position = pos
 	vel = Vector2.ZERO
-	gauge = GAUGE_MAX
 	on_platform = platform
 	dash_t = 0.0
 	dash_kind = ""
@@ -130,13 +128,12 @@ func reset(pos: Vector2, platform := false) -> void:
 	charge_t = 0.0
 	bouncing = false
 	dash_cd = 0.0
-	charge_cd = 0.0
 	evade_window = 0.0
-	regen_t = 0.0
 	evade_rewarded = false
 	dash_held = false
 	buffed = false
 	queued_press = false
+	pending_kind = ""
 	parry_queue = 0.0
 	parry_active = false
 	parry_held = false
@@ -158,8 +155,9 @@ func is_immune() -> bool:
 	return frozen or aim_phase or dash_t > 0.0 or shield_t > 0.0 or invuln > 0.0 or launch_t > 0.0
 
 
+## 모든 돌진은 표적에 닿으면 타격한다 (일반 돌진도 피해 1)
 func is_attacking() -> bool:
-	return dash_t > 0.0 and dash_kind != "evade"
+	return dash_t > 0.0 and dash_kind != ""
 
 
 ## 차지 완료에 필요한 시간 (퍼펙트 회피 버프가 있으면 절반)
@@ -167,9 +165,8 @@ func charge_need() -> float:
 	return CHARGE_TIME * (0.5 if buffed else 1.0)
 
 
-## 차지 쿨다운 중에는 아무리 눌러도 완료되지 않는다 (떼면 회피)
 func is_charged() -> bool:
-	return charging and charge_cd <= 0.0 and charge_t >= charge_need()
+	return charging and charge_t >= charge_need()
 
 
 func is_hovering_charge() -> bool:
@@ -177,12 +174,11 @@ func is_hovering_charge() -> bool:
 
 
 func can_dash() -> bool:
-	return not (frozen or aim_phase or stun > 0.0 or dash_cd > 0.0 or gauge <= 0)
+	return not (frozen or aim_phase or stun > 0.0 or dash_cd > 0.0 or dash_t > 0.0)
 
 
-## 왼쪽 버튼(패리/차지) 누름: 발판 위면 발사. 아니면 패리 판정을 열고, 막지 못하면 그대로 차지가 이어진다
-func parry_press() -> void:
-	parry_held = true
+## 좌클릭 누름: 발판 위면 발사, 아니면 모으기 시작 (짧게 떼면 돌진, 다 모아 떼면 차지 돌진)
+func press_dash() -> void:
 	dash_held = true
 	if frozen or aim_phase:
 		return
@@ -190,81 +186,50 @@ func parry_press() -> void:
 		_launch()
 		return
 	if stun > 0.0:
-		queued_press = true             # 추락(스턴) 중 선입력: 회복하자마자 패리 + 차지
+		queued_press = true             # 추락(스턴) 중 선입력: 회복하자마자 모으기 시작
 		return
-	if not parry_active:
-		if parry_cd > 0.0:
-			parry_queue = PARRY_BUFFER  # 쿨다운이 곧 끝나면 그때 발동
-		else:
-			parry_active = true
-			parry_t = 0.0
-	if not charging:
-		if can_dash():
-			_begin_charge()
-		else:
-			queued_press = true         # 회피 직후 등: 가능해지는 즉시 차지 시작
-
-
-## 왼쪽 버튼 뗌: 다 모았으면 차지 공격 돌진, 덜 모았으면 취소(칸 환급)
-func parry_release() -> void:
-	parry_held = false
-	dash_held = false
-	queued_press = false
-	if not charging:
-		return
-	if is_charged():
-		_fire_charge()
-	else:
-		cancel_charge()
-
-
-func _begin_charge() -> void:
-	gauge -= 1
+	pending_kind = ""
 	charging = true
 	charge_t = 0.0
 	charged_notified = false
 
 
-func _fire_charge() -> void:
-	charging = false
-	_dash("charge")
-
-
-## 오른쪽 버튼(회피): 발판 위면 발사, 아니면 게이지 1칸 쓰고 즉시 회피 돌진. 모으던 차지는 취소된다
-func evade_press() -> void:
-	if frozen or aim_phase or stun > 0.0:
-		return
-	if on_platform:
-		_launch()
-		return
-	if dash_cd > 0.0:
-		return
-	cancel_charge()
-	if not can_dash():
-		return
-	gauge -= 1
-	_dash("evade")
-
-
-## 차지 취소(피격/패리 전환): 소모한 칸을 돌려준다
-func cancel_charge() -> void:
+## 좌클릭 뗌: 다 모았으면 차지 돌진, 아니면 일반 돌진 (모은 시간이 버려지지 않는다)
+func release_dash() -> void:
+	dash_held = false
+	queued_press = false
 	if not charging:
 		return
+	var kind := "charge" if is_charged() else "dash"
 	charging = false
-	gauge = mini(GAUGE_MAX, gauge + 1)
+	_fire(kind)
+
+
+## 쿨다운 중이면 기억했다가 끝나는 즉시 (짧은 돌진은 거의 끝났을 때만 기억)
+func _fire(kind: String) -> void:
+	if can_dash():
+		_dash(kind)
+	elif kind == "charge" or (dash_cd <= DASH_BUFFER and dash_t <= 0.0):
+		pending_kind = kind
+
+
+## 차지 취소(피격/패리 전환)
+func cancel_charge() -> void:
+	charging = false
+	pending_kind = ""
 
 
 func _dash(kind: String) -> void:
 	dash_kind = kind
-	var spd := EVADE_SPEED
-	dash_total = EVADE_TIME
+	pending_kind = ""
+	var spd := DASH_SPEED
+	dash_total = DASH_TIME
 	if kind == "charge":
 		spd = CHARGE_SPEED
 		dash_total = CHARGE_DASH_TIME
-		charge_cd = CHARGE_COOLDOWN
 	dash_t = dash_total
-	dash_cd = dash_total + DASH_COOLDOWN
-	evade_window = PERFECT_EVADE_WINDOW if kind == "evade" else 0.0
+	dash_cd = DASH_COOLDOWN
+	evade_window = PERFECT_EVADE_WINDOW if kind == "dash" else 0.0
 	evade_rewarded = false
 	vel = aim * spd
 	bouncing = false
@@ -278,25 +243,59 @@ func _launch() -> void:
 	main.on_launch(position)
 
 
+## 우클릭/Space 누름: 패리 판정 (모으던 차지는 취소)
+func parry_press() -> void:
+	parry_held = true
+	cancel_charge()
+	queued_press = false
+	if frozen or aim_phase or parry_active or stun > 0.0:
+		return
+	if parry_cd > 0.0:
+		parry_queue = PARRY_BUFFER                  # 쿨다운이 곧 끝나면 그때 발동
+		return
+	parry_active = true
+	parry_t = 0.0
+
+
+func parry_release() -> void:
+	parry_held = false
+
+
 func parry_reach() -> float:
 	return RADIUS + (PARRY_REACH if parry_active else 0.0)
 
 
+## 탄 패리 성공: 시간이 느려지고 방향을 정한다 → 패리 돌진
 func on_parry_success(perfect: bool) -> void:
 	parry_active = false
 	parry_cd = 0.0
-	charging = false               # 차지는 패리로 대체된다 (게이지는 아래에서 가득 참)
+	cancel_charge()
 	queued_press = false
 	dash_t = 0.0
 	_end_dash()
 	on_platform = false
 	launch_t = 0.0
 	vel = Vector2.ZERO
-	gauge = GAUGE_MAX              # 패리 성공 = 연료 가득
-	aim_phase = true               # 시간이 느려지고 방향을 정한다
+	aim_phase = true
 	aim_perfect = perfect
 	aim_left = AIM_TIME_PERFECT if perfect else AIM_TIME
 	parry_flash = 1.0
+
+
+## 휩쓰는 팔을 그냥 패리: 피해는 없지만 패리 돌진도 없다. 팔 반대쪽으로 튕겨나기만 한다
+func on_parry_push(away: Vector2) -> void:
+	parry_active = false
+	parry_cd = 0.0
+	cancel_charge()
+	dash_t = 0.0
+	_end_dash()
+	on_platform = false
+	launch_t = 0.0
+	vel = away.normalized() * PARRY_PUSH
+	bouncing = true
+	shield_t = PARRY_PUSH_SHIELD
+	shield_max = PARRY_PUSH_SHIELD
+	parry_flash = 0.6
 
 
 ## 방향 지정 종료 → 마우스 방향으로 패리 돌진(공격 판정, 강한 데미지)
@@ -308,36 +307,34 @@ func launch_parry_dash() -> void:
 	perfect_dash = aim_perfect
 	dash_total = PARRY_DASH_TIME
 	dash_t = PARRY_DASH_TIME
-	dash_cd = PARRY_DASH_TIME + DASH_COOLDOWN
+	dash_cd = DASH_COOLDOWN
 	vel = aim * (PARRY_DASH_SPEED_PERFECT if aim_perfect else PARRY_DASH_SPEED)
 	parry_cd = PARRY_RELEASE_CD
 	main.on_parry_launch(position, aim)
 
 
-## 회피 직후 짧은 순간에 공격이 스친 상태인가 (main.gd 가 공격 판정과 겹치는지 검사)
+## 일반 돌진 중 공격이 스치는지 검사할 상태인가 (main.gd 가 공격 판정과 겹치는지 검사)
 func can_evade_reward() -> bool:
-	return dash_kind == "evade" and dash_t > 0.0 and not evade_rewarded
+	return dash_kind == "dash" and dash_t > 0.0 and evade_window > 0.0 and not evade_rewarded
 
 
-## 회피 성공 보상 (회피 한 번에 한 번).
-## 퍼펙트(회피 직후 짧은 순간): 게이지 2칸 + 차지 버프 + 무적 연장 / 일반(회피 무적으로 공격을 통과): 게이지 1칸
+## 퍼펙트 회피 (돌진 시작 직후 공격이 스침): 다음 차지 강화 + 무적 연장 + 돌진 쿨다운 즉시 초기화.
+## 그냥 무적으로 통과한 것은 보상·연출이 없다
 func try_evade_reward() -> void:
+	if evade_window <= 0.0:
+		return
 	evade_rewarded = true
-	if evade_window > 0.0:
-		gauge = mini(GAUGE_MAX, gauge + 2)
-		buffed = true
-		invuln = maxf(invuln, PERFECT_EVADE_INVULN)    # 성공 직후 다른 공격에 맞지 않도록 무적 연장
-		main.on_perfect_evade(position)
-	else:
-		gauge = mini(GAUGE_MAX, gauge + 1)
-		main.on_evade_dodge(position)
+	buffed = true
+	invuln = maxf(invuln, PERFECT_EVADE_INVULN)    # 성공 직후 다른 공격에 맞지 않도록 무적 연장
+	dash_cd = dash_t                               # 이 돌진이 끝나는 즉시 다시 돌진할 수 있다
+	main.on_perfect_evade(position)
 
 
 ## 피격: 잠시 조작 불가(스턴), 살짝 솟구친 뒤 추락
 func on_hurt(push: Vector2) -> void:
 	cancel_charge()
 	buffed = false
-	queued_press = dash_held                       # 누르고 있었다면 스턴이 끝나자마자 차지 시작
+	queued_press = dash_held                       # 누르고 있었다면 스턴이 끝나자마자 모으기 시작
 	evade_window = 0.0
 	var sx := signf(push.x) if absf(push.x) > 0.05 else (1.0 if randf() < 0.5 else -1.0)
 	vel = Vector2(sx * HURT_PUSH, -HURT_POP)
@@ -362,7 +359,7 @@ func step(dt: float) -> void:
 		aim = m.normalized()
 		if aim_phase:                                 # 에임 어시스트: 사거리 안 표적이 조준선 가까이 있으면 살짝 끌어당긴다
 			aim = _assisted(aim, (PARRY_DASH_SPEED_PERFECT if aim_perfect else PARRY_DASH_SPEED) * PARRY_DASH_TIME, POWER_RADIUS)
-		elif is_charged():
+		elif is_charged() or pending_kind == "charge":
 			aim = _assisted(aim, CHARGE_SPEED * CHARGE_DASH_TIME, 0.0)
 	if aim_phase:
 		facing = lerp_angle(facing, aim.angle(), 1.0 - exp(-ROT_SPEED * 2.0 * dt))
@@ -370,16 +367,7 @@ func step(dt: float) -> void:
 		return
 
 	dash_cd = maxf(0.0, dash_cd - dt)
-	charge_cd = maxf(0.0, charge_cd - dt)
 	evade_window = maxf(0.0, evade_window - dt)
-	if gauge > 0:
-		regen_t = 0.0
-	elif not charging and dash_t <= 0.0:       # 바닥나면 1칸까지만 천천히 되살아난다
-		regen_t += dt
-		if regen_t >= GAUGE_REGEN_TIME:
-			regen_t = 0.0
-			gauge = 1
-			main.on_gauge_regen(position)
 	parry_cd = maxf(0.0, parry_cd - dt)
 	invuln = maxf(0.0, invuln - dt)
 	shield_t = maxf(0.0, shield_t - dt)
@@ -394,19 +382,17 @@ func step(dt: float) -> void:
 			main.on_stun_recover(position)
 			if queued_press and dash_held:
 				queued_press = false
-				parry_press()
-	if queued_press and dash_held and stun <= 0.0 and not charging and dash_t <= 0.0 and not on_platform and can_dash():
-		queued_press = false
-		_begin_charge()
+				press_dash()
+	if pending_kind != "" and can_dash() and not on_platform:
+		_dash(pending_kind)
 	if charging:
 		charge_t += dt
-		if charge_cd > 0.0:
-			charge_t = minf(charge_t, charge_need() + CHARGE_AUTO * 0.5)   # 쿨다운 중엔 완료되지 않는다 (끝나면 곧바로 완료)
-		elif charge_t >= charge_need() and not charged_notified:
+		if charge_t >= charge_need() and not charged_notified:
 			charged_notified = true
 			main.on_charged(position)
 		if is_charged() and charge_t >= charge_need() + CHARGE_AUTO:   # 차지 완료 후 잠시 지나면 자동 발사
-			_fire_charge()
+			charging = false
+			_fire("charge")
 	if parry_queue > 0.0:
 		parry_queue -= dt
 		if parry_cd <= 0.0 and parry_held and not parry_active and stun <= 0.0:
@@ -432,14 +418,12 @@ func step(dt: float) -> void:
 		dash_t -= dt
 		if dash_t <= 0.0:
 			vel *= DASH_KEEP
-			var was_evade := dash_kind == "evade"
+			vel.y = maxf(vel.y, 0.0)              # 위쪽 관성은 남기지 않는다 (연속 돌진으로 높이를 공짜로 벌지 않게)
 			var grace := POWER_GRACE if dash_kind == "power" else (CHARGE_GRACE if dash_kind == "charge" else 0.0)
 			if grace > 0.0:                   # 무적 여유는 패리 돌진/차지 돌진만
 				shield_max = grace
 				shield_t = grace
 			_end_dash()
-			if was_evade:                     # 회피 무적이 끝나면 후딜 없이 바로 다음 행동(차지 등) 가능
-				dash_cd = 0.0
 	elif launch_t > 0.0:
 		pass                                  # 발사 직후: 중력 없이 곧게 솟는다
 	else:
@@ -492,7 +476,10 @@ func _move(dt: float) -> void:
 			position.x = clampf(position.x, PLAT_CENTER.x - PLAT_HALF + RADIUS, PLAT_CENTER.x + PLAT_HALF - RADIUS)
 			position.y = PLAT_CENTER.y - RADIUS
 			continue
-		# 표적(부위·갑옷·심장)은 상시 판정: 공격 돌진 중이면 타격, 아니면(회피 돌진 제외) 닿는 순간 스턴
+		# 차지 돌진이 휩쓰는 팔에 부딪히면 받아치기 (부위 타격보다 먼저)
+		if dash_kind == "charge" and dash_t > 0.0 and main.try_clash(position):
+			return
+		# 표적(부위·코어)은 상시 판정: 돌진 중이면 타격, 아니면 닿는 순간 피해 + 스턴
 		var hit: Dictionary = boss.strike_hit(position, RADIUS + (POWER_RADIUS if dash_kind == "power" else 0.0))
 		if not hit.is_empty():
 			if is_attacking():
@@ -536,31 +523,49 @@ func _end_dash() -> void:
 		main.on_power_dash_end()
 
 
+## 이번 돌진의 피해량과 버프 소모
+func _strike_damage() -> int:
+	match dash_kind:
+		"power":
+			return POWER_DAMAGE_PERFECT if perfect_dash else POWER_DAMAGE
+		"charge":
+			return CHARGE_DAMAGE * (EVADE_BUFF_MULT if buffed else 1)
+	return DASH_DAMAGE
+
+
 func _on_strike(hit: Dictionary) -> void:
-	if hit["kind"] == "heart":
-		main.on_heart_pierced(position)
-		return
 	var dir := vel.normalized()
-	var power := dash_kind == "power"
-	gauge = mini(GAUGE_MAX, gauge + 1)           # 타격 성공 → 돌진 연료 1칸 환급
-	var dmg := POWER_DAMAGE if power else CHARGE_DAMAGE
-	var was_buffed := buffed and not power
-	if was_buffed:                               # 퍼펙트 회피 버프: 차지 공격 피해 3배 (패리 돌진엔 적용되지 않는다)
-		dmg *= EVADE_BUFF_MULT
+	var kind := dash_kind
+	var dmg := _strike_damage()
+	var was_buffed := buffed and kind == "charge"
+	if was_buffed:                               # 퍼펙트 회피 버프는 차지 공격 한 번에 소모된다
 		buffed = false
-	main.on_strike(hit, dmg, position, dir, power, was_buffed)
+	main.on_strike(hit, dmg, position, dir, kind, was_buffed)
+	if frozen:
+		return
+	bounce_off(dir, hit["n"], kind == "power")
+
+
+## 받아치기: 휩쓰는 팔에 차지 돌진이 부딪힘 → 피해량 반환 (버프가 있으면 2배, 소모)
+func clash_damage() -> int:
+	var dmg := CLASH_DAMAGE * (EVADE_BUFF_MULT if buffed else 1)
+	buffed = false
+	return dmg
+
+
+## 맞은 면(법선 n)에 대해 입사각 = 반사각으로 튕긴다
+func bounce_off(dir: Vector2, n: Vector2, power := false) -> void:
 	dash_t = 0.0
 	_end_dash()
 	bouncing = true
 	shield_t = STRIKE_SHIELD                     # 튕겨나는 동안 무적
 	shield_max = STRIKE_SHIELD
-	parry_cd = 0.0                               # 튕겨나오는 즉시 패리·회피 등 모든 조작이 가능
-	dash_cd = 0.0
+	parry_cd = 0.0                               # 튕겨나오는 즉시 패리 가능 (돌진 쿨다운은 그대로)
 	parry_queue = 0.0
-	# 들어온 방향(좌/우)을 유지하며 약 50도로 뜬다. 거의 수직으로 들어왔으면 마우스 쪽으로
-	var sx := signf(dir.x) if absf(dir.x) > 0.2 else (signf(aim.x) if absf(aim.x) > 0.1 else (1.0 if randf() < 0.5 else -1.0))
-	var k := 1.15 if power else 1.0
-	vel = Vector2(sx * cos(BOUNCE_ANGLE), -sin(BOUNCE_ANGLE)) * BOUNCE_SPEED * k + Vector2(aim.x * BOUNCE_STEER, 0.0)
+	var out := dir
+	if dir.dot(n) < 0.0:
+		out = dir - 2.0 * dir.dot(n) * n
+	vel = out.normalized() * BOUNCE_SPEED * (1.15 if power else 1.0)
 
 
 ## 에임 어시스트: 사거리 안에서 조준선이 표적 가장자리 일정 각도(PC 24도, 터치 40도) 이내면 표적 중심으로 달라붙는다.
@@ -648,6 +653,8 @@ func _draw_flame(off: Vector2) -> void:
 		power = 0.35 + 0.65 * -aim.y
 	else:
 		power = 0.35 - 0.2 * aim.y
+	if dash_cd > 0.0 and dash_t <= 0.0:   # 돌진 쿨다운 중엔 화염이 약하다
+		power *= 0.6
 	var flen := (8.0 + 34.0 * power) * randf_range(0.85, 1.15)
 	var w := 4.0 + 4.0 * minf(power, 1.2)
 	var back := Vector2(-21, 0)
@@ -669,15 +676,15 @@ func _draw() -> void:
 	if is_hovering_charge():           # 차지 중엔 몸이 떨린다 (완료되면 더)
 		var amp := 0.8 if is_charged() else 0.6 + 1.6 * clampf(charge_t / charge_need(), 0.0, 1.0)
 		jitter = Vector2(randf_range(-amp, amp), randf_range(-amp, amp))
-	var evade := dash_t > 0.0 and dash_kind == "evade"
-	var attack := is_attacking()
+	var evade := dash_t > 0.0 and dash_kind == "dash"
+	var attack := dash_t > 0.0 and (dash_kind == "charge" or dash_kind == "power")
 
-	# 꼬리: 회피는 청백, 공격은 주황
+	# 꼬리: 일반 돌진은 청백(무적·잔상), 차지·패리 돌진은 주황
 	var tc := C_ATTACK if attack else C_EVADE
 	for i in range(trail.size() - 1):
 		var a := 1.0 - float(i) / trail.size()
 		draw_line(trail[i] - position, trail[i + 1] - position, Color(tc, a * (0.3 if evade else 0.6)), 6.0 * a + 1.0)
-	# 회피: 잔상
+	# 일반 돌진: 잔상
 	if evade:
 		for k in [3, 6, 9, 12]:
 			if k < trail.size():
@@ -737,19 +744,11 @@ func _draw() -> void:
 		draw_arc(lp, assist_r + 8.0 + 3.0 * ap, 0.0, TAU, 36, Color(lc, 0.85), 3.0)
 		draw_arc(lp, assist_r + 20.0, 0.0, TAU, 36, Color(lc, 0.3), 2.0)
 
-	# 차지 쿨다운: 플레이어 주변 링이 차오른다 (다 차면 다시 차지 가능)
-	if charge_cd > 0.0:
-		var rr := 36.0
-		var lw := 3.0
-		var ca := 0.85
-		if charging:                       # 쿨다운 중에 차지를 시도하면 링이 커지고 굵어져 '아직 안 됨'을 알린다
-			var hold := clampf(charge_t / 0.8, 0.0, 1.0)
-			rr += 4.0 + 10.0 * hold + 2.0 * sin(Time.get_ticks_msec() * 0.04)
-			lw = 4.5 + 2.0 * hold
-			ca = 1.0
-			draw_circle(Vector2.ZERO, rr, Color(C_ATTACK, 0.06 + 0.08 * hold))
-		draw_arc(Vector2.ZERO, rr, 0.0, TAU, 40, Color(C_ATTACK, 0.2), lw)
-		draw_arc(Vector2.ZERO, rr, -PI * 0.5, -PI * 0.5 + TAU * (1.0 - charge_cd / CHARGE_COOLDOWN), 40, Color(1.0, 0.5, 0.15, ca), lw)
+	# 돌진 쿨다운: 플레이어 주변 얇은 링이 차오른다 (다 차면 다시 돌진)
+	if dash_cd > 0.0 and dash_t <= 0.0:
+		var ca := 1.0 if charging or pending_kind != "" else 0.7   # 누르고 기다리는 중이면 또렷하게
+		draw_arc(Vector2.ZERO, 36.0, 0.0, TAU, 40, Color(C_EVADE, 0.15), 2.5)
+		draw_arc(Vector2.ZERO, 36.0, -PI * 0.5, -PI * 0.5 + TAU * (1.0 - dash_cd / DASH_COOLDOWN), 40, Color(C_EVADE, ca), 2.5)
 
 	# 패리 자세
 	if parry_active:

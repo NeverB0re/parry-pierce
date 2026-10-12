@@ -1,5 +1,5 @@
 extends Control
-## 모바일 터치 조작: 왼쪽 플로팅 스틱(방향), 오른쪽 큰 패리/차지 버튼 + 바로 붙은 작은 회피 버튼, 우상단 일시정지.
+## 모바일 터치 조작: 왼쪽 플로팅 스틱(방향), 오른쪽 큰 돌진/차지 버튼 + 바로 붙은 작은 패리 버튼, 우상단 일시정지.
 ## 모바일에서만(또는 --touch 로 시험할 때) main.gd 가 만든다. 마우스 조작은 그대로 유지된다.
 
 const BTN_PARRY_R := 122.0           # 패리/차지(누르고 있는 주력 버튼): 크게, 엄지가 가장 편한 자리
@@ -64,13 +64,13 @@ func _down(idx: int, pos: Vector2) -> void:
 		var pr := pos.distance_to(parry_center()) / BTN_PARRY_R
 		var dr := pos.distance_to(dash_center()) / BTN_DASH_R
 		if pr <= dr:
-			fingers[idx] = "parry"
-			parry_down = true
-			main.touch_parry(true)
-		else:
 			fingers[idx] = "dash"
 			dash_down = true
 			main.touch_dash(true)
+		else:
+			fingers[idx] = "parry"
+			parry_down = true
+			main.touch_parry(true)
 	elif pos.x < s.x * STICK_ZONE and not fingers.values().has("stick"):
 		fingers[idx] = "stick"
 		stick_origin = pos
@@ -121,24 +121,20 @@ func _draw() -> void:
 		draw_circle(hint, 30.0, Color(1, 1, 1, 0.08))
 	# 패리/차지(큰 버튼): 금색. 차지 쿨다운 중엔 바깥 링이 차오르고, 모으는 동안은 안쪽 호가 찬다
 	var pc := parry_center()
-	var pa := 0.5 if parry_down else 0.28
-	draw_circle(pc, BTN_PARRY_R, Color(1.0, 0.85, 0.35, pa * 0.5))
-	draw_arc(pc, BTN_PARRY_R, 0.0, TAU, 48, Color(1.0, 0.88, 0.4, pa + 0.25), 4.0)
-	draw_arc(pc, BTN_PARRY_R * 0.5, PI * 1.15, PI * 1.85, 16, Color(1.0, 0.92, 0.55, pa + 0.4), 7.0)
-	if pl.charging and pl.charge_cd <= 0.0:
+	var pa := 0.5 if dash_down else 0.28
+	draw_circle(pc, BTN_PARRY_R, Color(0.5, 0.85, 1.0, pa * 0.5))
+	draw_arc(pc, BTN_PARRY_R, 0.0, TAU, 48, Color(0.7, 0.92, 1.0, pa + 0.25), 4.0)
+	if pl.charging:
 		var fr := clampf(pl.charge_t / pl.charge_need(), 0.0, 1.0)
 		draw_arc(pc, BTN_PARRY_R * 0.78, -PI * 0.5, -PI * 0.5 + TAU * fr, 40, Color(1.0, 0.6, 0.2, 0.95), 6.0)
-	if pl.charge_cd > 0.0:
-		draw_arc(pc, BTN_PARRY_R + 9.0, -PI * 0.5, -PI * 0.5 + TAU * (1.0 - pl.charge_cd / pl.CHARGE_COOLDOWN), 48, Color(1.0, 0.55, 0.2, 0.9), 5.0)
+	if pl.dash_cd > 0.0:
+		draw_arc(pc, BTN_PARRY_R + 9.0, -PI * 0.5, -PI * 0.5 + TAU * (1.0 - pl.dash_cd / pl.DASH_COOLDOWN), 48, Color(0.7, 0.92, 1.0, 0.9), 5.0)
 	# 회피(작은 버튼): 청백 화살표
 	var dc := dash_center()
-	var da := 0.5 if dash_down else 0.28
-	draw_circle(dc, BTN_DASH_R, Color(0.5, 0.85, 1.0, da * 0.5))
-	draw_arc(dc, BTN_DASH_R, 0.0, TAU, 40, Color(0.7, 0.92, 1.0, da + 0.25), 4.0)
-	var ar := Vector2(BTN_DASH_R * 0.42, 0.0)
-	draw_line(dc - ar, dc + ar, Color(0.85, 0.97, 1.0, da + 0.4), 5.0)
-	draw_line(dc + ar, dc + ar + Vector2(-14, -12), Color(0.85, 0.97, 1.0, da + 0.4), 5.0)
-	draw_line(dc + ar, dc + ar + Vector2(-14, 12), Color(0.85, 0.97, 1.0, da + 0.4), 5.0)
+	var da := 0.5 if parry_down else 0.28
+	draw_circle(dc, BTN_DASH_R, Color(1.0, 0.85, 0.35, da * 0.5))
+	draw_arc(dc, BTN_DASH_R, 0.0, TAU, 40, Color(1.0, 0.88, 0.4, da + 0.25), 4.0)
+	draw_arc(dc, BTN_DASH_R * 0.5, PI * 1.15, PI * 1.85, 16, Color(1.0, 0.92, 0.55, da + 0.4), 6.0)
 	# 일시정지
 	var qc := pause_center()
 	draw_circle(qc, 26.0, Color(1, 1, 1, 0.1))

@@ -95,26 +95,13 @@ func _draw() -> void:
 	for i in main.LIVES:
 		_draw_life(Vector2(46 + i * 46, 50), i < main.lives)
 
-	# 추진 게이지
-	_text(Vector2(28, 100), "추진", 16, Color(0.8, 0.82, 0.86, 0.8))
-	for i in Player.GAUGE_MAX:
-		var c := Vector2(86 + i * 24, 94)
-		if i < pl.gauge:
-			draw_circle(c, 8.0, Color(1.0, 0.75, 0.45))
-			draw_circle(c, 4.0, Color(1.0, 0.95, 0.85))
-
-		else:
-			draw_arc(c, 8.0, 0.0, TAU, 20, Color(0.7, 0.7, 0.75, 0.5), 2.0)
-			if i == 0 and pl.gauge == 0 and pl.regen_t > 0.0:   # 재생 진행 (1칸까지)
-				draw_arc(c, 8.0, -PI * 0.5, -PI * 0.5 + TAU * clampf(pl.regen_t / Player.GAUGE_REGEN_TIME, 0.0, 1.0), 20, Color(1.0, 0.75, 0.45, 0.95), 3.0)
-
 	_draw_target_marker(s, boss)
 	if not boss.dead and boss.atk.get("kind", "") == "beam" and s.x >= 300.0:   # 레이저 중 머리가 화면 밖이면 방향 표시
 		_edge_arrow(s, (main.get_viewport().get_canvas_transform() * boss.HEAD_POS) / ui_k, Color(0.85, 0.2, 0.55))
 
 	# 상태 정보
-	var left: String = ("부위 %d" % boss.parts_left()) if boss.phase == 1 else ("갑옷 %d" % boss.plates_left())
-	_text(Vector2(28, 140), "%s   %.1fs" % [left, main.run_time], 15, Color(0.75, 0.77, 0.82, 0.7))
+	var left: String = ("부위 %d" % boss.parts_left()) if boss.phase == 1 else "코어"
+	_text(Vector2(28, 100), "%s   %.1fs" % [left, main.run_time], 15, Color(0.75, 0.77, 0.82, 0.7))
 
 	# 배너
 	if banner_title != "":
@@ -134,7 +121,7 @@ func _draw() -> void:
 
 	# 조작
 	if main.touch_ui == null:
-		_text(Vector2(28, s.y - 24), "마우스: 방향(위=활공)   좌클릭(꾹)·Space: 패리, 못 막으면 차지 → 떼면 공격   우클릭: 회피   패리 성공 → 슬로우 조준 → 패리 돌진   R: 재시작   Esc: 메뉴", 15, Color(0.75, 0.77, 0.82, 0.55))
+		_text(Vector2(28, s.y - 24), "마우스: 방향(위=활공)   좌클릭: 돌진 / 꾹: 차지 돌진 (휩쓰는 팔에 부딪히면 받아치기)   우클릭·Space 꾹: 패리 → 슬로우 조준 → 패리 돌진   R: 재시작   Esc: 메뉴", 15, Color(0.75, 0.77, 0.82, 0.55))
 
 	if warp_t > 0.0:                          # 퍼펙트 회피: 청록 틴트 + 가장자리에서 모여드는 선
 		var wk := clampf(warp_t / warp_max, 0.0, 1.0)

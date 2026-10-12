@@ -2,29 +2,24 @@ extends Node2D
 ## 거대한 적 (정면). 배경에 서 있어서 몸 자체는 충돌/피해 판정이 없다.
 ## 판정은 두 종류:
 ##  1) 적이 공격할 때 그 공격(주먹/발/충격파/탄환) — 그때만 생긴다
-##  2) 표적(부위·갑옷·심장)은 상시 판정: 돌진 중에 닿으면 타격, 아니면 닿은 플레이어가 피해
+##  2) 표적(부위·코어)은 상시 판정: 돌진 중에 닿으면 타격, 아니면 닿은 플레이어가 피해
 ## 페이즈: 1) 부위 파괴 — 좌/우 포대, 좌/우 팔꿈치 관절을 부순다 (가슴은 닫혀 있음)
 ##         2) 개방 연출 — 가슴이 열린다
-##         3) 코어 — 하트 모양 갑옷에 싸인 심장. 탄은 머리에서 쏜다
+##         3) 코어 — 하트 모양 강철 껍질에 싸인 코어(체력 하나). 피해가 쌓일수록 껍질이 부서진다. 탄은 머리에서 쏜다
+## 체력바는 없다: 부위·코어 모두 균열·연기·조각 탈락으로 남은 체력을 보여 준다
 ## 바닥 y=0, 위쪽이 음수. 몸 중심 x=0.
 
 # ── 구조 ───────────────────────────────────────────────
-const CELL := 60.0
-const GRID_N := 7
-const GRID_ORIGIN := Vector2(-210, -2110)   # 가슴 갑옷 격자 좌상단 (7x7, 중심이 심장)
-const HEART_CELL := 3
-const HEART_R := 24.0
-const RING_HP := [0, 5, 3, 2]               # 심장에서의 거리(칸)별 내구도: 0=심장, 1=가장 안쪽(강철), 2=중간, 3=바깥
-const PLATE_COL := [Color(0, 0, 0), Color(0.38, 0.46, 0.56), Color(0.6, 0.47, 0.32), Color(0.64, 0.6, 0.52)]
-const HEART_MASK := [                       # 하트 모양 갑옷 (1 = 갑옷 칸)
-	"0110110",
-	"1111111",
-	"1111111",
-	"1111111",
-	"0111110",
-	"0011100",
-	"0001000",
-]
+const HEART_POS := Vector2(0, -1900)        # 코어 중심
+const CHEST_RECT := Rect2(-236, -2136, 472, 472)   # 가슴 문 (페이즈 1에 닫혀 있음)
+const SHELL_SC := 15.0                      # 하트 껍질 크기 (하트 곡선 배율, 폭 약 480px)
+const SHELL_PTS := 60
+const WEDGES := 10                          # 껍질 판 수 (중심에서 부채꼴로 나뉜다)
+const WEDGE_DROP := [2, 7, 4, 5, 1, 8, 3, 6]   # 단계가 오를수록 이 순서로 떨어져 나간다
+const CORE_R := 78.0                        # 껍질 안 코어 반지름
+const CORE_HP := 160
+const C_STEEL := Color(0.34, 0.38, 0.45)
+const C_STEEL_DARK := Color(0.2, 0.22, 0.27)
 
 const HIPS := [Vector2(-210, -1020), Vector2(210, -1020)]
 const FOOT_REST := [Vector2(-230, 0), Vector2(230, 0)]
@@ -37,7 +32,7 @@ const HEAD_POS := Vector2(0, -2605)                             # 최종 페이�
 const EYES := [Vector2(-62, -2605), Vector2(62, -2605)]
 
 # ── 부위 ───────────────────────────────────────────────
-const PART_HP := 6                          # 0 왼쪽 포대, 1 오른쪽 포대, 2 왼팔 관절, 3 오른팔 관절
+const PART_HP := 24                         # 0 왼쪽 포대, 1 오른쪽 포대, 2 왼팔 관절, 3 오른팔 관절
 const PART_R := [55.0, 55.0, 70.0, 70.0]
 const OPEN_TIME := 1.6                      # 가슴이 열리는 연출 시간
 
@@ -103,8 +98,16 @@ var phase := 1
 var open_t := 0.0
 var part_hp: Array[int] = []
 var part_flash: Array[float] = []
-var plates: Array[int] = []
-var plate_flash: Array[float] = []
+var part_stage: Array[int] = []      # 부위 손상 단계 0~3 (남은 체력 75/50/25%)
+var core_hp := CORE_HP
+var core_flash := 0.0
+var core_stage := 0                  # 코어 손상 단계 0~4 (피해 20%마다)
+var shell_poly := PackedVector2Array()
+var wedge_polys: Array[PackedVector2Array] = []
+var wedge_on: Array[bool] = []
+var dents: Array[Vector3] = []       # x, y, 반지름 (단계 1부터 보임)
+var cracks: Array[PackedVector2Array] = []   # 빛나는 균열 (단계 2부터)
+var shards: Array[Dictionary] = []   # 떨어져 나가는 장갑 조각
 var feet: Array[Vector2] = []
 var fists: Array[Vector2] = []
 var debris: Array[Dictionary] = []   # 부서져 떨어진 부위
@@ -125,7 +128,40 @@ var events: Array[Dictionary] = []   # main.gd 가 매 프레임 꺼내 처리 (
 
 
 func _ready() -> void:
+	_build_shell()
 	reset()
+
+
+## 하트 껍질 외곽선과 판(부채꼴) 나누기, 패임·균열 위치를 한 번만 만든다
+func _build_shell() -> void:
+	shell_poly = _heart_outline()
+	wedge_polys.clear()
+	var per: int = SHELL_PTS / WEDGES
+	for k in WEDGES:
+		var w := PackedVector2Array([HEART_POS])
+		for j in per + 1:
+			w.append(shell_poly[(k * per + j) % SHELL_PTS])
+		wedge_polys.append(w)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 11
+	dents.clear()
+	while dents.size() < 12:
+		var q := HEART_POS + Vector2(rng.randf_range(-220, 220), rng.randf_range(-190, 230))
+		if Geometry2D.is_point_in_polygon(q, shell_poly) and q.distance_to(HEART_POS) > CORE_R * 0.6:
+			dents.append(Vector3(q.x, q.y, rng.randf_range(9, 20)))
+	cracks.clear()
+	for k in 7:
+		var a := TAU * k / 7.0 + rng.randf_range(-0.3, 0.3)
+		var line := PackedVector2Array([HEART_POS + Vector2.from_angle(a) * CORE_R * 0.9])
+		var q := line[0]
+		for j in 4:
+			a += rng.randf_range(-0.5, 0.5)
+			q += Vector2.from_angle(a) * rng.randf_range(30, 55)
+			if not Geometry2D.is_point_in_polygon(q, shell_poly):
+				break
+			line.append(q)
+		if line.size() >= 2:
+			cracks.append(line)
 
 
 func reset() -> void:
@@ -133,13 +169,14 @@ func reset() -> void:
 	open_t = 0.0
 	part_hp = [PART_HP, PART_HP, PART_HP, PART_HP]
 	part_flash = [0.0, 0.0, 0.0, 0.0]
-	plates.clear()
-	plate_flash.clear()
-	for r in GRID_N:
-		for c in GRID_N:
-			var ring := maxi(absi(c - HEART_CELL), absi(r - HEART_CELL))
-			plates.append(RING_HP[ring] if in_mask(c, r) else 0)
-			plate_flash.append(0.0)
+	part_stage = [0, 0, 0, 0]
+	core_hp = CORE_HP
+	core_flash = 0.0
+	core_stage = 0
+	wedge_on.clear()
+	for k in WEDGES:
+		wedge_on.append(true)
+	shards.clear()
 	feet.clear()
 	feet.append(FOOT_REST[0])
 	feet.append(FOOT_REST[1])
@@ -190,6 +227,12 @@ func damage_part(i: int, dmg: int) -> bool:
 	part_flash[i] = 1.0
 	if part_hp[i] - dmg > 0:
 		part_hp[i] -= dmg
+		var st := _part_stage_of(i)
+		if st > part_stage[i]:                 # 손상 단계가 올라가면 조각이 튀고 연기가 짙어진다
+			part_stage[i] = st
+			events.append({"type": "part_stage", "pos": part_pos(i), "stage": st})
+			if st == 3:
+				_spawn_shard(part_pos(i), 26.0, Vector2((1.0 if i % 2 == 1 else -1.0) * 240.0, -320.0))
 		return false
 	var pos := part_pos(i)
 	var s := 1.0 if i % 2 == 1 else -1.0
@@ -218,6 +261,17 @@ func damage_part(i: int, dmg: int) -> bool:
 	return true
 
 
+func _part_stage_of(i: int) -> int:
+	var f := float(part_hp[i]) / PART_HP
+	if f <= 0.25:
+		return 3
+	if f <= 0.5:
+		return 2
+	if f <= 0.75:
+		return 1
+	return 0
+
+
 ## 탄 속도 배율: 부위를 부술수록, 최종 페이즈일수록 빨라진다
 func bolt_mult() -> float:
 	return 1.0 + BOLT_SPEEDUP * (4 - parts_left()) + (BOLT_SPEEDUP_CORE if phase == 3 else 0.0)
@@ -236,33 +290,45 @@ func target_pos(from: Vector2) -> Vector2:
 	return best
 
 
-# ── 격자 ───────────────────────────────────────────────
-func in_mask(c: int, r: int) -> bool:
-	return String(HEART_MASK[r])[c] == "1"
-
-
-func cell_rect(c: int, r: int) -> Rect2:
-	return Rect2(GRID_ORIGIN + Vector2(c, r) * CELL, Vector2(CELL, CELL))
-
-
+# ── 코어 ───────────────────────────────────────────────
 func heart_pos() -> Vector2:
-	return cell_rect(HEART_CELL, HEART_CELL).get_center()
+	return HEART_POS
 
 
-func damage_plate(idx: int, dmg: int) -> bool:
-	if plates[idx] <= 0:
+## 코어 피해. 0이 되면 true (승리). 20%마다 껍질이 한 단계 더 부서진다
+func damage_core(dmg: int) -> bool:
+	if core_hp <= 0:
 		return false
-	plates[idx] = maxi(0, plates[idx] - dmg)
-	plate_flash[idx] = 1.0
-	return plates[idx] == 0
+	core_hp = maxi(0, core_hp - dmg)
+	core_flash = 1.0
+	var st := mini(4, int(float(CORE_HP - core_hp) * 5.0 / CORE_HP))
+	while core_stage < st:
+		core_stage += 1
+		var drop: int = [0, 0, 1, 4, 8][core_stage]
+		for j in drop:
+			var k: int = WEDGE_DROP[j]
+			if wedge_on[k]:
+				wedge_on[k] = false
+				var cen := Vector2.ZERO
+				for q in wedge_polys[k]:
+					cen += q
+				cen /= wedge_polys[k].size()
+				var out := (cen - HEART_POS).normalized()
+				_spawn_shard_poly(wedge_polys[k], cen, out * 380.0 + Vector2(0, -260.0))
+		events.append({"type": "core_stage", "pos": HEART_POS, "stage": core_stage})
+	return core_hp == 0
 
 
-func plates_left() -> int:
-	var n := 0
-	for hp in plates:
-		if hp > 0:
-			n += 1
-	return n
+func _spawn_shard(pos: Vector2, size: float, v: Vector2) -> void:
+	var pts := PackedVector2Array([Vector2(-size, -size * 0.6), Vector2(size * 0.8, -size * 0.8), Vector2(size, size * 0.5), Vector2(-size * 0.5, size)])
+	shards.append({"pos": pos, "vel": v, "rot": 0.0, "rotv": randf_range(-5.0, 5.0), "pts": pts})
+
+
+func _spawn_shard_poly(poly: PackedVector2Array, cen: Vector2, v: Vector2) -> void:
+	var pts := PackedVector2Array()
+	for q in poly:
+		pts.append(q - cen)
+	shards.append({"pos": cen, "vel": v, "rot": 0.0, "rotv": randf_range(-2.5, 2.5), "pts": pts})
 
 
 # ── 플레이어 공격 판정 ─────────────────────────────────
@@ -279,21 +345,27 @@ func strike_hit(p: Vector2, r: float) -> Dictionary:
 			var d := p.distance_to(part_pos(i))
 			if d < r + float(PART_R[i]) and d < best_d:
 				best_d = d
-				best = {"kind": "part", "idx": i}
+				var n := p - part_pos(i)
+				best = {"kind": "part", "idx": i, "n": n.normalized() if n.length() > 0.1 else Vector2.UP}
 		return best
-	var best := {}
-	var best_d := 0.0
-	for i in plates.size():
-		if plates[i] <= 0:
-			continue
-		var h := _rect_hit(p, r, cell_rect(i % GRID_N, i / GRID_N).grow(-2.0))
-		if not h.is_empty() and h["depth"] > best_d:
-			best_d = h["depth"]
-			best = {"kind": "plate", "idx": i}
-	if not best.is_empty():
-		return best
-	if p.distance_to(heart_pos()) < r + HEART_R:
-		return {"kind": "heart"}
+	return _core_hit(p, r)
+
+
+## 하트 껍질과의 충돌: 안쪽이면 중심에서 바깥 방향, 바깥이면 가장 가까운 변에서 바깥 방향이 법선
+func _core_hit(p: Vector2, r: float) -> Dictionary:
+	if Geometry2D.is_point_in_polygon(p, shell_poly):
+		var n := p - HEART_POS
+		return {"kind": "core", "n": n.normalized() if n.length() > 0.1 else Vector2.UP}
+	var best_d := INF
+	var best_q := Vector2.ZERO
+	for j in SHELL_PTS:
+		var q := Geometry2D.get_closest_point_to_segment(p, shell_poly[j], shell_poly[(j + 1) % SHELL_PTS])
+		var d := q.distance_to(p)
+		if d < best_d:
+			best_d = d
+			best_q = q
+	if best_d < r:
+		return {"kind": "core", "n": (p - best_q).normalized()}
 	return {}
 
 
@@ -307,21 +379,14 @@ func assist_targets() -> Array[Dictionary]:
 			if part_alive(i):
 				out.append({"pos": part_pos(i), "r": float(PART_R[i])})
 		return out
-	for i in plates.size():
-		if plates[i] > 0:
-			out.append({"pos": cell_rect(i % GRID_N, i / GRID_N).get_center(), "r": CELL * 0.55})
-	out.append({"pos": heart_pos(), "r": HEART_R})
+	out.append({"pos": HEART_POS, "r": 200.0})
 	return out
 
 
 func hit_center(hit: Dictionary) -> Vector2:
-	match hit["kind"]:
-		"heart":
-			return heart_pos()
-		"part":
-			return part_pos(int(hit["idx"]))
-	var idx: int = hit["idx"]
-	return cell_rect(idx % GRID_N, idx / GRID_N).get_center()
+	if hit["kind"] == "part":
+		return part_pos(int(hit["idx"]))
+	return HEART_POS
 
 
 static func _rect_hit(p: Vector2, r: float, rc: Rect2) -> Dictionary:
@@ -435,6 +500,7 @@ func overlaps(hb: Dictionary, p: Vector2, r: float) -> bool:
 	return hp.distance_to(p) < r + float(hb["r"])
 
 
+## 받아치기 / 탄 패리: 팔은 휩쓸던 반대쪽으로 밀려나 멈추고, 탄은 사라진다
 func on_parried(hb: Dictionary) -> void:
 	match hb["id"]:
 		"arm":
@@ -498,8 +564,8 @@ func die() -> void:
 # ── 진행 ───────────────────────────────────────────────
 func step(dt: float, ppos: Vector2) -> void:
 	t += dt
-	for i in plate_flash.size():
-		plate_flash[i] = maxf(0.0, plate_flash[i] - dt * 4.0)
+	core_flash = maxf(0.0, core_flash - dt * 4.0)
+	_step_shards(dt)
 	for i in 4:
 		part_flash[i] = maxf(0.0, part_flash[i] - dt * 4.0)
 	_step_debris(dt)
@@ -824,6 +890,18 @@ func _step_bolts(dt: float) -> void:
 			bolts.erase(b)
 			events.append({"type": "bolt_pop", "pos": p})
 
+func _step_shards(dt: float) -> void:
+	for sd in shards.duplicate():
+		var v: Vector2 = sd["vel"]
+		v.y += 1400.0 * dt
+		sd["vel"] = v
+		var sp: Vector2 = sd["pos"] + v * dt
+		sd["pos"] = sp
+		sd["rot"] = float(sd["rot"]) + float(sd["rotv"]) * dt
+		if sp.y > 40.0:                        # 용암에 떨어져 사라진다
+			shards.erase(sd)
+
+
 func _step_debris(dt: float) -> void:
 	for d in debris:
 		if d["rest"]:
@@ -855,6 +933,7 @@ func _draw() -> void:
 	_draw_head()
 	_draw_part_marks()
 	_draw_debris()
+	_draw_shards()
 	_draw_telegraphs()
 	_draw_bolts()
 
@@ -913,27 +992,26 @@ func _draw_torso() -> void:
 	draw_line(Vector2(-380, -1300), Vector2(380, -1300), C_BONE, 5.0)
 
 
-## 하트 곡선 (gap = 바깥으로 넓힐 여백)
-func _heart_outline(gap: float) -> PackedVector2Array:
+## 하트 껍질 외곽선 (코어 중심이 하트의 넓은 부분에 오도록)
+func _heart_outline() -> PackedVector2Array:
 	var pts := PackedVector2Array()
-	var sc := 14.0 + gap / 16.0
-	var c := heart_pos() + Vector2(0, -40)
-	for j in 48:
-		var u := TAU * j / 48.0
+	var c := HEART_POS - Vector2(0, SHELL_SC)
+	for j in SHELL_PTS:
+		var u := TAU * j / SHELL_PTS
 		var x := 16.0 * pow(sin(u), 3)
 		var y := -(13.0 * cos(u) - 5.0 * cos(2.0 * u) - 2.0 * cos(3.0 * u) - cos(4.0 * u))
-		pts.append(c + Vector2(x, y) * sc)
+		pts.append(c + Vector2(x, y) * SHELL_SC)
 	return pts
 
 
-## 가슴: 페이즈 1은 닫힌 문, 페이즈 2는 열리는 중, 페이즈 3은 하트 모양 갑옷 코어
+## 가슴: 페이즈 1은 닫힌 문, 페이즈 2는 열리는 중, 페이즈 3은 하트 모양 강철 껍질에 싸인 코어
 func _draw_chest() -> void:
 	var open_k := 0.0 if phase == 1 else (1.0 if phase == 3 else clampf(open_t / OPEN_TIME, 0.0, 1.0))
 	if open_k > 0.0:
-		_draw_grid()
+		_draw_core()
 	if open_k >= 1.0:
 		return
-	var rc := Rect2(GRID_ORIGIN, Vector2(GRID_N, GRID_N) * CELL).grow(26.0)
+	var rc := CHEST_RECT
 	var half_w := rc.size.x * 0.5
 	var slide := ease(open_k, 2.2) * (half_w + 20.0)
 	var alpha := 1.0 - maxf(0.0, open_k - 0.7) / 0.3
@@ -952,73 +1030,78 @@ func _draw_chest() -> void:
 		draw_line(Vector2(0, rc.position.y), Vector2(0, rc.end.y), Color(C_HEART, 0.18 + 0.1 * sin(t * 3.0)), 3.0)
 
 
-func _draw_grid() -> void:
-	var hc := heart_pos()
-	var beat := 0.5 + 0.5 * sin(t * 5.0)
-	draw_colored_polygon(_heart_outline(30.0), C_BODY_DARK)
-	var rim := _heart_outline(30.0)
-	rim.append(rim[0])
-	draw_polyline(rim, Color(C_RIM, 0.6), 4.0)
+## 코어: 껍질 판(부채꼴)이 남아 있는 만큼 덮고, 단계가 오를수록 패임 → 빛나는 균열 → 판 탈락 → 뼈대만
+func _draw_core() -> void:
+	var hc := HEART_POS
+	var beat := 0.5 + 0.5 * sin(t * (5.0 + core_stage * 1.5))   # 많이 부서질수록 빨리 뛴다
 	var lit := strike_glow or focus_glow > 0.0     # 공격 돌진 중이거나 방향 지정·차지 중이면 표적이 드러난다
-	var edge_col := Color(1.0, 0.85, 0.5) if lit else C_PLATE_EDGE
-	var edge_w := 3.0 if lit else 2.0
-	# 호출 수를 줄이기 위해 윤곽선·하이라이트·내구도 구분선은 모아서 한 번에 그린다
-	var outline_pts := PackedVector2Array()
-	var shine_pts := PackedVector2Array()
-	var sep_pts := PackedVector2Array()
-	for r in GRID_N:
-		for c in GRID_N:
-			if not in_mask(c, r):
-				continue
-			var rc := cell_rect(c, r)
-			if c == HEART_CELL and r == HEART_CELL:
-				draw_rect(rc, C_CAVITY)
-				continue
-			var i := r * GRID_N + c
-			var hp := plates[i]
-			if hp <= 0:
-				draw_rect(rc, C_CAVITY)
-				var near := 1.0 - clampf(rc.get_center().distance_to(hc) / 200.0, 0.0, 1.0)
-				draw_rect(rc, Color(0.45, 0.08, 0.06, 0.2 + 0.45 * near * (0.7 + 0.3 * beat)))
-				continue
-			var ring := maxi(absi(c - HEART_CELL), absi(r - HEART_CELL))
-			var maxhp: int = RING_HP[ring]
-			var col: Color = PLATE_COL[ring]
-			col = col.lerp(Color.WHITE, plate_flash[i])
-			if lit:
-				col = col.lerp(Color(1.0, 0.85, 0.5), 0.25)
-			var inner := rc.grow(-2.0)
-			draw_rect(inner, col)
-			var tl := inner.position
-			var tr := Vector2(inner.end.x, inner.position.y)
-			var br := inner.end
-			var bl := Vector2(inner.position.x, inner.end.y)
-			outline_pts.append_array(PackedVector2Array([tl, tr, tr, br, br, bl, bl, tl]))
-			shine_pts.append_array(PackedVector2Array([tl + Vector2(3, 3), Vector2(inner.end.x - 3, inner.position.y + 3)]))
-			# 남은 내구도 = 칸 아래쪽의 점 개수 (채워진 점이 남은 타격 수, 빈 점이 잃은 만큼)
-			var bar_w := 44.0
-			var bar := Rect2(rc.get_center().x - bar_w * 0.5, rc.end.y - 14.0, bar_w, 8.0)
-			draw_rect(bar, Color(0.0, 0.0, 0.0, 0.5))
-			draw_rect(Rect2(bar.position, Vector2(bar_w * float(hp) / maxhp, bar.size.y)), Color(1.0, 0.92, 0.6))
-			for k in range(1, maxhp):
-				var sx := bar.position.x + bar_w * float(k) / maxhp
-				sep_pts.append_array(PackedVector2Array([Vector2(sx, bar.position.y), Vector2(sx, bar.end.y)]))
-	if not outline_pts.is_empty():
-		draw_multiline(outline_pts, edge_col, edge_w)
-		draw_multiline(shine_pts, Color(1, 1, 1, 0.18), 2.0)
-		draw_multiline(sep_pts, Color(0.2, 0.12, 0.05), 2.0)
+	draw_colored_polygon(shell_poly, C_CAVITY)
 	if dead:
 		var k := minf(1.0, death_t / 1.2)
-		draw_circle(hc, HEART_R + k * 240.0, Color(C_HEART, 0.5 * (1.0 - k)))
-		draw_arc(hc, HEART_R + k * 450.0, 0.0, TAU, 48, Color(1, 0.9, 0.7, 1.0 - k), 6.0)
+		draw_circle(hc, CORE_R + k * 240.0, Color(C_HEART, 0.5 * (1.0 - k)))
+		draw_arc(hc, CORE_R + k * 450.0, 0.0, TAU, 48, Color(1, 0.9, 0.7, 1.0 - k), 6.0)
 		return
-	var pr := HEART_R * (1.0 + 0.12 * beat)
-	if focus_glow > 0.0:
-		var in_reach := hc.distance_to(focus_from) <= focus_reach
-		draw_circle(hc, pr * 4.0, Color(C_HEART, focus_glow * (0.22 if in_reach else 0.1) * (0.6 + 0.4 * beat)))
-	draw_circle(hc, pr * (2.4 if lit else 1.7), Color(C_HEART, 0.1 + 0.08 * beat + (0.12 if lit else 0.0)))
-	draw_circle(hc, pr, C_HEART)
-	draw_circle(hc + Vector2(-6, -6), pr * 0.45, Color(1.0, 0.85, 0.6))
+	var pr := CORE_R * (1.0 + 0.06 * beat)
+	draw_circle(hc, pr * 1.9, Color(C_HEART, 0.12 + 0.1 * beat))
+	draw_circle(hc, pr, C_HEART.lerp(Color.WHITE, core_flash * 0.6))
+	draw_circle(hc + Vector2(-pr * 0.3, -pr * 0.3), pr * 0.4, Color(1.0, 0.85, 0.6))
+	# 강철 판
+	var steel := C_STEEL.lerp(Color.WHITE, core_flash * 0.5)
+	if lit:
+		steel = steel.lerp(Color(1.0, 0.85, 0.5), 0.15)
+	var seams := PackedVector2Array()
+	var rim := PackedVector2Array()
+	for k in WEDGES:
+		if not wedge_on[k]:
+			continue
+		var w := wedge_polys[k]
+		draw_colored_polygon(w, steel)
+		seams.append_array(PackedVector2Array([w[0], w[1], w[0], w[w.size() - 1]]))
+		for j in range(1, w.size() - 1):
+			rim.append_array(PackedVector2Array([w[j], w[j + 1]]))
+	if not seams.is_empty():
+		draw_multiline(seams, C_STEEL_DARK, 4.0)
+		draw_multiline(seams, Color(C_HEART, 0.12 + 0.1 * beat + 0.08 * core_stage), 1.5)   # 이음새로 새는 빛
+		draw_multiline(rim, Color(1.0, 0.85, 0.5) if lit else C_PLATE_EDGE, 5.0)
+		for k in WEDGES:                           # 판마다 리벳
+			if wedge_on[k]:
+				var w := wedge_polys[k]
+				var q: Vector2 = w[0].lerp(w[w.size() / 2], 0.8)
+				draw_circle(q, 5.0, C_STEEL_DARK)
+				draw_circle(q + Vector2(-1, -1), 2.0, Color(0.7, 0.74, 0.8))
+	# 단계별 손상
+	if core_stage >= 1:                            # 패임
+		for d in dents:
+			var dp := Vector2(d.x, d.y)
+			if _wedge_alive_at(dp):
+				draw_circle(dp, d.z, Color(C_STEEL_DARK, 0.85))
+				draw_arc(dp, d.z, PI * 1.1, PI * 1.9, 8, Color(0.7, 0.74, 0.8, 0.5), 2.0)
+	if core_stage >= 2:                            # 코어 빛이 새는 균열
+		for cr in cracks:
+			if _wedge_alive_at(cr[cr.size() - 1]):
+				draw_polyline(cr, Color(1.0, 0.55, 0.25, 0.55 + 0.4 * beat), 3.0)
+	if core_stage >= 4:                            # 뼈대만 남고 코어에서 불꽃이 튄다
+		var ribs := PackedVector2Array()
+		for k in WEDGES:
+			ribs.append_array(PackedVector2Array([wedge_polys[k][0].lerp(wedge_polys[k][1], 0.35), wedge_polys[k][1]]))
+		draw_multiline(ribs, C_STEEL_DARK, 7.0)
+		var rim_all := shell_poly.duplicate()
+		rim_all.append(shell_poly[0])
+		draw_polyline(rim_all, C_STEEL_DARK, 8.0)
+		for j in 5:
+			var a := t * 3.0 + j * 1.3
+			var sp := hc + Vector2.from_angle(a) * (CORE_R + fmod(t * 140.0 + j * 37.0, 90.0))
+			draw_circle(sp, 3.0, Color(1.0, 0.85, 0.5, 0.9))
+	if focus_glow > 0.0:                           # 방향 지정·차지 중: 노릴 수 있는 표적 강조
+		var in_reach := hc.distance_to(focus_from) <= focus_reach + 200.0
+		draw_arc(hc, 260.0, 0.0, TAU, 48, Color(1.0, 0.85, 0.55, focus_glow * (0.6 if in_reach else 0.25)), 3.0)
+
+
+func _wedge_alive_at(q: Vector2) -> bool:
+	for k in WEDGES:
+		if Geometry2D.is_point_in_polygon(q, wedge_polys[k]):
+			return wedge_on[k]
+	return false
 
 
 func _draw_arms() -> void:
@@ -1071,7 +1154,7 @@ func _draw_stump(p: Vector2, dir: Vector2, r: float) -> void:
 	draw_circle(p + dir * r * 0.2, r * 0.35, Color(C_HEART, 0.25 + 0.15 * sin(t * 4.0)))
 
 
-## 페이즈 1 표적: 포대·팔꿈치에 맥동하는 약점 표시 + 남은 내구도 조각
+## 페이즈 1 표적: 포대·팔꿈치에 맥동하는 약점 표시 + 손상 단계(체력바 대신)
 func _draw_part_marks() -> void:
 	if phase != 1 or dead:
 		return
@@ -1086,15 +1169,59 @@ func _draw_part_marks() -> void:
 			draw_circle(p, r * 1.7, Color(C_HEART, focus_glow * (0.3 if in_reach else 0.12) * (0.6 + 0.4 * pulse)))
 			if in_reach:
 				draw_arc(p, r * 1.7, 0.0, TAU, 32, Color(1.0, 0.85, 0.55, focus_glow * 0.8), 3.0)
-		if i >= 2 and is_staggered(i - 2):      # 패리당해 멈춘 팔: 관절이 크게 빛난다
+		if i >= 2 and is_staggered(i - 2):      # 받아치기로 멈춘 팔: 관절이 크게 빛난다
 			draw_circle(p, r * 1.3 + 8.0 * pulse, Color(1.0, 0.75, 0.4, 0.35))
-		var core := Color(C_HEART, 0.85).lerp(Color.WHITE, part_flash[i])
-		draw_circle(p, r * 0.45 + 4.0 * pulse, Color(C_HEART, 0.18 + 0.12 * pulse + (0.15 if strike_glow else 0.0)))
+		var flick := 1.0
+		if part_stage[i] >= 3:                  # 거의 부서짐: 약점 빛이 깜빡인다
+			flick = 0.4 + 0.6 * float(int(t * 9.0 + i) % 3 != 0)
+		var core := Color(C_HEART, 0.85 * flick).lerp(Color.WHITE, part_flash[i])
+		draw_circle(p, r * 0.45 + 4.0 * pulse, Color(C_HEART, (0.18 + 0.12 * pulse + (0.15 if strike_glow else 0.0)) * flick))
 		draw_circle(p, r * 0.28, core)
 		var edge := Color(1.0, 0.85, 0.5, 0.9) if strike_glow else Color(C_PLATE_EDGE, 0.9)
-		var seg := TAU / PART_HP
-		for k in part_hp[i]:
-			draw_arc(p, r + 6.0, -PI * 0.5 + k * seg + 0.08, -PI * 0.5 + (k + 1) * seg - 0.08, 8, edge, 5.0)
+		draw_arc(p, r + 6.0, 0.0, TAU, 32, edge, 3.0)
+		_draw_part_damage(i, p, r, pulse)
+
+
+## 부위 손상: 1 긁힘 → 2 빛나는 균열 + 불꽃 → 3 떨어져 나간 자리 + 연기
+func _draw_part_damage(i: int, p: Vector2, r: float, pulse: float) -> void:
+	var st: int = part_stage[i]
+	if st <= 0:
+		return
+	var base := i * 1.7
+	for k in 3:
+		var a := base + k * 2.1
+		var c0 := p + Vector2.from_angle(a) * r * 0.55
+		draw_line(c0, c0 + Vector2.from_angle(a + 1.9) * r * 0.5, Color(0.75, 0.78, 0.84, 0.6), 2.5)
+	if st >= 2:
+		for k in 3:
+			var a := base + 0.6 + k * 2.1
+			var q0 := p + Vector2.from_angle(a) * r * 0.3
+			var q1 := q0 + Vector2.from_angle(a + 0.4) * r * 0.4
+			var q2 := q1 + Vector2.from_angle(a - 0.3) * r * 0.4
+			draw_polyline(PackedVector2Array([q0, q1, q2]), Color(1.0, 0.55, 0.25, 0.6 + 0.35 * pulse), 3.0)
+		if fmod(t * 3.0 + i * 0.37, 1.0) < 0.25:
+			for k in 3:
+				var sa := t * 11.0 + k * 2.0 + i
+				draw_circle(p + Vector2.from_angle(sa) * r * (0.6 + 0.4 * fmod(t * 4.0 + k, 1.0)), 2.5, Color(1.0, 0.85, 0.5))
+	if st >= 3:
+		var nc := p + Vector2.from_angle(base + 2.5) * r * 0.85
+		draw_circle(nc, r * 0.35, C_CAVITY)
+		draw_circle(nc, r * 0.18, Color(C_HEART, 0.35 + 0.3 * pulse))
+		for k in 4:
+			var life := fmod(t * 0.6 + k * 0.25 + i * 0.13, 1.0)
+			var sp := p + Vector2(sin(t + k * 1.7) * 14.0 + (k - 1.5) * 10.0, -r * 0.5 - life * 160.0)
+			draw_circle(sp, 12.0 + life * 26.0, Color(0.32, 0.33, 0.36, 0.45 * (1.0 - life)))
+
+
+func _draw_shards() -> void:
+	for sd in shards:
+		var pts: PackedVector2Array = sd["pts"]
+		draw_set_transform(sd["pos"], float(sd["rot"]))
+		draw_colored_polygon(pts, C_STEEL)
+		var ol := pts.duplicate()
+		ol.append(pts[0])
+		draw_polyline(ol, C_STEEL_DARK, 3.0)
+	draw_set_transform(Vector2.ZERO, 0.0)
 
 
 func _draw_debris() -> void:

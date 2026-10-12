@@ -156,10 +156,8 @@ func aim_offset(from: Vector2) -> Vector2:
 
 
 func touch_dash(pressed: bool) -> void:
-	if state != State.PLAY:
-		return
-	if pressed:
-		_evade_input()
+	if state == State.PLAY:
+		_dash_input(pressed)
 
 
 func touch_parry(pressed: bool) -> void:
@@ -184,9 +182,9 @@ func _unhandled_input(e: InputEvent) -> void:
 		if state != State.PLAY:
 			return
 		if e.button_index == MOUSE_BUTTON_LEFT:
-			_parry_input(e.pressed)            # 패리 → (못 막으면) 차지. 발판 위면 발사
-		elif e.button_index == MOUSE_BUTTON_RIGHT and e.pressed:
-			_evade_input()
+			_dash_input(e.pressed)             # 발판 위면 발사. 짧게 떼면 돌진, 꾹 눌러 모으면 차지 돌진
+		elif e.button_index == MOUSE_BUTTON_RIGHT:
+			_parry_input(e.pressed)
 	elif e is InputEventKey and not e.echo:
 		if e.keycode == KEY_SPACE and state == State.PLAY:
 			_parry_input(e.pressed)
@@ -194,24 +192,25 @@ func _unhandled_input(e: InputEvent) -> void:
 			reset_run()
 
 
-## 패리/차지 버튼: 누르면 패리 판정 후 차지, 떼면 차지 발사. 성공 후 방향 지정 중에는 누르거나 떼면 돌진.
-func _parry_input(pressed: bool) -> void:
+## 돌진 버튼: 패리 후 방향 지정 중에 누르면 즉시 패리 돌진
+func _dash_input(pressed: bool) -> void:
 	if pressed:
 		if player.aim_phase:
 			player.launch_parry_dash()
 		else:
-			player.parry_press()
+			player.press_dash()
+	else:
+		player.release_dash()
+
+
+## 패리는 누르고 있는 동안 판정 유지. 성공 후 방향 지정 중에는 버튼을 떼면 돌진.
+func _parry_input(pressed: bool) -> void:
+	if pressed:
+		player.parry_press()
 	else:
 		player.parry_release()
 		if player.aim_phase:
 			player.launch_parry_dash()
-
-
-func _evade_input() -> void:
-	if player.aim_phase:
-		player.launch_parry_dash()
-	else:
-		player.evade_press()
 
 
 func _physics_process(delta: float) -> void:
@@ -295,19 +294,27 @@ func _check_attacks() -> void:
 	var p: Vector2 = player.position
 	var graze: float = Player.RADIUS + Player.PERFECT_EVADE_GRAZE
 	if player.can_evade_reward() and boss.beam_hit(p, graze) != Vector2.ZERO:
-		player.try_evade_reward()                       # 회피 중 레이저가 스침
-	var beam_push: Vector2 = boss.beam_hit(p, Player.RADIUS)   # 패리 불가: 회피 돌진(무적)으로만 피한다
+		player.try_evade_reward()                       # 돌진 직후 레이저가 스침 = 퍼펙트 회피
+	var beam_push: Vector2 = boss.beam_hit(p, Player.RADIUS)   # 패리 불가: 돌진 무적으로만 피한다
 	if beam_push != Vector2.ZERO and not player.is_immune():
 		hurt_player(beam_push)
 		return
 	var reach: float = player.parry_reach()
 	for hb in boss.hitboxes(p):
 		if player.can_evade_reward() and boss.overlaps(hb, p, graze):
-			player.try_evade_reward()                   # 회피 중 공격이 스침 (직후면 퍼펙트)
+			player.try_evade_reward()                   # 돌진 직후 공격이 스침 = 퍼펙트 회피
 		if not boss.overlaps(hb, p, reach):
 			continue
 		if player.parry_active:
 			var perfect: bool = player.parry_t <= Player.PERFECT_WINDOW
+			if hb["id"] == "arm":                       # 팔은 그냥 패리하면 피해 없이 튕겨나기만 (받아치기는 차지 돌진)
+				var hp_pos: Vector2 = hb["pos"]
+				var away: Vector2 = p - hp_pos
+				if away.length() < 0.1:
+					away = -Vector2(hb["push"])
+				player.on_parry_push(away)
+				_parry_push_feedback(p.lerp(hp_pos, 0.3))
+				return
 			player.on_parry_success(perfect)
 			boss.on_parried(hb)
 			_parry_feedback(p, perfect, hb)
@@ -316,6 +323,39 @@ func _check_attacks() -> void:
 			hurt_player(hb["push"])
 			boss.on_hit_player(hb)
 			return
+
+
+## 받아치기: 차지 돌진이 휩쓰는 팔에 부딪힘 (player.gd 가 이동 중에 호출). 그 팔 관절에 즉시 피해 + 팔이 밀려나 멈춘다
+func try_clash(p: Vector2) -> bool:
+	for hb in boss.hitboxes(p):
+		if hb["id"] == "arm" and boss.overlaps(hb, p, Player.RADIUS):
+			_clash(hb, p)
+			return true
+	return false
+
+
+func _clash(hb: Dictionary, p: Vector2) -> void:
+	var a: int = boss.atk["arm"]
+	var contact: Vector2 = hb["pos"]
+	var dir: Vector2 = player.vel.normalized()
+	var n: Vector2 = p - contact
+	n = n.normalized() if n.length() > 0.1 else -dir
+	var dmg: int = player.clash_damage()
+	boss.on_parried(hb)                          # 휩쓸던 반대쪽으로 밀려나 잠시 멈춘다 (관절 노출)
+	player.bounce_off(dir, n)
+	var at := p.lerp(contact, 0.4)
+	boss.damage_part(2 + a, dmg)
+	_buzz(80)
+	hitstop = maxf(hitstop, 0.2)
+	shake = maxf(shake, 24.0)
+	hud.flash(0.22, Color(1.0, 0.85, 0.55))
+	sfx.play("perfect", 2.0)
+	sfx.play("armor", 4.0)
+	fx.burst(at, 50, Color(1.0, 0.8, 0.45), 1400.0, 0.6, 4.5)
+	fx.burst(at, 24, Color(1.0, 0.55, 0.25), 900.0, 0.5, 3.5)
+	fx.rays_burst(at, 16, Color(1.0, 0.9, 0.6), 500.0, 0.45, 7.0)
+	fx.ring(at, Color(1.0, 0.9, 0.6), 300.0, 0.45, 10.0)
+	fx.ring(at, Color(1.0, 0.55, 0.25), 180.0, 0.35, 7.0)
 
 
 ## 피격 = 목숨 −1 + 스턴. 잠시 조작을 잃고 추락 → 용암 위험
@@ -335,12 +375,12 @@ func hurt_player(push: Vector2, damage := true) -> void:
 			_die()
 
 
-## 표적(부위·갑옷·심장)에 공격 돌진이 아닐 때 닿음 → 튕겨남·스턴만 (피해 없음)
+## 표적(부위·코어)에 돌진이 아닐 때 닿음 → 목숨 −1 + 스턴
 func touch_hurt(hit: Dictionary, pos: Vector2) -> void:
 	var push: Vector2 = pos - boss.hit_center(hit)
 	if push.length() < 0.1:
 		push = Vector2.UP
-	hurt_player(push, false)
+	hurt_player(push)
 
 
 func _parry_feedback(p: Vector2, perfect: bool, hb: Dictionary) -> void:
@@ -369,6 +409,16 @@ func _parry_feedback(p: Vector2, perfect: bool, hb: Dictionary) -> void:
 		fx.ring(contact, Color(0.85, 0.92, 1.0), 200.0, 0.4, 8.0)
 		fx.ring(contact, Color(0.6, 0.75, 1.0), 120.0, 0.3, 5.0)
 		sfx.play("parry", 2.0)
+
+
+## 팔을 그냥 패리: 피해는 막았지만 보상은 없다 → 짧고 가벼운 연출
+func _parry_push_feedback(at: Vector2) -> void:
+	_buzz(30)
+	hitstop = maxf(hitstop, 0.06)
+	shake = maxf(shake, 8.0)
+	sfx.play("parry", -4.0)
+	fx.burst(at, 14, Color(0.85, 0.92, 1.0), 600.0, 0.3, 2.5)
+	fx.ring(at, Color(0.85, 0.92, 1.0), 110.0, 0.25, 4.0)
 
 
 func _drain_boss_events() -> void:
@@ -407,6 +457,20 @@ func _drain_boss_events() -> void:
 				fx.rays_burst(pos, 12, Color(1.0, 0.8, 0.5), 380.0, 0.4, 6.0)
 				fx.ring(pos, Color(1.0, 0.8, 0.55), 240.0, 0.4, 8.0)
 				hud.flash(0.12, Color(1.0, 0.8, 0.6))
+			"part_stage":                       # 부위 손상 단계 상승: 불꽃·파편이 튄다
+				shake = maxf(shake, 10.0)
+				sfx.play("break", -4.0)
+				fx.burst(pos, 22, Color(1.0, 0.7, 0.35), 800.0, 0.5, 3.0)
+				fx.burst(pos, 10, Color(0.55, 0.58, 0.64), 500.0, 0.8, 5.0, 1200.0)
+			"core_stage":                       # 코어 껍질이 한 단계 더 부서진다
+				hitstop = maxf(hitstop, 0.12)
+				shake = maxf(shake, 18.0)
+				sfx.play("break", 2.0)
+				sfx.play("stomp", -6.0)
+				fx.burst(pos, 36, Color(0.6, 0.64, 0.72), 900.0, 0.9, 5.0, 1300.0)
+				fx.burst(pos, 26, Color(1.0, 0.6, 0.3), 1000.0, 0.5, 3.5)
+				fx.ring(pos, Color(1.0, 0.65, 0.35), 320.0, 0.45, 8.0)
+				hud.flash(0.1, Color(1.0, 0.75, 0.5))
 			"debris_land":
 				shake = maxf(shake, 10.0)
 				sfx.play("land", 2.0)
@@ -427,8 +491,8 @@ func _drain_boss_events() -> void:
 
 
 # ── player.gd 에서 호출 ───────────────────────────────
-## kind: "evade"(회피, 청백·가볍게) / "charge"(공격, 주황·묵직하게)
-func on_dash(pos: Vector2, dir: Vector2, kind := "evade") -> void:
+## kind: "dash"(일반 돌진, 청백·가볍게) / "charge"(차지 돌진, 주황·묵직하게)
+func on_dash(pos: Vector2, dir: Vector2, kind := "dash") -> void:
 	if kind == "charge":
 		sfx.play("dash", 2.0)
 		shake = maxf(shake, 8.0)
@@ -450,12 +514,6 @@ func on_charged(pos: Vector2) -> void:
 func on_stun_recover(pos: Vector2) -> void:
 	sfx.play("land", -2.0, 0.0)
 	fx.ring(pos, Color(0.85, 0.95, 1.0), 70.0, 0.25, 4.0)
-
-
-## 게이지가 바닥난 뒤 1칸 재생
-func on_gauge_regen(pos: Vector2) -> void:
-	sfx.play("bolt", -8.0, 0.0)
-	fx.ring(pos, Color(1.0, 0.75, 0.45), 80.0, 0.3, 4.0)
 
 
 ## 발판에서 첫 돌진 = 발사. 발판은 금이 가며 가라앉는다
@@ -513,15 +571,6 @@ func on_perfect_evade(pos: Vector2) -> void:
 	fx.burst(pos, 14, Color(0.5, 1.0, 0.9), 500.0, 0.5, 2.5, 0.0, Vector2.ZERO, PI)
 
 
-## 일반 회피 성공(회피 무적으로 공격을 통과): 짧은 슬로우와 가벼운 이펙트, 게이지 1칸 환급
-func on_evade_dodge(pos: Vector2) -> void:
-	slowmo = maxf(slowmo, 0.2)
-	_buzz(25)
-	sfx.play("dash", -8.0, 0.0)
-	fx.ring(pos, Color(0.5, 0.9, 1.0), 110.0, 0.3, 4.0, true)
-	fx.burst(pos, 8, Color(0.6, 0.9, 1.0), 400.0, 0.3, 2.0)
-
-
 ## 패리 돌진 종료(적중 또는 빗나감): 패리로 밀려난 팔은 바로 제자리로
 func on_power_dash_end() -> void:
 	boss.release_stagger()
@@ -535,63 +584,49 @@ func on_parry_launch(pos: Vector2, dir: Vector2) -> void:
 	fx.ring(pos, Color(0.8, 0.92, 1.0), 160.0, 0.3, 6.0)
 
 
-func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, power := false, buffed := false) -> void:
+## 돌진 적중. kind: "dash"(피해 1, 가볍게) / "charge"(3, 주황) / "power"(패리 돌진 12·16, 크게)
+func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, kind := "dash", buffed := false) -> void:
 	var contact := pos + dir * Player.RADIUS
-	if not power:                              # 차지 공격 타격: 패리 돌진보다 약한 주황 임팩트
-		shake = maxf(shake, 13.0)
-		hud.flash(0.08, Color(1.0, 0.8, 0.55))
-		sfx.play("armor", 3.0)
-		fx.rays_burst(contact, 8, Color(1.0, 0.7, 0.35), 320.0, 0.3, 5.0)
-		fx.ring(contact, Color(1.0, 0.65, 0.3), 150.0, 0.3, 7.0)
-		fx.burst(contact, 18, Color(1.0, 0.7, 0.35), 900.0, 0.4, 3.0, 0.0, -dir, 1.1)
-	if buffed:                                 # 퍼펙트 회피 버프가 실린 일격
+	if buffed:                                 # 퍼펙트 회피 버프가 실린 차지 일격
 		shake = maxf(shake, 20.0)
 		sfx.play("perfect", -2.0, 0.0)
 		fx.ring(contact, Color(0.75, 0.96, 1.0), 240.0, 0.35, 8.0)
 		fx.rays_burst(contact, 10, Color(0.8, 0.97, 1.0), 420.0, 0.35, 6.0)
 		fx.burst(contact, 22, Color(0.8, 0.97, 1.0), 1100.0, 0.5, 3.5, 0.0, -dir, 1.0)
-	var idx: int = hit["idx"]
-	if hit["kind"] == "part":                  # 페이즈 1: 포대/팔꿈치 부위 타격
-		if not boss.damage_part(idx, dmg):
-			hitstop = 0.09 if power else 0.1
-			shake = 14.0 if power else 9.0
-			sfx.play("armor", 2.0 if power else 0.0)
-			fx.burst(contact, 18 if power else 12, Color(1.0, 0.85, 0.6), 700.0, 0.35, 3.0, 0.0, -dir, 1.0)
-			fx.ring(contact, Color(1.0, 0.7, 0.4), 90.0, 0.22, 4.0)
-		hud.flash(0.06, Color(1.0, 0.9, 0.7))
-		return
-	var broken: bool = boss.damage_plate(idx, dmg)
-	if power:                                  # 패리 돌진: 주변 갑옷도 함께 금이 간다
-		var c: int = idx % boss.GRID_N
-		var r: int = idx / boss.GRID_N
-		for off in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-			var nc: int = c + off.x
-			var nr: int = r + off.y
-			if nc >= 0 and nc < boss.GRID_N and nr >= 0 and nr < boss.GRID_N:
-				boss.damage_plate(nr * boss.GRID_N + nc, 1)
-		hitstop = 0.18
-		shake = 26.0
-		sfx.play("break", 4.0)
-		sfx.play("perfect", 0.0)
-		fx.burst(contact, 44, Color(1.0, 0.8, 0.5), 1400.0, 0.9, 5.0, 1200.0, -dir, 1.4)
-		fx.rays_burst(contact, 14, Color(1.0, 0.85, 0.6), 420.0, 0.4, 6.0)
-		fx.ring(contact, Color(1, 0.9, 0.7), 260.0, 0.4, 9.0)
-	elif broken:
-		hitstop = 0.11
-		shake = 16.0
-		sfx.play("break", 1.0)
-		fx.burst(contact, 26, Color(0.84, 0.8, 0.7), 800.0, 0.8, 5.0, 1200.0, -dir, 1.2)
-		fx.ring(contact, Color(1, 0.9, 0.75), 130.0, 0.3, 6.0)
+	if hit["kind"] == "core":
+		if boss.damage_core(dmg):
+			_core_destroyed(contact)
+			return
 	else:
-		hitstop = 0.07 if power else 0.1
-		shake = 10.0
-		sfx.play("armor")
-		fx.burst(contact, 14, Color(1.0, 0.9, 0.7), 650.0, 0.3, 3.0, 0.0, -dir, 1.0)
-		fx.ring(contact, Color(1.0, 0.9, 0.7), 80.0, 0.2, 4.0)
-	hud.flash(0.08, Color(1.0, 0.9, 0.7))
+		boss.damage_part(int(hit["idx"]), dmg)
+	match kind:
+		"power":
+			hitstop = maxf(hitstop, 0.18)
+			shake = maxf(shake, 26.0)
+			sfx.play("break", 4.0)
+			sfx.play("perfect", 0.0)
+			hud.flash(0.1, Color(1.0, 0.9, 0.7))
+			fx.burst(contact, 44, Color(1.0, 0.8, 0.5), 1400.0, 0.9, 5.0, 1200.0, -dir, 1.4)
+			fx.rays_burst(contact, 14, Color(1.0, 0.85, 0.6), 420.0, 0.4, 6.0)
+			fx.ring(contact, Color(1, 0.9, 0.7), 260.0, 0.4, 9.0)
+		"charge":
+			hitstop = maxf(hitstop, 0.1)
+			shake = maxf(shake, 13.0)
+			hud.flash(0.08, Color(1.0, 0.8, 0.55))
+			sfx.play("armor", 3.0)
+			fx.rays_burst(contact, 8, Color(1.0, 0.7, 0.35), 320.0, 0.3, 5.0)
+			fx.ring(contact, Color(1.0, 0.65, 0.3), 150.0, 0.3, 7.0)
+			fx.burst(contact, 18, Color(1.0, 0.7, 0.35), 900.0, 0.4, 3.0, 0.0, -dir, 1.1)
+		_:
+			hitstop = maxf(hitstop, 0.04)
+			shake = maxf(shake, 5.0)
+			sfx.play("armor", -4.0)
+			fx.burst(contact, 8, Color(0.85, 0.92, 1.0), 500.0, 0.25, 2.5, 0.0, -dir, 1.0)
+			fx.ring(contact, Color(0.85, 0.92, 1.0), 60.0, 0.18, 3.0)
 
 
-func on_heart_pierced(pos: Vector2) -> void:
+## 코어 파괴 = 승리
+func _core_destroyed(pos: Vector2) -> void:
 	state = State.WON
 	player.frozen = true
 	player.vel = Vector2.ZERO
@@ -605,7 +640,7 @@ func on_heart_pierced(pos: Vector2) -> void:
 	fx.ring(pos, Color(1, 0.9, 0.7), 500.0, 0.8, 10.0)
 	sfx.play("perfect", 4.0, 0.0)
 	sfx.play("win", 0.0, 0.0)
-	hud.banner("심장 관통", "%.1f초 · 남은 목숨 %d · R: 다시" % [run_time, lives])
+	hud.banner("코어 파괴", "%.1f초 · 남은 목숨 %d · R: 다시" % [run_time, lives])
 
 
 func _die() -> void:
