@@ -10,7 +10,7 @@
 - 안드로이드: 릴리즈의 `ParryPierce-android.apk`를 폰에 내려받아 설치 ("출처를 알 수 없는 앱 설치" 허용 필요, 디버그 서명, arm64, 가로 화면)
 - 소스: Godot **4.7** 에서 이 폴더(`project.godot`)를 열고 F5
 
-그래픽/사운드 에셋 없이 전부 코드로 그리고 합성합니다.
+그래픽/사운드 에셋 없이 전부 코드로 그리고 합성합니다. 화면은 **640×360 도트 해상도**로 그린 뒤 정수배로 키우고, 34색 고정 팔레트 + 4×4 디더링 후처리(`shaders/pixel_palette.gdshader`)로 도트풍을 냅니다. 글꼴은 [Galmuri](https://github.com/quiple/galmuri) (SIL OFL 1.1, `fonts/Galmuri-OFL.txt`).
 
 ## 조작
 | 입력 | 동작 |

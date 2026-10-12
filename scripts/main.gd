@@ -11,9 +11,10 @@ const Sfx := preload("res://scripts/sfx.gd")
 const PauseMenu := preload("res://scripts/pause_menu.gd")
 const TouchControls := preload("res://scripts/touch_controls.gd")
 const Quality := preload("res://scripts/quality.gd")
+const PixelShader := preload("res://shaders/pixel_palette.gdshader")
 
 const SPAWN := Vector2(650, -52)   # 시작 발판 위 (Player.PLAT_CENTER - 반지름)
-const CAM_ZOOM := 0.72             # 기본 줌아웃 (튕겨 올라가도 표적이 시야에 남도록)
+const CAM_ZOOM := 0.36             # 기본 줌아웃 (640×360 도트 화면 기준. 튕겨 올라가도 표적이 시야에 남도록)
 const MOBILE_AREA := 1.2             # 모바일 시야 면적 = PC 화면의 이 배수 (폰 화면 비율에 맞춰 줌을 계산)
 const AIM_ZOOM := 0.82             # 방향 지정 중엔 물러나 표적을 넓게 본다
 const CHARGE_ZOOM := 0.85            # 차징 중에만 물러난다
@@ -76,6 +77,8 @@ func _ready() -> void:
 
 	var bg_layer := CanvasLayer.new()
 	bg_layer.layer = -10
+	var vk := get_viewport_rect().size.y / 720.0      # 배경은 1280×720 기준으로 그려져 있다
+	bg_layer.scale = Vector2(vk, vk)
 	add_child(bg_layer)
 	bg = Background.new()
 	bg_layer.add_child(bg)
@@ -95,7 +98,7 @@ func _ready() -> void:
 	add_child(fg)
 
 	cam = Camera2D.new()
-	cam.zoom = Vector2(0.9, 0.9)
+	cam.zoom = Vector2(CAM_ZOOM, CAM_ZOOM)
 	cam.limit_left = -1300
 	cam.limit_right = 1300
 	cam.limit_top = -3250
@@ -103,17 +106,39 @@ func _ready() -> void:
 	add_child(cam)
 	cam.make_current()
 
+	# 도트 후처리: 월드(배경·보스·플레이어·이펙트)를 고정 팔레트 + 디더링으로. HUD는 그 위에 따로 그린다
+	var screen_fx_layer := CanvasLayer.new()   # 화면 틴트 (도트 후처리 바로 아래)
+	screen_fx_layer.layer = 4
+	add_child(screen_fx_layer)
+	var screen_fx := Control.new()
+	screen_fx.set_anchors_preset(Control.PRESET_FULL_RECT)
+	screen_fx.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	screen_fx_layer.add_child(screen_fx)
+
+	var pixel_layer := CanvasLayer.new()
+	pixel_layer.layer = 5
+	add_child(pixel_layer)
+	var pixel_rect := ColorRect.new()
+	pixel_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	pixel_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var pm := ShaderMaterial.new()
+	pm.shader = PixelShader
+	pixel_rect.material = pm
+	pixel_layer.add_child(pixel_rect)
+
 	var hud_layer := CanvasLayer.new()
 	hud_layer.layer = 10
 	add_child(hud_layer)
 	hud = Hud.new()
 	hud.main = self
+	hud.screen_fx = screen_fx
 	hud_layer.add_child(hud)
+	screen_fx.draw.connect(func() -> void: hud.draw_screen_fx(screen_fx))
 
 	sfx = Sfx.new()
 	add_child(sfx)
 	menu = PauseMenu.new()
-	menu.ui_scale = 1.7 if touch_mode else 1.0
+	menu.ui_scale = 2.0 if touch_mode else 1.0
 	add_child(menu)
 	menu.restart_requested.connect(reset_run)
 	if touch_mode:
@@ -272,7 +297,7 @@ func _mobile_view_k() -> float:
 	if touch_ui == null:
 		return 1.0
 	var vp := get_viewport_rect().size
-	return sqrt(vp.x * vp.y / (1280.0 * 720.0 * MOBILE_AREA))
+	return sqrt(vp.x * vp.y / (640.0 * 360.0 * MOBILE_AREA))
 
 
 func _update_camera(delta: float) -> void:

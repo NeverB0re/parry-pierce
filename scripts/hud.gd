@@ -1,10 +1,13 @@
 extends Control
-## HUD: 체력 가면, 추진 게이지, 배너, 비네트, 화면 플래시.
+## HUD: 목숨(로켓), 표적 화살표, 상태 글자, 배너. 도트 글꼴(Galmuri)로 640×360 화면에 맞춰 그린다.
+## 화면 전체 틴트(용암 열기·조준 슬로우·퍼펙트 회피·플래시·비네트)는 도트 후처리 아래 층(screen_fx)에 그려 함께 디더링된다.
 
 const Player := preload("res://scripts/player.gd")
+const FONT_11 := preload("res://fonts/Galmuri11.ttf")
+const FONT_9 := preload("res://fonts/Galmuri9.ttf")
 
 var main: Node
-var font: SystemFont
+var screen_fx: Control                # main.gd 가 만든 아래 층 캔버스
 var banner_title := ""
 var banner_sub := ""
 var flash_a := 0.0
@@ -16,8 +19,10 @@ var warp_max := 0.45
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	font = SystemFont.new()
-	font.font_names = PackedStringArray(["Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans CJK KR", "sans-serif"])
+	for f in [FONT_11, FONT_9]:              # 도트 글꼴: 안티앨리어싱·힌팅·서브픽셀 없이 픽셀 그대로
+		f.antialiasing = TextServer.FONT_ANTIALIASING_NONE
+		f.hinting = TextServer.HINTING_NONE
+		f.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
 
 
 func banner(title: String, sub := "") -> void:
@@ -44,6 +49,8 @@ func step(dt: float) -> void:
 	flash_a = maxf(0.0, flash_a - dt * 3.0)
 	warp_t = maxf(0.0, warp_t - dt)
 	queue_redraw()
+	if screen_fx != null:
+		screen_fx.queue_redraw()
 
 
 var _tl_cache := {}                  # 문자열 조형(셰이핑)은 비싸므로 TextLine 을 재사용한다
@@ -56,40 +63,41 @@ func _line(s: String, size: int) -> TextLine:
 		if _tl_cache.size() > 48:
 			_tl_cache.clear()
 		tl = TextLine.new()
-		tl.add_string(s, font, size)
+		tl.add_string(s, FONT_9 if size <= 10 else FONT_11, size)
 		_tl_cache[key] = tl
 	return tl
 
 
+## 글자: 위치·크기는 논리 좌표(1280×720 기준)로 받고, 실제 화면에는 도트 글꼴의 정수 크기(10/12/24)로 찍는다
 func _text(pos: Vector2, s: String, size: int, c: Color, align := HORIZONTAL_ALIGNMENT_LEFT, width := -1.0) -> void:
-	var tl := _line(s, size)
-	var x := pos.x
+	var want := size * ui_k
+	var px := 10 if want <= 8.5 else (12 if want <= 18.0 else 24)
+	var tl := _line(s, px)
+	var x := pos.x * ui_k
 	if align == HORIZONTAL_ALIGNMENT_CENTER and width > 0.0:
-		x += (width - tl.get_size().x) * 0.5
-	var top := Vector2(x, pos.y - tl.get_line_ascent())
-	tl.draw(get_canvas_item(), top + Vector2(2, 2), Color(0, 0, 0, c.a * 0.7))
+		x += (width * ui_k - tl.get_size().x) * 0.5
+	var top := Vector2(x, pos.y * ui_k - tl.get_line_ascent()).round()
+	draw_set_transform(Vector2.ZERO)
+	tl.draw(get_canvas_item(), top + Vector2(1, 1), Color(0, 0, 0, c.a * 0.8))
 	tl.draw(get_canvas_item(), top, c)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2(ui_k, ui_k))
 
 
 const UI_SCALE_TOUCH := 1.7           # 작은 폰 화면에서 좌상단 UI가 PC와 비슷한 크기로 보이도록
-var ui_k := 1.0                       # 현재 UI 배율 (그리기 좌표는 논리 좌표)
+var ui_k := 1.0                       # 논리 좌표(1280×720) → 실제 화면 배율 (640×360 이면 0.5)
+
+
+func _ui_k() -> float:
+	return get_viewport_rect().size.y / 720.0 * (UI_SCALE_TOUCH if main.touch_ui != null else 1.0)
 
 
 func _draw() -> void:
 	var real := get_viewport_rect().size
-	_draw_vignette(real)
-	ui_k = UI_SCALE_TOUCH if main.touch_ui != null else 1.0
+	ui_k = _ui_k()
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2(ui_k, ui_k))
 	var s := real / ui_k
 	var pl = main.player
 	var boss = main.boss
-
-	# 용암 경고: 낮을수록 화면 아래가 붉게 물든다
-	var heat := clampf(1.0 + pl.position.y / 500.0, 0.0, 1.0)
-	if heat > 0.0:
-		var hc := Color(1.0, 0.25, 0.05, 0.45 * heat)
-		var hz := Color(1.0, 0.25, 0.05, 0.0)
-		draw_polygon(PackedVector2Array([Vector2(0, s.y * 0.45), Vector2(s.x, s.y * 0.45), s, Vector2(0, s.y)]), PackedColorArray([hz, hz, hc, hc]))
 
 	# 목숨: 플레이어와 같은 로켓. 잃은 목숨은 박살난 회색 잔해
 	for i in main.LIVES:
@@ -113,7 +121,6 @@ func _draw() -> void:
 	if pl.aim_phase:
 		var total: float = Player.AIM_TIME_PERFECT if pl.aim_perfect else Player.AIM_TIME
 		var frac := clampf(pl.aim_left / total, 0.0, 1.0)
-		draw_rect(Rect2(Vector2.ZERO, s), Color(0.3, 0.5, 0.95, 0.14))
 		var bw := 320.0
 		var bx := (s.x - bw) * 0.5
 		draw_rect(Rect2(bx, s.y * 0.7, bw, 8), Color(1, 1, 1, 0.2))
@@ -121,22 +128,35 @@ func _draw() -> void:
 
 	# 조작
 	if main.touch_ui == null:
-		_text(Vector2(28, s.y - 24), "마우스: 방향(위=활공)   좌클릭: 돌진 / 꾹: 차지 돌진 (휩쓰는 팔에 부딪히면 받아치기)   우클릭·Space 꾹: 패리 → 슬로우 조준 → 패리 돌진   R: 재시작   Esc: 메뉴", 15, Color(0.75, 0.77, 0.82, 0.55))
+		_text(Vector2(28, s.y - 20), "좌클릭 돌진 · 꾹 차지     우클릭 패리     R 재시작     Esc 메뉴", 15, Color(0.75, 0.77, 0.82, 0.6))
 
+
+## 도트 후처리 아래 층: 화면 전체 틴트와 비네트 (함께 디더링된다)
+func draw_screen_fx(c: Control) -> void:
+	var s := c.get_viewport_rect().size
+	var k := s.y / 720.0
+	var pl = main.player
+	_draw_vignette(c, s, k)
+	var heat := clampf(1.0 + pl.position.y / 500.0, 0.0, 1.0)   # 용암 경고: 낮을수록 화면 아래가 붉게 물든다
+	if heat > 0.0:
+		var hc := Color(1.0, 0.25, 0.05, 0.45 * heat)
+		var hz := Color(1.0, 0.25, 0.05, 0.0)
+		c.draw_polygon(PackedVector2Array([Vector2(0, s.y * 0.45), Vector2(s.x, s.y * 0.45), s, Vector2(0, s.y)]), PackedColorArray([hz, hz, hc, hc]))
+	if pl.aim_phase:                          # 방향 지정 슬로우: 푸른 틴트
+		c.draw_rect(Rect2(Vector2.ZERO, s), Color(0.3, 0.5, 0.95, 0.14))
 	if warp_t > 0.0:                          # 퍼펙트 회피: 청록 틴트 + 가장자리에서 모여드는 선
 		var wk := clampf(warp_t / warp_max, 0.0, 1.0)
-		draw_rect(Rect2(Vector2.ZERO, s), Color(0.1, 0.85, 0.75, 0.14 * wk))
-		var c := s * 0.5
+		c.draw_rect(Rect2(Vector2.ZERO, s), Color(0.1, 0.85, 0.75, 0.14 * wk))
+		var cen := s * 0.5
 		for i in 28:
 			var a := TAU * i / 28.0 + 0.11
 			var d := Vector2.from_angle(a)
 			var edge := minf((s.x * 0.5) / maxf(absf(d.x), 0.001), (s.y * 0.5) / maxf(absf(d.y), 0.001))
-			var p1 := c + d * edge * (0.98 - 0.35 * (1.0 - wk))
-			var p0 := c + d * edge * (1.0 - 0.18 * wk - 0.0)
-			draw_line(p0, p1, Color(0.5, 1.0, 0.9, 0.55 * wk), 2.0)
-
+			var p1 := cen + d * edge * (0.98 - 0.35 * (1.0 - wk))
+			var p0 := cen + d * edge * (1.0 - 0.18 * wk)
+			c.draw_line(p0, p1, Color(0.5, 1.0, 0.9, 0.55 * wk), maxf(1.0, 2.0 * k))
 	if flash_a > 0.0:
-		draw_rect(Rect2(Vector2.ZERO, s), Color(flash_c, flash_a))
+		c.draw_rect(Rect2(Vector2.ZERO, s), Color(flash_c, flash_a))
 
 
 ## 다음 표적(부위 또는 심장)이 화면 밖이면 가장자리에 방향 표시
@@ -207,12 +227,12 @@ func _draw_life(o: Vector2, alive: bool) -> void:
 		draw_circle(_rk(d, o), 1.6, Color(0.4, 0.41, 0.45, 0.8))
 
 
-func _draw_vignette(s: Vector2) -> void:
-	var inset := 260.0
+func _draw_vignette(c: Control, s: Vector2, k: float) -> void:
+	var inset := 260.0 * k
 	var dark := Color(0, 0, 0, 0.55)
 	var clear := Color(0, 0, 0, 0)
 	var o := [Vector2.ZERO, Vector2(s.x, 0), s, Vector2(0, s.y)]
 	var i := [Vector2(inset, inset * 0.6), Vector2(s.x - inset, inset * 0.6), Vector2(s.x - inset, s.y - inset * 0.6), Vector2(inset, s.y - inset * 0.6)]
-	for k in 4:
-		var n := (k + 1) % 4
-		draw_polygon(PackedVector2Array([o[k], o[n], i[n], i[k]]), PackedColorArray([dark, dark, clear, clear]))
+	for j in 4:
+		var n := (j + 1) % 4
+		c.draw_polygon(PackedVector2Array([o[j], o[n], i[n], i[j]]), PackedColorArray([dark, dark, clear, clear]))
