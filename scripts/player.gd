@@ -44,10 +44,11 @@ const PARRY_DASH_TIME := 0.22
 const POWER_DAMAGE := 3
 const POWER_RADIUS := 8.0        # 패리 돌진은 타격 범위도 넓다
 const POWER_GRACE := 0.7
-const BOUNCE_SPEED := 1600.0     # 직격 후 튕겨나는 속도 (타격감: 빠르게 튕겨나간다). 입사각 = 반사각
+const BOUNCE_SPEED := 1650.0     # 직격 후 반사 속도 (타격감: 빠르게 튕겨나간다). 입사각 = 반사각
+const BOUNCE_BOOST := 600.0      # 타격 직후 마우스 방향으로 따로 얹는 추진력. 표적을 계속 가리키면 반대로 작용해 덜 튕기고(≈1050), 다른 곳을 가리키면 그쪽으로 휜다
+const BOUNCE_BOOST_TIME := 0.12  # 추진력이 가해지는 시간 (이동하는 동안 마우스를 바꿀 수 있다)
 const BOUNCE_UP_MIN := 0.35      # 표적 아래쪽 200도(수평보다 10도 위까지)에서 칠 때의 최소 상향 성분(정규화)
 const BOUNCE_UP_ARC := 0.1736    # sin(10도): 맞은 면의 법선이 이보다 아래쪽이면 상향 보정
-const BOUNCE_DRAG := 0.35        # 튕겨나가는 동안 가로 공기저항 배율 (멀리 나간다)
 const BOUNCE_THRUST := 2.0       # 튕겨나는 동안 좌우 추진 배율
 const STRIKE_SHIELD := 0.9       # 직격 후 튕겨나는 동안 무적 시간
 const STUN_TIME := 0.9           # 피격(공격/표적 접촉) → 조작 불가
@@ -84,6 +85,7 @@ var charge_cd := 0.0             # 차지 쿨다운
 var regen_t := 0.0               # 게이지 0일 때 재생 진행
 var evade_window := 0.0          # 퍼펙트 회피 판정이 남은 시간
 var evade_rewarded := false      # 이번 회피에서 이미 보상 받음 (퍼펙트 또는 일반)
+var boost_t := 0.0               # 타격 직후 추진력이 남은 시간
 var dash_held := false           # 좌클릭을 누르고 있는 중 (스턴 중 선입력 판단용)
 var buffed := false              # 퍼펙트 회피 버프: 다음 차지 공격 피해 3배, 차지 시간 절반
 var queued_press := false        # 회피 도중 누른 좌클릭: 회피 무적이 끝나면 차지 시작
@@ -128,6 +130,7 @@ func reset(pos: Vector2, platform := false) -> void:
 	evade_window = 0.0
 	regen_t = 0.0
 	evade_rewarded = false
+	boost_t = 0.0
 	dash_held = false
 	buffed = false
 	queued_press = false
@@ -233,6 +236,7 @@ func _dash(kind: String) -> void:
 	dash_cd = dash_total + DASH_COOLDOWN
 	evade_window = PERFECT_EVADE_WINDOW if kind == "evade" else 0.0
 	evade_rewarded = false
+	boost_t = 0.0
 	vel = aim * spd
 	bouncing = false
 	main.on_dash(position, aim, kind)
@@ -269,6 +273,7 @@ func parry_reach() -> float:
 func on_parry_success(perfect: bool) -> void:
 	parry_active = false
 	parry_cd = 0.0
+	boost_t = 0.0
 	dash_t = 0.0
 	_end_dash()
 	on_platform = false
@@ -318,6 +323,7 @@ func try_evade_reward() -> void:
 ## 피격: 잠시 조작 불가(스턴), 살짝 솟구친 뒤 추락
 func on_hurt(push: Vector2) -> void:
 	cancel_charge()
+	boost_t = 0.0
 	buffed = false
 	queued_press = dash_held                       # 누르고 있었다면 스턴이 끝나자마자 차지 시작
 	evade_window = 0.0
@@ -349,6 +355,10 @@ func step(dt: float) -> void:
 	dash_cd = maxf(0.0, dash_cd - dt)
 	charge_cd = maxf(0.0, charge_cd - dt)
 	evade_window = maxf(0.0, evade_window - dt)
+	if boost_t > 0.0:                          # 타격 후 추진력: 지금 가리키는 방향으로 (표적을 다시 가리키면 반대로 작용)
+		var bdt := minf(dt, boost_t)
+		boost_t -= bdt
+		vel += aim * (BOUNCE_BOOST / BOUNCE_BOOST_TIME) * bdt
 	if gauge > 0:
 		regen_t = 0.0
 	elif not charging and dash_t <= 0.0:       # 바닥나면 1칸까지만 천천히 되살아난다
@@ -436,7 +446,7 @@ func step(dt: float) -> void:
 			vel.x -= vel.x * 4.0 * dt
 		else:
 			vel.y += GRAVITY * dt
-			vel.x -= vel.x * AIR_DRAG * (BOUNCE_DRAG if bouncing else 1.0) * dt
+			vel.x -= vel.x * AIR_DRAG * dt
 		if vel.y > fall_cap:
 			vel.y = move_toward(vel.y, fall_cap, 2500.0 * dt)
 
@@ -546,6 +556,7 @@ func _on_strike(hit: Dictionary) -> void:
 	out = out.normalized()
 	var k := 1.15 if power else 1.0
 	vel = out * BOUNCE_SPEED * k
+	boost_t = BOUNCE_BOOST_TIME
 
 
 # ── 그리기 ─────────────────────────────────────────────
