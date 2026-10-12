@@ -1,0 +1,592 @@
+extends CanvasLayer
+## 튜토리얼 팝업: 새 메커니즘이 처음 나올 때 게임을 멈추고 반복 재생 애니메이션 + 설명을 보여 준다.
+## 애니메이션은 코드로 그린 짧은 루프(움짤)다. 한 번 본 장은 다시 자동으로 뜨지 않고(user://tutorial.cfg),
+## ESC 메뉴의 '조작법'에서 언제든 다시 볼 수 있다.
+
+const Sprites := preload("res://scripts/sprites.gd")
+
+const ORDER := ["dodge", "parry", "charge", "unparry"]
+const SAVE_PATH := "user://tutorial.cfg"
+
+var enabled := true                  # false: 자동 팝업·저장 없음 (테스트·헤드리스)
+var touch := false
+var seen := {}
+var queue: Array = []
+var current := ""
+var was_paused := false
+var was_mouse := Input.MOUSE_MODE_VISIBLE
+
+var font: SystemFont
+var dim: ColorRect
+var title_l: Label
+var stage: Control
+var desc_l: Label
+var page_l: Label
+var btn: Button
+
+
+func _ready() -> void:
+	layer = 60
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	visible = false
+	font = SystemFont.new()
+	font.font_names = PackedStringArray(["Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans CJK KR", "sans-serif"])
+	_load_seen()
+	_build_ui()
+
+
+# ── 내용 ───────────────────────────────────────────────
+func _pages() -> Dictionary:
+	var dash := "화면의 큰 버튼 탭" if touch else "좌클릭"
+	var hold := "큰 버튼 꾹" if touch else "좌클릭 꾹"
+	var par := "작은 금색 버튼 꾹" if touch else "우클릭(또는 Space) 꾹"
+	return {
+		"dodge": {
+			"title": "회피 — 돌진",
+			"lines": [
+				"%s(짧게)으로 돌진합니다. 돌진하는 동안은 무적이라 탄과 공격을 그대로 통과할 수 있습니다." % dash,
+				"돌진은 쿨다운(0.7초)만 있고 횟수 제한이 없습니다. 표적에 닿으면 피해 1을 주고 위로 솟구칩니다.",
+				"돌진을 시작한 직후(0.12초 안)에 공격이 스치면 '퍼펙트 회피'! 다음 차지 공격의 피해가 2배가 되고, 차지가 두 배 빨라지며, 돌진 쿨다운이 즉시 초기화됩니다.",
+			],
+		},
+		"parry": {
+			"title": "패리 — 막고 반격",
+			"lines": [
+				"금색 탄은 %s 으로 막을 수 있습니다. 누르는 순간 짧은 패리 판정이 열리니 탄이 닿기 직전에 누르세요." % par,
+				"성공하면 시간이 느려집니다. 마우스(스틱)로 방향을 정하고 버튼을 떼면 패리 돌진! 피해 12 (PERFECT 패리는 16).",
+				"금색 = 패리할 수 있는 공격입니다. 팔 휘두르기를 그냥 패리하면 피해만 막고 튕겨나기만 합니다.",
+			],
+		},
+		"charge": {
+			"title": "차지 공격 — 강한 일격과 받아치기",
+			"lines": [
+				"%s 으로 0.6초 모으고 떼면 차지 돌진: 피해 3으로 일반 돌진(1)보다 훨씬 강합니다. 모으는 동안 기체가 떨리고 완료되면 빛납니다." % hold,
+				"적이 팔을 들어 위치를 잡고 붉게 점멸하며 멈춰 있을 때(또는 휘두르는 중) 차지 돌진으로 부딪히면 공격을 끊고 관절에 피해 8!",
+				"팔을 들어 올리는 중에는 막을 수 없습니다. 일반 돌진은 팔을 통과합니다.",
+			],
+		},
+		"unparry": {
+			"title": "패리 불가 — 보라색 공격",
+			"lines": [
+				"검붉은 보라색 공격(눈 레이저)은 패리할 수 없습니다. 돌진의 무적으로 통과하세요. 지나갈 부채꼴과 경로가 미리 표시됩니다.",
+				"돌진을 시작한 직후(0.12초 안)에 스치게 피하면 '강한 퍼펙트 회피'! 다음 차지 공격의 피해가 4배, 무적 1.2초, 눈에 띄는 금빛 오라가 붙습니다.",
+				"그 일격은 퍼펙트 패리에 준하는 큰 임팩트로 들어갑니다.",
+			],
+		},
+	}
+
+
+# ── 저장 ───────────────────────────────────────────────
+func _load_seen() -> void:
+	var cf := ConfigFile.new()
+	if cf.load(SAVE_PATH) == OK:
+		for id in ORDER:
+			seen[id] = bool(cf.get_value("seen", id, false))
+
+
+func _save_seen() -> void:
+	if not enabled:
+		return
+	var cf := ConfigFile.new()
+	for id in ORDER:
+		cf.set_value("seen", id, bool(seen.get(id, false)))
+	cf.save(SAVE_PATH)
+
+
+# ── 표시 ───────────────────────────────────────────────
+func is_open() -> bool:
+	return visible
+
+
+## 처음 보는 장만 골라 연속으로 띄운다 (자동 트리거용). 이미 열려 있으면 뒤에 붙인다
+func request(ids: Array) -> void:
+	if not enabled:
+		return
+	var fresh: Array = []
+	for id in ids:
+		if not seen.get(id, false) and not fresh.has(id) and not queue.has(id) and current != id:
+			fresh.append(id)
+	if fresh.is_empty():
+		return
+	for id in fresh:
+		seen[id] = true
+	_save_seen()
+	queue.append_array(fresh)
+	if not visible:
+		_open_next(true)
+
+
+## 다시 보기 (ESC 메뉴): 본 적 있어도 띄우고, 저장은 건드리지 않는다
+func replay(id: String) -> void:
+	queue.clear()
+	queue.append(id)
+	_open_next(true)
+
+
+func _open_next(first: bool) -> void:
+	if queue.is_empty():
+		_close()
+		return
+	if first and not visible:
+		was_paused = get_tree().paused
+		was_mouse = Input.mouse_mode
+		get_tree().paused = true
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	current = queue.pop_front()
+	var pg: Dictionary = _pages()[current]
+	title_l.text = pg["title"]
+	var lines: PackedStringArray = PackedStringArray()
+	for l in pg["lines"]:
+		lines.append("• " + String(l))
+	desc_l.text = "\n".join(lines)
+	page_l.text = "" if queue.is_empty() else "다음 장 %d개 남음" % queue.size()
+	btn.text = "다음 (Enter)" if not queue.is_empty() else "계속하기 (Enter)"
+	stage.set("kind", current)
+	stage.set("t", 0.0)
+	visible = true
+	btn.grab_focus()
+
+
+func _close() -> void:
+	visible = false
+	current = ""
+	queue.clear()
+	get_tree().paused = was_paused
+	Input.mouse_mode = was_mouse
+
+
+func _input(e: InputEvent) -> void:
+	if not visible:
+		return
+	var accept := false
+	if e is InputEventKey and e.pressed and not e.echo:
+		if e.keycode == KEY_ENTER or e.keycode == KEY_KP_ENTER or e.keycode == KEY_SPACE or e.keycode == KEY_ESCAPE:
+			accept = true
+		get_viewport().set_input_as_handled()
+	if accept:
+		_open_next(false)
+
+
+func _build_ui() -> void:
+	dim = ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.72)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(dim)
+
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(center)
+
+	var panel := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.07, 0.08, 0.11, 0.98)
+	sb.border_color = Color(0.55, 0.62, 0.75)
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(6)
+	sb.set_content_margin_all(18)
+	panel.add_theme_stylebox_override("panel", sb)
+	center.add_child(panel)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 10)
+	panel.add_child(box)
+
+	title_l = Label.new()
+	title_l.add_theme_font_override("font", font)
+	title_l.add_theme_font_size_override("font_size", 28)
+	title_l.add_theme_color_override("font_color", Color(1.0, 0.92, 0.7))
+	box.add_child(title_l)
+
+	stage = Stage.new()
+	stage.font = font
+	stage.process_mode = Node.PROCESS_MODE_ALWAYS
+	stage.custom_minimum_size = Vector2(700, 260)
+	stage.clip_contents = true
+	box.add_child(stage)
+
+	desc_l = Label.new()
+	desc_l.add_theme_font_override("font", font)
+	desc_l.add_theme_font_size_override("font_size", 17)
+	desc_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	desc_l.custom_minimum_size = Vector2(700, 130)
+	box.add_child(desc_l)
+
+	var foot := HBoxContainer.new()
+	box.add_child(foot)
+	page_l = Label.new()
+	page_l.add_theme_font_override("font", font)
+	page_l.add_theme_font_size_override("font_size", 14)
+	page_l.add_theme_color_override("font_color", Color(0.65, 0.68, 0.75))
+	page_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	foot.add_child(page_l)
+	btn = Button.new()
+	btn.add_theme_font_override("font", font)
+	btn.add_theme_font_size_override("font_size", 20)
+	btn.custom_minimum_size = Vector2(190, 44)
+	btn.pressed.connect(func() -> void: _open_next(false))
+	foot.add_child(btn)
+
+
+# ═══ 애니메이션 무대 ═══════════════════════════════════
+class Stage extends Control:
+	const Sprites := preload("res://scripts/sprites.gd")
+	const GOLD := Color(1.0, 0.86, 0.3)
+	const MINT := Color(0.45, 1.0, 0.85)
+	const UNP := Color(0.6, 0.08, 0.36)
+	const UNP_C := Color(1.0, 0.62, 0.86)
+	var kind := ""
+	var t := 0.0
+	var font: SystemFont
+
+	func _ready() -> void:
+		texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+
+	func _process(dt: float) -> void:
+		t += dt
+		queue_redraw()
+
+	# ── 그리기 도우미 ──
+	func _txt(s: String, p: Vector2, size: int, c: Color) -> void:
+		draw_string(font, p + Vector2(1, 1), s, HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color(0, 0, 0, c.a * 0.8))
+		draw_string(font, p, s, HORIZONTAL_ALIGNMENT_LEFT, -1, size, c)
+
+	func _ship(p: Vector2, heading := -PI * 0.5, alpha := 1.0, col := "b", size := 54.0) -> void:
+		draw_set_transform(p, heading + PI * 0.5)
+		draw_texture_rect(Sprites.ship(col, 0.0), Rect2(Vector2(-size, -size) * 0.5, Vector2(size, size)), false, Color(1, 1, 1, alpha))
+		draw_set_transform(Vector2.ZERO, 0.0)
+
+	func _flame(p: Vector2, heading: float, len := 18.0) -> void:
+		var back := Vector2.from_angle(heading + PI)
+		var side := back.orthogonal()
+		var b := p + back * 14.0
+		draw_colored_polygon(PackedVector2Array([b + side * 5.0, b - side * 5.0, b + back * len]), Color(0.95, 0.15, 0.05))
+		draw_colored_polygon(PackedVector2Array([b + side * 2.5, b - side * 2.5, b + back * len * 0.6]), Color(1.0, 0.8, 0.3))
+
+	func _bolt(p: Vector2, v := Vector2.LEFT) -> void:
+		draw_line(p, p - v.normalized() * 34.0, Color(GOLD, 0.35), 8.0)
+		draw_circle(p, 12.0, Color(GOLD, 0.25))
+		draw_circle(p, 8.0, GOLD)
+		draw_circle(p, 4.0, Color(1, 1, 0.9))
+
+	func _ring(p: Vector2, r: float, c: Color, w := 2.0) -> void:
+		draw_arc(p, r, 0.0, TAU, 40, c, w)
+
+	func _spark(p: Vector2, k: float, c: Color, n := 10, rad := 40.0) -> void:
+		if k < 0.0 or k > 1.0:
+			return
+		for i in n:
+			var a := TAU * i / n + 0.3
+			var d := Vector2.from_angle(a)
+			draw_line(p + d * rad * (0.3 + 0.5 * k), p + d * rad * (0.5 + 0.9 * k), Color(c, 1.0 - k), 3.0)
+		_ring(p, rad * (0.4 + k), Color(c, 1.0 - k), 3.0)
+
+	func _target(p: Vector2, hit_k := 0.0, cracks := 0) -> void:
+		draw_circle(p, 30.0, Color(0.1, 0.11, 0.14))
+		_ring(p, 30.0, Color(0.62, 0.3, 0.14), 3.0)
+		draw_circle(p, 12.0, Color(1.0, 0.42, 0.22).lerp(Color.WHITE, hit_k))
+		for i in cracks:
+			var a := 0.8 + i * 2.1
+			draw_line(p + Vector2.from_angle(a) * 6.0, p + Vector2.from_angle(a + 0.3) * 26.0, Color(1.0, 0.7, 0.3), 2.0)
+
+	func _mouse(p: Vector2, left: bool, right: bool) -> void:
+		var r := Rect2(p - Vector2(15, 22), Vector2(30, 44))
+		draw_rect(r, Color(0.2, 0.22, 0.28))
+		draw_rect(r, Color(0.7, 0.75, 0.85), false, 2.0)
+		draw_rect(Rect2(r.position + Vector2(2, 2), Vector2(12, 16)), GOLD if left else Color(0.35, 0.38, 0.46))
+		draw_rect(Rect2(r.position + Vector2(16, 2), Vector2(12, 16)), GOLD if right else Color(0.35, 0.38, 0.46))
+
+	func _caption(s: String, c := Color(0.85, 0.9, 1.0)) -> void:
+		_txt(s, Vector2(16, 28), 17, c)
+
+	func _smooth(a: float, b: float, x: float) -> float:
+		return clampf((x - a) / (b - a), 0.0, 1.0)
+
+	# ── 장면 ──
+	func _draw() -> void:
+		var s := size
+		draw_rect(Rect2(Vector2.ZERO, s), Color(0.06, 0.07, 0.1))
+		draw_rect(Rect2(Vector2.ZERO, s), Color(0.3, 0.35, 0.45), false, 2.0)
+		draw_rect(Rect2(0, s.y - 22, s.x, 22), Color(0.45, 0.14, 0.05))      # 용암
+		draw_rect(Rect2(0, s.y - 22, s.x, 3), Color(1.0, 0.5, 0.15))
+		match kind:
+			"dodge":
+				_dodge()
+			"parry":
+				_parry()
+			"charge":
+				_charge()
+			"unparry":
+				_unparry()
+
+	func _dodge() -> void:
+		var T := 6.0
+		var tt := fmod(t, T)
+		if tt < 3.0:
+			_caption("① 돌진으로 통과 — 돌진 중엔 무적")
+			var y := 150.0
+			var bx := lerpf(680.0, 20.0, _smooth(0.2, 2.6, tt))
+			var d0 := 1.0
+			var sx := 220.0
+			var dashing := tt >= d0 and tt < d0 + 0.28
+			if tt >= d0:
+				sx = 220.0 + 260.0 * _smooth(d0, d0 + 0.28, tt)
+			if dashing:
+				for k in 3:
+					_ship(Vector2(sx - 26.0 * (k + 1), y), 0.0, 0.18, "b")
+			_ship(Vector2(sx, y), 0.0, 0.5 if dashing else 1.0)
+			if tt < d0:
+				_flame(Vector2(sx, y), 0.0)
+			_bolt(Vector2(bx, y), Vector2.LEFT)
+			if tt < d0 + 0.05 and tt > d0 - 0.4:
+				_txt("좌클릭!", Vector2(sx - 30.0, y + 52.0), 16, GOLD)
+				_mouse(Vector2(sx + 40.0, y + 60.0), tt >= d0, false)
+			if dashing:
+				_ring(Vector2(sx, y), 36.0, Color(0.7, 0.9, 1.0, 0.5), 2.0)
+		else:
+			_caption("② 돌진 직후 0.12초 안에 스치면 PERFECT", MINT)
+			var u := tt - 3.0
+			var y := 150.0
+			var bx := lerpf(680.0, 20.0, _smooth(0.0, 2.4, u))
+			var d0 := 0.62
+			var sx := 470.0
+			var dashing := u >= d0 and u < d0 + 0.28
+			if u >= d0:
+				sx = 470.0 - 170.0 * _smooth(d0, d0 + 0.28, u)
+			if dashing:
+				for k in 3:
+					_ship(Vector2(sx + 26.0 * (k + 1), y), PI, 0.18, "b")
+			_ship(Vector2(sx, y), PI, 0.5 if dashing else 1.0)
+			_bolt(Vector2(bx, y), Vector2.LEFT)
+			if u >= d0 + 0.05:
+				var k := _smooth(d0 + 0.05, d0 + 0.55, u)
+				_ring(Vector2(sx, y), 60.0 - 40.0 * k, Color(MINT, 1.0 - k * 0.5), 2.0)
+				_txt("PERFECT", Vector2(sx - 40.0, y - 50.0 - 8.0 * k), 20, MINT)
+			if u >= d0 + 0.5:
+				_ring(Vector2(sx, y), 34.0, Color(0.8, 0.97, 1.0, 0.8), 2.5)
+				_txt("다음 차지 ×2", Vector2(sx - 52.0, y + 56.0), 16, Color(0.85, 1.0, 1.0))
+
+	func _parry() -> void:
+		var T := 6.4
+		var tt := fmod(t, T)
+		_caption("우클릭 꾹 → 막으면 슬로우 → 방향 정하고 떼면 돌진", GOLD)
+		var sp := Vector2(150, 175)
+		var tgt := Vector2(540, 90)
+		var shift := _smooth(0.0, 1.0, tt)
+		var bolt_k := _smooth(0.3, 1.9, tt)
+		var parried := tt >= 1.9
+		var holding := tt >= 1.3 and tt < 4.0
+		var ship_pos := sp
+		var heading := -PI * 0.5
+		var dashing := tt >= 4.0 and tt < 4.25
+		if tt >= 4.0:
+			ship_pos = sp.lerp(tgt - Vector2(34, -12), _smooth(4.0, 4.25, tt))
+		if parried and tt < 4.0:                       # 방향 지정: 조준선이 표적 쪽으로 돌아간다
+			var ta := (tgt - sp).angle()
+			heading = lerp_angle(-PI * 0.5, ta, _smooth(2.1, 3.0, tt))
+		elif tt >= 4.0:
+			heading = (tgt - sp).angle()
+		if parried and tt < 4.0:
+			draw_rect(Rect2(Vector2.ZERO, size), Color(0.3, 0.5, 0.95, 0.1))
+		_target(tgt, _smooth(4.25, 4.5, tt) * (1.0 - _smooth(4.5, 4.9, tt)), 3 if tt >= 4.25 else 0)
+		if dashing:
+			for k in 3:
+				_ship(ship_pos - Vector2.from_angle(heading) * 24.0 * (k + 1), heading, 0.2, "r")
+		_ship(ship_pos, heading, 1.0, "r" if dashing else "b")
+		if tt < 4.0:
+			_flame(ship_pos, heading, 14.0)
+		if not parried:
+			var bp := Vector2(680, 150).lerp(sp + Vector2(18, -4), bolt_k)
+			_bolt(bp, Vector2(-1, 0.2))
+		if holding:
+			var pr := 40.0 + (4.0 if int(t * 10.0) % 2 == 0 else 0.0)
+			_ring(sp, pr, Color(1.0, 0.95, 0.75, 0.9), 2.5)
+		if parried and tt < 2.3:
+			var k := (tt - 1.9) / 0.4
+			_spark(sp + Vector2(20, -4), k, Color(1, 1, 1), 12, 56.0)
+			_txt("막았다!", Vector2(sp.x - 24.0, sp.y - 62.0), 18, GOLD)
+		if parried and tt >= 2.3 and tt < 4.0:
+			var ta := (tgt - sp).normalized()
+			var aim := Vector2.from_angle(heading)
+			draw_line(ship_pos + aim * 30.0, ship_pos + aim * 360.0, Color(0.75, 0.92, 1.0, 0.8), 2.0)
+			_txt("방향 지정 (슬로우)", Vector2(sp.x + 40.0, sp.y + 54.0), 16, Color(0.8, 0.92, 1.0))
+		if tt >= 4.2 and tt < 5.8:
+			_txt("피해 12", Vector2(tgt.x - 30.0, tgt.y - 50.0), 20, GOLD)
+			_spark(tgt, _smooth(4.25, 4.8, tt), Color(1.0, 0.85, 0.5), 12, 60.0)
+		_mouse(Vector2(size.x - 40.0, 60.0), false, holding)
+		if holding:
+			_txt("꾹", Vector2(size.x - 52.0, 100.0), 15, GOLD)
+		if tt >= 4.0 and tt < 4.3:
+			_txt("뗀다", Vector2(size.x - 60.0, 100.0), 15, Color(0.8, 0.9, 1.0))
+
+	func _charge() -> void:
+		var T := 8.0
+		var tt := fmod(t, T)
+		if tt < 3.6:
+			_caption("모으면 피해 3 — 일반 돌진은 1")
+			var sp := Vector2(120, 170)
+			var tgt := Vector2(560, 170)
+			var pos := sp
+			var col := "b"
+			var held := false
+			# 일반 돌진
+			if tt < 1.4:
+				if tt >= 0.4 and tt < 0.65:
+					pos = sp.lerp(tgt - Vector2(40, 0), _smooth(0.4, 0.65, tt))
+				elif tt >= 0.65:
+					pos = (tgt - Vector2(40, 0)).lerp(sp, _smooth(0.9, 1.4, tt))
+					pos.y -= 40.0 * sin(_smooth(0.65, 1.4, tt) * PI)
+				_target(tgt, _smooth(0.65, 0.8, tt) * (1.0 - _smooth(0.8, 1.2, tt)), 0)
+				if tt >= 0.65 and tt < 1.3:
+					_spark(tgt - Vector2(34, 0), _smooth(0.65, 1.0, tt), Color(0.85, 0.93, 1.0), 6, 28.0)
+					_txt("피해 1", Vector2(tgt.x - 30.0, tgt.y - 50.0), 17, Color(0.85, 0.93, 1.0))
+				_mouse(Vector2(size.x - 40.0, 60.0), tt >= 0.4 and tt < 0.65, false)
+			else:
+				# 차지
+				var u := tt - 1.4
+				var shake := Vector2.ZERO
+				if u < 1.1:
+					held = true
+					var f := u / 1.1
+					shake = Vector2(randf_range(-1, 1), randf_range(-1, 1)) * (0.6 + 1.6 * f)
+					pos = sp + shake
+					draw_arc(sp, 44.0, -PI * 0.5, -PI * 0.5 + TAU * f, 40, Color(1.0, 0.6, 0.2), 4.0)
+					if f >= 1.0 - 0.001:
+						col = "r"
+				elif u < 1.4:
+					pos = sp.lerp(tgt - Vector2(40, 0), _smooth(1.1, 1.4, u))
+					col = "r"
+				else:
+					pos = tgt - Vector2(40, 0)
+					col = "r"
+				if u >= 1.0 and u < 1.1:
+					col = "r"
+				_target(tgt, _smooth(1.4, 1.55, u) * (1.0 - _smooth(1.55, 1.9, u)), 3 if u >= 1.4 else 0)
+				if u >= 1.4 and u < 2.2:
+					_spark(tgt - Vector2(34, 0), _smooth(1.4, 1.9, u), Color(1.0, 0.7, 0.3), 14, 56.0)
+					_txt("피해 3", Vector2(tgt.x - 30.0, tgt.y - 54.0), 22, Color(1.0, 0.75, 0.35))
+				_mouse(Vector2(size.x - 40.0, 60.0), held, false)
+				if held:
+					_txt("꾹", Vector2(size.x - 52.0, 100.0), 15, GOLD)
+			_ship(pos, 0.0, 1.0, col)
+		else:
+			_caption("팔이 멈춰 있을 때 차지로 부딪히면 저지!", Color(1.0, 0.8, 0.6))
+			var u := tt - 3.6
+			var sh := Vector2(110, 60)
+			var arm_len := 380.0
+			var ang := 0.2
+			var phase := ""
+			if u < 1.2:
+				phase = "prep"
+				ang = lerpf(-0.5, 0.55, _smooth(0.0, 1.2, u))
+			elif u < 2.4:
+				phase = "set"
+				ang = 0.55
+			else:
+				phase = "hit"
+				ang = 0.55 - 0.5 * _smooth(2.7, 3.3, u)
+			var fist := sh + Vector2.from_angle(ang) * arm_len
+			var blink := 0.5 + 0.5 * sin(t * 24.0)
+			if phase == "set":
+				draw_colored_polygon(PackedVector2Array([sh, sh + Vector2.from_angle(0.55) * 420.0, sh + Vector2.from_angle(1.35) * 420.0]), Color(1.0, 0.3, 0.25, 0.1 + 0.25 * blink))
+			var arm_c := Color(0.35, 0.37, 0.45)
+			draw_line(sh, fist, arm_c, 22.0)
+			draw_circle(fist, 24.0, Color(0.22, 0.23, 0.3))
+			draw_circle(sh, 26.0, Color(0.18, 0.19, 0.25))
+			var el := sh.lerp(fist, 0.55)
+			draw_circle(el, 13.0, Color(1.0, 0.42, 0.22).lerp(Color.WHITE, _smooth(2.35, 2.5, u) * (1.0 - _smooth(2.5, 2.9, u))))
+			if phase == "prep":
+				_txt("들어 올리는 중 — 아직 저지 불가", Vector2(240, 230), 16, Color(0.75, 0.78, 0.85))
+			elif phase == "set":
+				_txt("위치 고정 · 붉게 점멸 = 지금!", Vector2(240, 230), 16, Color(1.0, 0.6, 0.5))
+			var spx := Vector2(520, 205)
+			var pos := spx
+			var dashing := false
+			if u >= 1.9 and u < 2.4:
+				pos = spx.lerp(el + Vector2(26, 20), _smooth(1.9, 2.4, u) * 0.999)
+				dashing = true
+			elif u >= 2.4:
+				pos = el + Vector2(26, 20) + Vector2(60.0, -60.0) * _smooth(2.4, 3.2, u)
+			if u >= 1.6 and u < 1.9:
+				pos += Vector2(randf_range(-1, 1), randf_range(-1, 1)) * 2.0
+				draw_arc(pos, 44.0, -PI * 0.5, -PI * 0.5 + TAU * _smooth(1.6, 1.9, u), 32, Color(1.0, 0.6, 0.2), 3.0)
+			_ship(pos, (el - spx).angle() if u < 2.4 else -PI * 0.5, 1.0, "r" if u >= 1.6 else "b")
+			if dashing:
+				_ring(pos, 40.0, Color(1.0, 0.6, 0.2, 0.6), 2.0)
+			if u >= 2.4 and u < 3.6:
+				_spark(el, _smooth(2.4, 3.0, u), Color(1.0, 0.85, 0.5), 14, 60.0)
+				_txt("저지! 관절 피해 8", Vector2(el.x + 10.0, el.y - 36.0), 20, GOLD)
+			if u >= 1.5 and u < 2.4:
+				_mouse(Vector2(size.x - 40.0, 60.0), true, false)
+
+	func _unparry() -> void:
+		var T := 7.0
+		var tt := fmod(t, T)
+		_caption("보라색 = 패리 불가 → 돌진으로 통과", UNP_C)
+		var eye := Vector2(330, 34)
+		draw_circle(eye, 24.0, Color(0.1, 0.1, 0.14))
+		draw_circle(eye, 8.0 + 4.0 * _smooth(0.0, 1.4, tt), UNP_C)
+		var ship := Vector2(450, 148)
+		var th_from := PI + 0.2
+		var th_to := -0.2
+		var fan_a := _smooth(0.2, 1.6, tt)
+		var sweep := tt >= 1.6 and tt < 3.4
+		var th := th_from
+		if sweep:
+			var k := (tt - 1.6) / 1.8
+			th = lerpf(th_from, th_to, k * k * (3.0 - 2.0 * k) * 0.3 + k * 0.7)
+		elif tt >= 3.4:
+			th = th_to
+		if tt < 3.4:
+			var blink := 0.65 + 0.35 * sin(t * 20.0)
+			var pts := PackedVector2Array([eye])
+			var a0 := th if sweep else th_from
+			for j in 17:
+				var a := lerpf(a0, th_to, j / 16.0)
+				pts.append(eye + Vector2.from_angle(a) * 460.0)
+			if pts.size() >= 3:
+				draw_colored_polygon(pts, Color(UNP, (0.12 + 0.22 * fan_a) * (blink if not sweep else 1.0)))
+		if sweep:
+			var e := eye + Vector2.from_angle(th) * 470.0
+			draw_line(eye, e, Color(UNP, 0.5), 18.0)
+			draw_line(eye, e, Color(UNP, 0.9), 8.0)
+			draw_line(eye, e, UNP_C, 3.0)
+		# 플레이어: 레이저가 지나가기 직전에 돌진
+		var hit_a := (ship - eye).angle()
+		var kh := (th_from - hit_a) / (th_from - th_to)             # 레이저가 기체 각도를 지나는 진행도
+		var dash_t0 := 1.6 + 1.8 * 0.5                              # 근사: 아래 보정식으로 시각 계산
+		dash_t0 = _beam_time(kh) - 0.09
+		var dashing := tt >= dash_t0 and tt < dash_t0 + 0.28
+		var pos := ship
+		if tt >= dash_t0:
+			pos = ship + Vector2(70.0, 0.0) * _smooth(dash_t0, dash_t0 + 0.28, tt)
+		if dashing:
+			for k in 3:
+				_ship(pos - Vector2(22.0 * (k + 1), 0), 0.0, 0.18, "b")
+		var strong := tt >= dash_t0 + 0.15
+		_ship(pos, 0.0, 0.5 if dashing else 1.0)
+		if tt >= dash_t0 - 0.5 and tt < dash_t0:
+			_txt("돌진!", Vector2(pos.x - 20.0, pos.y + 54.0), 17, GOLD)
+			_mouse(Vector2(size.x - 40.0, 70.0), tt >= dash_t0 - 0.1, false)
+		if strong and tt < 6.6:
+			var f := _smooth(dash_t0 + 0.15, dash_t0 + 0.6, tt)
+			_ring(pos, 40.0 + 3.0 * sin(t * 12.0), Color(1.0, 0.95, 0.7, 0.9), 3.0)
+			_ring(pos, 54.0 - 3.0 * sin(t * 12.0), Color(0.6, 1.0, 0.9, 0.7), 2.0)
+			for k in 6:
+				var ba := t * 2.2 * (1.0 if k % 2 == 0 else -1.0) + k * TAU / 6.0
+				draw_circle(pos + Vector2.from_angle(ba) * (48.0 if k % 2 == 0 else 60.0), 3.0, Color(1.0, 0.9, 0.5))
+			_txt("강한 PERFECT!", Vector2(pos.x - 70.0, pos.y - 70.0 - 6.0 * f), 20, GOLD)
+			_txt("다음 차지 ×4 · 무적 1.2초", Vector2(pos.x - 100.0, pos.y + 78.0), 16, Color(1.0, 0.95, 0.75))
+
+	## 레이저 진행도 k(0~1)가 되는 시각 (sweep 가속 곡선을 이분법으로 역산)
+	func _beam_time(target_k: float) -> float:
+		var lo := 0.0
+		var hi := 1.0
+		for i in 20:
+			var m := (lo + hi) * 0.5
+			var f := m * m * (3.0 - 2.0 * m) * 0.3 + m * 0.7
+			if f < target_k:
+				lo = m
+			else:
+				hi = m
+		return 1.6 + 1.8 * lo

@@ -5,6 +5,9 @@ signal restart_requested
 
 var font: SystemFont
 var ui_scale := 1.0                  # 터치 기기에서는 키운다
+var tutorial                         # main.gd 가 연결: 조작법 다시 보기
+var main_box: VBoxContainer
+var help_box: VBoxContainer
 
 
 func _ready() -> void:
@@ -25,6 +28,7 @@ func _ready() -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 14)
 	center.add_child(box)
+	main_box = box
 
 	var title := Label.new()
 	title.text = "일시정지"
@@ -37,7 +41,24 @@ func _ready() -> void:
 	_button(box, "처음부터 다시", func() -> void:
 		restart_requested.emit()
 		resume())
+	_button(box, "조작법", func() -> void: _show_help(true))
 	_button(box, "종료", func() -> void: get_tree().quit())
+
+	help_box = VBoxContainer.new()
+	help_box.add_theme_constant_override("separation", 14)
+	help_box.visible = false
+	center.add_child(help_box)
+	var ht := Label.new()
+	ht.text = "조작법"
+	ht.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ht.add_theme_font_override("font", font)
+	ht.add_theme_font_size_override("font_size", int(36 * ui_scale))
+	help_box.add_child(ht)
+	var names := {"dodge": "회피 — 돌진", "parry": "패리 — 막고 반격", "charge": "차지 공격 · 받아치기", "unparry": "패리 불가 공격"}
+	for id in ["dodge", "parry", "charge", "unparry"]:
+		var sid: String = id
+		_button(help_box, names[sid], func() -> void: tutorial.replay(sid))
+	_button(help_box, "뒤로", func() -> void: _show_help(false))
 
 
 func _button(parent: Control, text: String, cb: Callable) -> void:
@@ -59,7 +80,13 @@ func _unhandled_input(e: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
+func _show_help(on: bool) -> void:
+	main_box.visible = not on
+	help_box.visible = on
+
+
 func open() -> void:
+	_show_help(false)
 	visible = true
 	get_tree().paused = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE

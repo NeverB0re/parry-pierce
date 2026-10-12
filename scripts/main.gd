@@ -9,6 +9,7 @@ const Background := preload("res://scripts/background.gd")
 const Hud := preload("res://scripts/hud.gd")
 const Sfx := preload("res://scripts/sfx.gd")
 const PauseMenu := preload("res://scripts/pause_menu.gd")
+const Tutorial := preload("res://scripts/tutorial.gd")
 const TouchControls := preload("res://scripts/touch_controls.gd")
 const Quality := preload("res://scripts/quality.gd")
 
@@ -36,6 +37,7 @@ var bg
 var cam: Camera2D
 var touch_ui                          # 모바일 터치 조작 (없으면 마우스·키보드)
 var menu
+var tutorial                          # 튜토리얼 팝업
 
 var state := State.PLAY
 var hitstop := 0.0
@@ -116,6 +118,11 @@ func _ready() -> void:
 	menu.ui_scale = 1.7 if touch_mode else 1.0
 	add_child(menu)
 	menu.restart_requested.connect(reset_run)
+	tutorial = Tutorial.new()
+	tutorial.touch = touch_mode
+	tutorial.enabled = DisplayServer.get_name() != "headless" and not OS.get_cmdline_user_args().has("--notutorial")
+	add_child(tutorial)
+	menu.tutorial = tutorial
 	if touch_mode:
 		var touch_layer := CanvasLayer.new()
 		touch_layer.layer = 20
@@ -124,6 +131,7 @@ func _ready() -> void:
 		touch_ui.main = self
 		touch_layer.add_child(touch_ui)
 	reset_run()
+	tutorial.request(["dodge", "parry"])        # 처음 실행: 회피 → 패리 순서로 한 장씩
 
 
 func reset_run() -> void:
@@ -240,7 +248,9 @@ func _physics_process(delta: float) -> void:
 	boss.focus_from = player.position
 	boss.focus_reach = (Player.PARRY_DASH_SPEED_PERFECT if player.aim_perfect else Player.PARRY_DASH_SPEED) * Player.PARRY_DASH_TIME \
 		if player.aim_phase else Player.CHARGE_SPEED * Player.CHARGE_DASH_TIME
+	boss.hold_attacks = player.on_platform       # 시작·부활 직후 날아오르기 전에는 공격이 시작되지 않는다
 	boss.step(dt, player.position)
+	_tutorial_triggers()
 	_drain_boss_events()
 	player.step(delta)
 	if state == State.PLAY:
@@ -254,6 +264,17 @@ func _physics_process(delta: float) -> void:
 		if dead_t <= 0.0:
 			reset_run()
 	fx.step(dt)
+
+
+## 새 메커니즘이 처음 나오면 튜토리얼을 띄운다 (팔 휘두르기 준비 → 차지, 눈 레이저 준비 → 패리 불가)
+func _tutorial_triggers() -> void:
+	if not tutorial.enabled:
+		return
+	var kd: String = boss.atk.get("kind", "")
+	if kd == "swing":
+		tutorial.request(["charge"])
+	elif kd == "beam":
+		tutorial.request(["unparry"])
 
 
 func _update_platform(dt: float) -> void:
@@ -483,10 +504,23 @@ func _drain_boss_events() -> void:
 				shake = maxf(shake, 18.0)
 				sfx.play("break", 2.0)
 				sfx.play("stomp", -6.0)
-				fx.burst(pos, 36, Color(0.6, 0.64, 0.72), 900.0, 0.9, 5.0, 1300.0)
-				fx.burst(pos, 26, Color(1.0, 0.6, 0.3), 1000.0, 0.5, 3.5)
-				fx.ring(pos, Color(1.0, 0.65, 0.35), 320.0, 0.45, 8.0)
+				fx.burst(pos, 28, Color(0.6, 0.64, 0.72), 800.0, 0.9, 5.0, 1300.0)
+				fx.burst(pos, 14, Color(1.0, 0.6, 0.3), 800.0, 0.45, 3.0)
+				fx.ring(pos, Color(1.0, 0.65, 0.35), 200.0, 0.4, 6.0)
 				hud.flash(0.1, Color(1.0, 0.75, 0.5))
+			"armor_break":                      # 껍질이 완전히 부서짐: 코어가 드러난다 (한 발 더 필요)
+				hitstop = maxf(hitstop, 0.25)
+				shake = maxf(shake, 30.0)
+				sfx.play("break", 6.0)
+				sfx.play("stomp", 2.0)
+				sfx.play("perfect", -2.0, 0.0)
+				hud.flash(0.3, Color(1.0, 0.7, 0.5))
+				fx.burst(pos, 70, Color(0.65, 0.68, 0.76), 1200.0, 1.0, 6.0, 1400.0)
+				fx.burst(pos, 40, Color(1.0, 0.6, 0.3), 1300.0, 0.7, 4.0)
+				fx.rays_burst(pos, 20, Color(1.0, 0.7, 0.4), 700.0, 0.6, 8.0)
+				fx.ring(pos, Color(1.0, 0.75, 0.45), 520.0, 0.6, 10.0)
+				fx.sprite(pos, 1, 520.0, 0.6)
+				fx.sprite(pos, 2, 380.0, 0.55, false, Color.WHITE, 0.1)
 			"debris_land":
 				shake = maxf(shake, 10.0)
 				sfx.play("land", 2.0)
