@@ -467,6 +467,13 @@ func on_parry_launch(pos: Vector2, dir: Vector2) -> void:
 
 func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, power := false, buffed := false) -> void:
 	var contact := pos + dir * Player.RADIUS
+	if not power:                              # 차지 공격 타격: 패리 돌진보다 약한 주황 임팩트
+		shake = maxf(shake, 13.0)
+		hud.flash(0.08, Color(1.0, 0.8, 0.55))
+		sfx.play("armor", 3.0)
+		fx.rays_burst(contact, 8, Color(1.0, 0.7, 0.35), 320.0, 0.3, 5.0)
+		fx.ring(contact, Color(1.0, 0.65, 0.3), 150.0, 0.3, 7.0)
+		fx.burst(contact, 18, Color(1.0, 0.7, 0.35), 900.0, 0.4, 3.0, 0.0, -dir, 1.1)
 	if buffed:                                 # 퍼펙트 회피 버프가 실린 일격
 		shake = maxf(shake, 20.0)
 		sfx.play("perfect", -2.0, 0.0)
@@ -476,7 +483,7 @@ func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, power := f
 	var idx: int = hit["idx"]
 	if hit["kind"] == "part":                  # 페이즈 1: 포대/팔꿈치 부위 타격
 		if not boss.damage_part(idx, dmg):
-			hitstop = 0.09 if power else 0.06
+			hitstop = 0.09 if power else 0.1
 			shake = 14.0 if power else 9.0
 			sfx.play("armor", 2.0 if power else 0.0)
 			fx.burst(contact, 18 if power else 12, Color(1.0, 0.85, 0.6), 700.0, 0.35, 3.0, 0.0, -dir, 1.0)
@@ -506,7 +513,7 @@ func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, power := f
 		fx.burst(contact, 26, Color(0.84, 0.8, 0.7), 800.0, 0.8, 5.0, 1200.0, -dir, 1.2)
 		fx.ring(contact, Color(1, 0.9, 0.75), 130.0, 0.3, 6.0)
 	else:
-		hitstop = 0.07
+		hitstop = 0.07 if power else 0.1
 		shake = 10.0
 		sfx.play("armor")
 		fx.burst(contact, 14, Color(1.0, 0.9, 0.7), 650.0, 0.3, 3.0, 0.0, -dir, 1.0)

@@ -976,7 +976,6 @@ func _draw_grid() -> void:
 			var ring := maxi(absi(c - HEART_CELL), absi(r - HEART_CELL))
 			var maxhp: int = RING_HP[ring]
 			var col: Color = PLATE_COL[ring]
-			col = col.lerp(col * 0.55, 1.0 - float(hp) / maxhp)
 			col = col.lerp(Color.WHITE, plate_flash[i])
 			if lit:
 				col = col.lerp(Color(1.0, 0.85, 0.5), 0.25)
@@ -984,12 +983,18 @@ func _draw_grid() -> void:
 			draw_rect(inner, col)
 			draw_rect(inner, edge_col, false, edge_w)
 			draw_line(inner.position + Vector2(3, 3), Vector2(inner.end.x - 3, inner.position.y + 3), Color(1, 1, 1, 0.18), 2.0)
-			if hp < maxhp:
-				var cc := rc.get_center()
-				var s := float((i * 37) % 11) - 5.0
-				draw_polyline(PackedVector2Array([cc + Vector2(-20, -18 + s), cc + Vector2(-4, -2), cc + Vector2(6, 4 - s), cc + Vector2(20, 16)]), Color(0.15, 0.12, 0.1), 2.0)
-				if hp < maxhp - 1:
-					draw_polyline(PackedVector2Array([cc + Vector2(16, -20), cc + Vector2(2, 0), cc + Vector2(-14, 20)]), Color(0.15, 0.12, 0.1), 2.0)
+			# 남은 내구도 = 칸 아래쪽의 점 개수 (채워진 점이 남은 타격 수, 빈 점이 잃은 만큼)
+			var pw := 8.0
+			var gap := 4.0
+			var x0 := rc.get_center().x - (maxhp * pw + (maxhp - 1) * gap) * 0.5
+			var py := rc.end.y - 13.0
+			for k in maxhp:
+				var pr_rc := Rect2(x0 + k * (pw + gap), py, pw, pw)
+				if k < hp:
+					draw_rect(pr_rc, Color(1.0, 0.92, 0.6))
+					draw_rect(pr_rc, Color(0.2, 0.12, 0.05), false, 1.5)
+				else:
+					draw_rect(pr_rc, Color(0.0, 0.0, 0.0, 0.45))
 	if dead:
 		var k := minf(1.0, death_t / 1.2)
 		draw_circle(hc, HEART_R + k * 240.0, Color(C_HEART, 0.5 * (1.0 - k)))

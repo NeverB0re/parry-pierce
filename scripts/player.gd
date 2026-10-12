@@ -28,7 +28,7 @@ const PERFECT_EVADE_GRAZE := 16.0   # 퍼펙트 회피로 인정하는 근접 �
 const PERFECT_EVADE_INVULN := 0.8   # 퍼펙트 회피 성공 시 추가 무적 (회피 직후 다른 곳에 맞는 일 방지)
 const EVADE_BUFF_MULT := 3          # 퍼펙트 회피 버프: 다음 차지 공격 피해 배율 (차지 시간도 절반)
 const PARRY_BUFFER := 0.15          # 패리 쿨다운 중 누른 입력을 이만큼 기억
-const GAUGE_REGEN_TIME := 4.0    # 게이지가 0일 때만 이 시간이 지나면 1칸까지 천천히 재생 (그 이상은 패리로만)
+const GAUGE_REGEN_TIME := 3.33   # 게이지가 0일 때만 이 시간이 지나면 1칸까지 천천히 재생 (그 이상은 패리로만)
 const GAUGE_MAX := 3             # 회피 1칸, 차지 1칸, 패리 성공 시 가득. 자연 회복 없음
 const PERFECT_WINDOW := 0.07     # 패리 누른 뒤 이 시간 안에 막으면 PERFECT
 const PARRY_MIN := 0.12          # 짧게 눌러도 이 시간만큼은 패리 유지
@@ -44,8 +44,10 @@ const PARRY_DASH_TIME := 0.22
 const POWER_DAMAGE := 3
 const POWER_RADIUS := 8.0        # 패리 돌진은 타격 범위도 넓다
 const POWER_GRACE := 0.7
-const BOUNCE_SPEED := 1100.0     # 직격 후 튕겨나는 속도. 입사각 = 반사각, 아래에서 위로 칠 때만 상향 보정
-const BOUNCE_UP_MIN := 0.35      # 아래에서 위로 공격했을 때 튕김의 최소 상향 성분(정규화) — 상향 보정
+const BOUNCE_SPEED := 1600.0     # 직격 후 튕겨나는 속도 (타격감: 빠르게 튕겨나간다). 입사각 = 반사각
+const BOUNCE_UP_MIN := 0.35      # 표적 아래쪽 200도(수평보다 10도 위까지)에서 칠 때의 최소 상향 성분(정규화)
+const BOUNCE_UP_ARC := 0.1736    # sin(10도): 맞은 면의 법선이 이보다 아래쪽이면 상향 보정
+const BOUNCE_DRAG := 0.35        # 튕겨나가는 동안 가로 공기저항 배율 (멀리 나간다)
 const BOUNCE_THRUST := 2.0       # 튕겨나는 동안 좌우 추진 배율
 const STRIKE_SHIELD := 0.9       # 직격 후 튕겨나는 동안 무적 시간
 const STUN_TIME := 0.9           # 피격(공격/표적 접촉) → 조작 불가
@@ -434,7 +436,7 @@ func step(dt: float) -> void:
 			vel.x -= vel.x * 4.0 * dt
 		else:
 			vel.y += GRAVITY * dt
-			vel.x -= vel.x * AIR_DRAG * dt
+			vel.x -= vel.x * AIR_DRAG * (BOUNCE_DRAG if bouncing else 1.0) * dt
 		if vel.y > fall_cap:
 			vel.y = move_toward(vel.y, fall_cap, 2500.0 * dt)
 
@@ -537,7 +539,7 @@ func _on_strike(hit: Dictionary) -> void:
 	if dir.dot(n) > 0.0:
 		n = -n
 	var out := dir.bounce(n)
-	if dir.y < -0.2:
+	if n.y > -BOUNCE_UP_ARC:                      # 표적 아래쪽 200도에서 친 경우: 상향 성분을 준다 (위 160도는 순수 반사)
 		out.y = minf(-absf(out.y), -BOUNCE_UP_MIN)
 		if absf(out.x) < 0.25:                    # 거의 수직이면 마우스 쪽으로 살짝
 			out.x += (signf(aim.x) if absf(aim.x) > 0.1 else (1.0 if randf() < 0.5 else -1.0)) * 0.25
