@@ -976,17 +976,22 @@ func _draw_grid() -> void:
 	var lit := strike_glow or focus_glow > 0.0     # 공격 돌진 중이거나 방향 지정·차지 중이면 표적이 드러난다
 	var edge_col := Color(1.0, 0.85, 0.5) if lit else C_PLATE_EDGE
 	var edge_w := 3.0 if lit else 2.0
+	# 호출 수를 줄이기 위해 윤곽선·하이라이트·내구도 구분선은 모아서 한 번에 그린다
+	var outline_pts := PackedVector2Array()
+	var shine_pts := PackedVector2Array()
+	var sep_pts := PackedVector2Array()
 	for r in GRID_N:
 		for c in GRID_N:
 			if not in_mask(c, r):
 				continue
 			var rc := cell_rect(c, r)
-			draw_rect(rc, C_CAVITY)
 			if c == HEART_CELL and r == HEART_CELL:
+				draw_rect(rc, C_CAVITY)
 				continue
 			var i := r * GRID_N + c
 			var hp := plates[i]
 			if hp <= 0:
+				draw_rect(rc, C_CAVITY)
 				var near := 1.0 - clampf(rc.get_center().distance_to(hc) / 200.0, 0.0, 1.0)
 				draw_rect(rc, Color(0.45, 0.08, 0.06, 0.2 + 0.45 * near * (0.7 + 0.3 * beat)))
 				continue
@@ -998,20 +1003,24 @@ func _draw_grid() -> void:
 				col = col.lerp(Color(1.0, 0.85, 0.5), 0.25)
 			var inner := rc.grow(-2.0)
 			draw_rect(inner, col)
-			draw_rect(inner, edge_col, false, edge_w)
-			draw_line(inner.position + Vector2(3, 3), Vector2(inner.end.x - 3, inner.position.y + 3), Color(1, 1, 1, 0.18), 2.0)
+			var tl := inner.position
+			var tr := Vector2(inner.end.x, inner.position.y)
+			var br := inner.end
+			var bl := Vector2(inner.position.x, inner.end.y)
+			outline_pts.append_array(PackedVector2Array([tl, tr, tr, br, br, bl, bl, tl]))
+			shine_pts.append_array(PackedVector2Array([tl + Vector2(3, 3), Vector2(inner.end.x - 3, inner.position.y + 3)]))
 			# 남은 내구도 = 칸 아래쪽의 점 개수 (채워진 점이 남은 타격 수, 빈 점이 잃은 만큼)
-			var pw := 8.0
-			var gap := 4.0
-			var x0 := rc.get_center().x - (maxhp * pw + (maxhp - 1) * gap) * 0.5
-			var py := rc.end.y - 13.0
-			for k in maxhp:
-				var pr_rc := Rect2(x0 + k * (pw + gap), py, pw, pw)
-				if k < hp:
-					draw_rect(pr_rc, Color(1.0, 0.92, 0.6))
-					draw_rect(pr_rc, Color(0.2, 0.12, 0.05), false, 1.5)
-				else:
-					draw_rect(pr_rc, Color(0.0, 0.0, 0.0, 0.45))
+			var bar_w := 44.0
+			var bar := Rect2(rc.get_center().x - bar_w * 0.5, rc.end.y - 14.0, bar_w, 8.0)
+			draw_rect(bar, Color(0.0, 0.0, 0.0, 0.5))
+			draw_rect(Rect2(bar.position, Vector2(bar_w * float(hp) / maxhp, bar.size.y)), Color(1.0, 0.92, 0.6))
+			for k in range(1, maxhp):
+				var sx := bar.position.x + bar_w * float(k) / maxhp
+				sep_pts.append_array(PackedVector2Array([Vector2(sx, bar.position.y), Vector2(sx, bar.end.y)]))
+	if not outline_pts.is_empty():
+		draw_multiline(outline_pts, edge_col, edge_w)
+		draw_multiline(shine_pts, Color(1, 1, 1, 0.18), 2.0)
+		draw_multiline(sep_pts, Color(0.2, 0.12, 0.05), 2.0)
 	if dead:
 		var k := minf(1.0, death_t / 1.2)
 		draw_circle(hc, HEART_R + k * 240.0, Color(C_HEART, 0.5 * (1.0 - k)))

@@ -10,9 +10,11 @@ const Hud := preload("res://scripts/hud.gd")
 const Sfx := preload("res://scripts/sfx.gd")
 const PauseMenu := preload("res://scripts/pause_menu.gd")
 const TouchControls := preload("res://scripts/touch_controls.gd")
+const Quality := preload("res://scripts/quality.gd")
 
 const SPAWN := Vector2(650, -52)   # 시작 발판 위 (Player.PLAT_CENTER - 반지름)
 const CAM_ZOOM := 0.72             # 기본 줌아웃 (튕겨 올라가도 표적이 시야에 남도록)
+const MOBILE_ZOOM := 0.8            # 모바일은 화면이 작으므로 더 넓게 보이도록 물러난다
 const AIM_ZOOM := 0.82             # 방향 지정 중엔 물러나 표적을 넓게 본다
 const CHARGE_ZOOM := 0.85            # 차징 중에만 물러난다
 const AIM_SLOW := 0.08             # 방향 지정 중 월드 시간 배율
@@ -54,9 +56,14 @@ var spawn_on_platform := true
 func _ready() -> void:
 	randomize()
 	var touch_mode := OS.has_feature("mobile")
+	Quality.low = touch_mode                      # 모바일: 연출 일부를 줄여 프레임을 지킨다
+	if touch_mode:
+		Engine.max_fps = 60
 	for a in OS.get_cmdline_user_args():
 		if a == "--touch":                        # 데스크톱에서 터치 UI 시험
 			touch_mode = true
+		elif a == "--lowfx":
+			Quality.low = true
 	if not touch_mode:
 		Input.mouse_mode = Input.MOUSE_MODE_CONFINED   # 플레이 중엔 창 밖으로 못 나감 (ESC 메뉴에서 해제)
 	for a in OS.get_cmdline_user_args():      # 테스트용: -- --spawn=x,y
@@ -270,7 +277,7 @@ func _update_camera(delta: float) -> void:
 	cam.position = cam.position.lerp(target, 1.0 - exp(-6.0 * delta))
 	cam.offset = Vector2(randf_range(-1, 1), randf_range(-1, 1)) * shake
 	shake = move_toward(shake, 0.0, 60.0 * delta)
-	var z := CAM_ZOOM * mode
+	var z := CAM_ZOOM * mode * (MOBILE_ZOOM if touch_ui != null else 1.0)
 	cam.zoom = cam.zoom.lerp(Vector2(z, z), 1.0 - exp(-8.0 * delta))
 	bg.cam = cam.get_screen_center_position()
 

@@ -17,7 +17,7 @@ const DASH_KEEP := 0.5           # 돌진이 끝난 뒤 남기는 속도 비율
 const DASH_COOLDOWN := 0.1
 const CHARGE_TIME := 0.6         # 좌클릭을 이만큼 누르면 차지 완료 → 떼면 공격 돌진 (짧게 떼면 회피)
 const CHARGE_HOVER := 0.15       # 이 시간 이상 누르면 차지 자세(공중 정지)로 들어간다
-const CHARGE_AUTO := 0.5         # 차지 완료 후 이 시간이 지나면 자동 발사
+const CHARGE_AUTO := 1.3         # 차지 완료 후 이 시간이 지나면 자동 발사
 const CHARGE_SPEED := 3600.0     # 차지 돌진: 빠르게 꽂힌다. 사거리 약 790px
 const CHARGE_DASH_TIME := 0.22
 const CHARGE_COOLDOWN := 1.5     # 차지 돌진 후 다시 차지할 수 있을 때까지 (그동안 좌클릭 = 즉시 회피)
@@ -51,8 +51,9 @@ const BOUNCE_TURN_SPEED := 1350.0    # ② 방향 틀기: 그 밖의 방향이�
 const BOUNCE_FAST_SPEED := 1900.0    # ③ 고속: 반사 방향과 비슷한 쪽을 가리키면 그쪽으로 빠르게
 const BOUNCE_BRAKE_COS := 0.57       # 들어온 방향에서 ±55도 이내를 가리키면 역추진
 const BOUNCE_FAST_COS := 0.64        # 반사 방향에서 ±50도 이내를 가리키면 고속
-const ASSIST_CONE := 0.25            # 에임 어시스트: 표적 가장자리에서 이 각도(약 14도) 안이면 끌어당긴다
-const ASSIST_PULL := 0.65            # 어긋난 각도 중 이만큼을 끌어당긴다 (살짝)
+const ASSIST_CONE := 0.42            # 에임 어시스트: 표적 가장자리에서 이 각도(약 24도) 안이면 표적 중심으로 달라붙는다
+const ASSIST_CONE_TOUCH := 0.70      # 터치(스틱은 민감하므로 더 넓게, 약 40도)
+const ASSIST_SLACK := 60.0           # 사거리 여유
 const BOUNCE_UP_MIN := 0.35      # 표적 아래쪽 200도(수평보다 10도 위까지)에서 칠 때의 최소 상향 성분(정규화)
 const BOUNCE_UP_ARC := 0.1736    # sin(10도): 맞은 면의 법선이 이보다 아래쪽이면 상향 보정
 const BOUNCE_THRUST := 2.0       # 튕겨나는 동안 좌우 추진 배율
@@ -91,6 +92,9 @@ var charge_cd := 0.0             # 차지 쿨다운
 var regen_t := 0.0               # 게이지 0일 때 재생 진행
 var evade_window := 0.0          # 퍼펙트 회피 판정이 남은 시간
 var evade_rewarded := false      # 이번 회피에서 이미 보상 받음 (퍼펙트 또는 일반)
+var assist_lock := false          # 에임 어시스트가 표적에 붙어 있음
+var assist_pos := Vector2.ZERO   # 붙은 표적 위치
+var assist_r := 0.0
 var boost_t := 0.0               # 타격 직후 방향 선택 시간이 남은 시간
 var bounce_in := Vector2.ZERO    # 맞을 때의 진행 방향
 var bounce_out := Vector2.ZERO   # 반사 방향
@@ -354,6 +358,7 @@ func step(dt: float) -> void:
 		queue_redraw()
 		return
 	var m: Vector2 = main.aim_offset(position)
+	assist_lock = false
 	if m.length() > AIM_DEADZONE:
 		aim = m.normalized()
 		if aim_phase:                                 # 에임 어시스트: 사거리 안 표적이 조준선 가까이 있으면 살짝 끌어당긴다
@@ -582,25 +587,39 @@ func _bounce_vel() -> Vector2:
 	return aim * BOUNCE_TURN_SPEED * bounce_k
 
 
-## 에임 어시스트: 사거리 안에서 조준선이 표적 가장자리 14도 이내로 빗나가면 어긋난 각도의 일부를 끌어당긴다
+## 에임 어시스트: 사거리 안에서 조준선이 표적 가장자리 일정 각도(PC 24도, 터치 40도) 이내면 표적 중심으로 달라붙는다.
+## 가장자리에서 멀수록 천천히 풀려(연속) 튀지 않는다. 가장 가까운 표적 하나만 대상.
 func _assisted(a: Vector2, reach: float, extra_r: float) -> Vector2:
+	var cone := ASSIST_CONE_TOUCH if main.touch_ui != null else ASSIST_CONE
 	var ang := a.angle()
-	var best := a
-	var best_err := ASSIST_CONE
+	var best_score := INF
+	var best_da := 0.0
+	var best_err := 0.0
+	var best_t := {}
 	for t in boss.assist_targets():
 		var d: Vector2 = t["pos"] - position
 		var dist := d.length()
 		var r: float = float(t["r"]) + RADIUS + extra_r
-		if dist < 1.0 or dist - r > reach:
+		if dist < 1.0 or dist - r > reach + ASSIST_SLACK:
 			continue
 		var da := wrapf(d.angle() - ang, -PI, PI)
 		var err := absf(da) - asin(minf(1.0, r / dist))
-		if err <= 0.0:
-			return a                               # 이미 맞는 조준
-		if err < best_err:
+		if err > cone:
+			continue
+		var score := maxf(err, 0.0) * 10.0 + absf(da)
+		if score < best_score:
+			best_score = score
+			best_da = da
 			best_err = err
-			best = a.rotated(signf(da) * err * ASSIST_PULL)
-	return best
+			best_t = t
+	if best_t.is_empty():
+		return a
+	var s := 1.0 - smoothstep(cone * 0.5, cone, maxf(best_err, 0.0))     # 가까우면 완전히 붙고, 멀면 풀린다
+	if s > 0.5:
+		assist_lock = true
+		assist_pos = best_t["pos"]
+		assist_r = float(best_t["r"])
+	return a.rotated(best_da * s)
 
 
 # ── 그리기 ─────────────────────────────────────────────
@@ -733,6 +752,14 @@ func _draw() -> void:
 			draw_circle(Vector2.ZERO, 30.0, Color(C_ATTACK, 0.12 + 0.1 * pulse))
 			draw_circle(Vector2.ZERO, 19.0, Color(1.0, 0.85, 0.6, 0.12 + 0.12 * pulse))
 			_laser(aim, CHARGE_SPEED * CHARGE_DASH_TIME, C_ATTACK)
+
+	# 에임 어시스트: 붙은 표적을 고리로 표시
+	if assist_lock and (aim_phase or is_charged()):
+		var lp := assist_pos - position
+		var ap := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.02)
+		var lc := Color(0.75, 0.92, 1.0) if aim_phase else C_ATTACK
+		draw_arc(lp, assist_r + 8.0 + 3.0 * ap, 0.0, TAU, 36, Color(lc, 0.85), 3.0)
+		draw_arc(lp, assist_r + 20.0, 0.0, TAU, 36, Color(lc, 0.3), 2.0)
 
 	# 차지 쿨다운: 플레이어 주변 링이 차오른다 (다 차면 다시 차지 가능)
 	if charge_cd > 0.0:

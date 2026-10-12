@@ -46,9 +46,29 @@ func step(dt: float) -> void:
 	queue_redraw()
 
 
+var _tl_cache := {}                  # 문자열 조형(셰이핑)은 비싸므로 TextLine 을 재사용한다
+
+
+func _line(s: String, size: int) -> TextLine:
+	var key := "%d|%s" % [size, s]
+	var tl: TextLine = _tl_cache.get(key)
+	if tl == null:
+		if _tl_cache.size() > 48:
+			_tl_cache.clear()
+		tl = TextLine.new()
+		tl.add_string(s, font, size)
+		_tl_cache[key] = tl
+	return tl
+
+
 func _text(pos: Vector2, s: String, size: int, c: Color, align := HORIZONTAL_ALIGNMENT_LEFT, width := -1.0) -> void:
-	draw_string(font, pos + Vector2(2, 2), s, align, width, size, Color(0, 0, 0, c.a * 0.7))
-	draw_string(font, pos, s, align, width, size, c)
+	var tl := _line(s, size)
+	var x := pos.x
+	if align == HORIZONTAL_ALIGNMENT_CENTER and width > 0.0:
+		x += (width - tl.get_size().x) * 0.5
+	var top := Vector2(x, pos.y - tl.get_line_ascent())
+	tl.draw(get_canvas_item(), top + Vector2(2, 2), Color(0, 0, 0, c.a * 0.7))
+	tl.draw(get_canvas_item(), top, c)
 
 
 func _draw() -> void:

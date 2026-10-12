@@ -2,6 +2,8 @@ extends Node2D
 ## 용암 바닥 + 양쪽 벽 + 시작 발판(뒤), 또는 앞쪽 용암 표면과 불씨(front = true). 월드 좌표.
 ## 용암 표면 y=0. 빠지면 목숨 하나를 잃는다.
 
+const Quality := preload("res://scripts/quality.gd")
+
 const C_LAVA_DEEP := Color(0.35, 0.05, 0.02)
 const C_LAVA := Color(1.0, 0.38, 0.1)
 const C_LAVA_HOT := Color(1.0, 0.8, 0.35)
@@ -15,12 +17,14 @@ var plat_center := Vector2(650, -40)
 var plat_half := 90.0
 var plat_sink := 0.0              # 0 = 떠 있음, 1 = 완전히 가라앉음
 var plat_crack := 0.0             # 0~1 금 간 정도
+var _last_sink := -1.0
+var _last_crack := -1.0
 
 
 func _ready() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7
-	for i in 40:
+	for i in (16 if Quality.low else 40):
 		embers.append(Vector3(rng.randf_range(-1150, 1150), rng.randf() * 10.0, rng.randf_range(40, 110)))
 	if front:
 		z_index = 5
@@ -28,7 +32,12 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	t += delta
-	queue_redraw()
+	if front:
+		queue_redraw()                   # 출렁이는 표면은 매 프레임
+	elif plat_sink != _last_sink or plat_crack != _last_crack:
+		_last_sink = plat_sink           # 뒤쪽(벽·발판)은 발판 상태가 바뀔 때만 다시 그린다
+		_last_crack = plat_crack
+		queue_redraw()
 
 
 func _surface_y(x: float) -> float:
@@ -77,9 +86,10 @@ func _draw_platform() -> void:
 func _draw_front() -> void:
 	var surf := PackedVector2Array()
 	var x := -1400.0
+	var step := 80.0 if Quality.low else 40.0
 	while x <= 1700.0:
 		surf.append(Vector2(x, _surface_y(x)))
-		x += 40.0
+		x += step
 	var body := surf.duplicate()
 	body.append(Vector2(1700, 900))
 	body.append(Vector2(-1400, 900))

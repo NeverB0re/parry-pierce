@@ -2,11 +2,12 @@ extends Control
 ## 모바일 터치 조작: 왼쪽 플로팅 스틱(방향), 오른쪽 패리(꾹)/회피·차지 버튼, 우상단 일시정지.
 ## 모바일에서만(또는 --touch 로 시험할 때) main.gd 가 만든다. 마우스 조작은 그대로 유지된다.
 
-const BTN_PARRY_R := 92.0
-const BTN_DASH_R := 74.0
+const BTN_PARRY_R := 94.0
+const BTN_DASH_R := 106.0            # 회피/차지를 더 자주 쓰므로 가장 크고 엄지가 닿기 쉬운 자리
 const STICK_R := 120.0               # 스틱 최대 반경
 const STICK_ZONE := 0.5              # 화면 왼쪽 이 비율 안에서 시작한 터치만 스틱
-const MARGIN := 44.0                 # 노치/가장자리 여유
+const MARGIN := 60.0                 # 노치/가장자리 여유
+const LIFT := 96.0                   # 바닥에서 띄우는 높이 (손바닥에 가려지지 않도록)
 
 var main: Node
 var stick := Vector2.ZERO            # -1..1 (방향 입력)
@@ -23,14 +24,16 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
 
-func parry_center() -> Vector2:
-	var s := get_viewport_rect().size
-	return Vector2(s.x - MARGIN - BTN_PARRY_R - 10.0, s.y - MARGIN - BTN_PARRY_R - 40.0)
-
-
+## 회피/차지: 오른쪽 아래, 엄지가 가장 편한 자리
 func dash_center() -> Vector2:
 	var s := get_viewport_rect().size
-	return Vector2(s.x - MARGIN - BTN_PARRY_R * 2.0 - BTN_DASH_R - 40.0, s.y - MARGIN - BTN_DASH_R - 6.0)
+	return Vector2(s.x - MARGIN - BTN_DASH_R - 24.0, s.y - LIFT - BTN_DASH_R)
+
+
+## 패리: 회피 버튼의 왼쪽 위 (엄지를 살짝 올려 누른다)
+func parry_center() -> Vector2:
+	var d := dash_center()
+	return d + Vector2(-(BTN_DASH_R + BTN_PARRY_R) * 0.92 - 10.0, -(BTN_PARRY_R) * 0.9)
 
 
 func pause_center() -> Vector2:
@@ -55,11 +58,11 @@ func _down(idx: int, pos: Vector2) -> void:
 	if pos.distance_to(pause_center()) < 52.0:
 		fingers[idx] = "pause"
 		main.touch_pause()
-	elif pos.distance_to(parry_center()) < BTN_PARRY_R * 1.2:
+	elif pos.distance_to(parry_center()) < BTN_PARRY_R * 1.1:
 		fingers[idx] = "parry"
 		parry_down = true
 		main.touch_parry(true)
-	elif pos.distance_to(dash_center()) < BTN_DASH_R * 1.25:
+	elif pos.distance_to(dash_center()) < BTN_DASH_R * 1.1:
 		fingers[idx] = "dash"
 		dash_down = true
 		main.touch_dash(true)
@@ -108,7 +111,7 @@ func _draw() -> void:
 		draw_circle(stick_origin + stick * STICK_R, 44.0, Color(0.7, 0.92, 1.0, 0.45))
 	else:
 		var s := get_viewport_rect().size
-		var hint := Vector2(MARGIN + STICK_R + 20.0, s.y - MARGIN - STICK_R - 20.0)
+		var hint := Vector2(MARGIN + STICK_R + 40.0, s.y - LIFT - STICK_R * 0.8)
 		draw_arc(hint, STICK_R * 0.8, 0.0, TAU, 40, Color(1, 1, 1, 0.12), 3.0)
 		draw_circle(hint, 30.0, Color(1, 1, 1, 0.08))
 	# 패리: 금색
