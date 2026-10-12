@@ -5,6 +5,7 @@
 
 ## 실행
 - 바로 플레이: [Releases](../../releases)에서 `ParryPierce.exe` 다운로드 (Windows)
+- 안드로이드: 릴리즈의 `ParryPierce-android.apk`를 폰에 내려받아 설치 ("출처를 알 수 없는 앱 설치" 허용 필요, 디버그 서명, arm64, 가로 화면)
 - 소스: Godot **4.7** 에서 이 폴더(`project.godot`)를 열고 F5
 
 그래픽/사운드 에셋 없이 전부 코드로 그리고 합성합니다.
@@ -63,4 +64,6 @@
 ## 빌드
 ```
 godot --headless --path . --export-release "Windows Desktop" ParryPierce.exe
+godot --headless --path . --export-debug "Android" ParryPierce.apk
 ```
+안드로이드 내보내기는 Godot 안드로이드 템플릿, Android SDK(platform-tools, build-tools 36.1.0, platform android-36), JDK 17+, 디버그 키스토어가 필요합니다.
