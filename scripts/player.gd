@@ -511,7 +511,7 @@ func _draw_flame(off: Vector2) -> void:
 func _draw() -> void:
 	var jitter := Vector2.ZERO
 	if is_hovering_charge():           # 차지 중엔 몸이 떨린다 (완료되면 더)
-		var amp := 2.2 if is_charged() else 1.0
+		var amp := 0.8 if is_charged() else 0.6 + 1.6 * clampf(charge_t / CHARGE_TIME, 0.0, 1.0)
 		jitter = Vector2(randf_range(-amp, amp), randf_range(-amp, amp))
 	var evade := dash_t > 0.0 and dash_kind == "evade"
 	var attack := is_attacking()
@@ -559,12 +559,15 @@ func _draw() -> void:
 		_laser(aim, (PARRY_DASH_SPEED_PERFECT if aim_perfect else PARRY_DASH_SPEED) * PARRY_DASH_TIME, c)
 	elif is_hovering_charge():
 		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.03)
-		if is_charged():               # 차지 완료: 진한 주황 링 + 공격 사거리 레이저
-			draw_circle(Vector2.ZERO, 34.0, Color(C_ATTACK, 0.14 + 0.12 * pulse))
-			draw_arc(Vector2.ZERO, 34.0, 0.0, TAU, 32, Color(C_ATTACK, 0.9), 2.5)
+		if is_charged():               # 차지 완료: 몸이 살짝 빛나고 공격 사거리 레이저. (차지 중엔 떨림만)
+			draw_circle(Vector2.ZERO, 30.0, Color(C_ATTACK, 0.12 + 0.1 * pulse))
+			draw_circle(Vector2.ZERO, 19.0, Color(1.0, 0.85, 0.6, 0.12 + 0.12 * pulse))
 			_laser(aim, CHARGE_SPEED * CHARGE_DASH_TIME, C_ATTACK)
-		else:                          # 차지 중: 차오르는 링
-			draw_arc(Vector2.ZERO, 34.0, -PI * 0.5, -PI * 0.5 + TAU * clampf(charge_t / CHARGE_TIME, 0.0, 1.0), 32, Color(1.0, 0.8, 0.45, 0.9), 3.0)
+
+	# 차지 쿨다운: 플레이어 주변 링이 차오른다 (다 차면 다시 차지 가능)
+	if charge_cd > 0.0:
+		draw_arc(Vector2.ZERO, 36.0, 0.0, TAU, 32, Color(C_ATTACK, 0.18), 3.0)
+		draw_arc(Vector2.ZERO, 36.0, -PI * 0.5, -PI * 0.5 + TAU * (1.0 - charge_cd / CHARGE_COOLDOWN), 32, Color(C_ATTACK, 0.85), 3.0)
 
 	# 패리 자세
 	if parry_active:

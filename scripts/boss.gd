@@ -52,7 +52,12 @@ const ERUPT_GAP := 0.1               # 덩어리 사이 간격
 const GLOB_G := 600.0                # 용암 덩어리 중력
 const GLOB_OVERSHOOT := 150.0        # 플레이어 높이보다 이만큼 위까지 솟는다
 const SWING_L := 1180.0              # 팔 전체를 곧게 뻗어 휩쓰는 반경
-const SWING_WIND := 1.0              # 경고(휩쓸 부채꼴이 표시된다)
+const SWING_PREP := 0.9              # 준비 모션: 팔이 뒤로 젖혀졌다 목표 위치로 (앞부분에서만 플레이어를 따라간다)
+const SWING_PREP_TRACK := 0.6        # 준비 모션의 이 비율까지만 조준. 이후 위치 확정
+const SWING_SET := 0.3               # 팔 위치 고정 (예상 범위 윤곽만 표시)
+const SWING_WARN := 0.8              # 실제 공격 범위가 붉게 점멸
+const UPPER_W := 75.0                # 팔 판정 반폭: 위팔 / 아래팔 / 주먹은 FIST_R
+const FORE_W := 62.0
 const SWING_TIME := 0.65
 const SWING_HOLD := 0.25
 const SWING_SPAN := 2.6              # 휩쓰는 각도(라디안, 약 150도)
@@ -332,7 +337,7 @@ func elbow_of(a: int) -> Vector2:
 		var straight: Vector2 = SHOULDERS[a].lerp(fists[a], ELBOW_AT)   # 휩쓰는 동안은 곧은 팔 → 관절 위치를 예측 가능
 		var tt: float = atk["t"]
 		match atk["phase"]:
-			"wind":
+			"prep":
 				return bent.lerp(straight, minf(1.0, tt / 0.3))
 			"return":
 				return straight.lerp(bent, minf(1.0, tt / 0.4))
@@ -375,7 +380,7 @@ func hitboxes(ppos: Vector2) -> Array[Dictionary]:
 		var a: int = atk["arm"]
 		var sh: Vector2 = SHOULDERS[a]
 		var el := elbow_of(a)
-		var segs := [[sh, el, 75.0], [el, fists[a], 62.0], [fists[a], fists[a], FIST_R]]
+		var segs := [[sh, el, UPPER_W], [el, fists[a], FORE_W], [fists[a], fists[a], FIST_R]]
 		var best := fists[a]
 		var best_d := INF
 		for sg in segs:
@@ -533,7 +538,7 @@ func _choose(ppos: Vector2) -> void:
 		atk = {"kind": "beam", "phase": "wind", "t": 0.0, "th": BEAM_FROM, "th_prev": BEAM_FROM}
 		return
 	if arm >= 0 and (roll < 0.64 or not can_shoot):
-		atk = {"kind": "swing", "phase": "wind", "t": 0.0, "arm": arm}
+		atk = {"kind": "swing", "phase": "prep", "t": 0.0, "arm": arm, "from": fists[arm]}
 		_aim_swing(arm, ppos)
 	elif can_shoot:
 		if roll < 0.86:
@@ -633,6 +638,37 @@ func _aim_swing(a: int, ppos: Vector2) -> void:
 	atk["th"] = th0
 
 
+## 휩쓸기가 실제로 닿는 영역 (판정과 동일: 위팔/아래팔/주먹이 th0~th1 을 쓸고 지나가는 합집합)
+func swing_area(a: int, th0: float, th1: float) -> PackedVector2Array:
+	var s := 1.0 if a == 1 else -1.0
+	var sh: Vector2 = SHOULDERS[a]
+	var pieces: Array[PackedVector2Array] = []
+	var wedge := PackedVector2Array([sh])
+	for j in 25:
+		var th := lerpf(th0, th1, j / 24.0)
+		wedge.append(sh + Vector2(s * cos(th), sin(th)) * (SWING_L + FIST_R))
+	pieces.append(wedge)
+	for ti in 2:
+		var th := th0 if ti == 0 else th1
+		var d := Vector2(s * cos(th), sin(th))
+		var n := d.orthogonal()
+		var el := sh + d * SWING_L * ELBOW_AT
+		var fist := sh + d * SWING_L
+		pieces.append(PackedVector2Array([sh + n * UPPER_W, el + n * UPPER_W, el - n * UPPER_W, sh - n * UPPER_W]))
+		pieces.append(PackedVector2Array([el + n * FORE_W, fist + n * FORE_W, fist - n * FORE_W, el - n * FORE_W]))
+		var circ := PackedVector2Array()
+		for j in 20:
+			circ.append(fist + Vector2.from_angle(TAU * j / 20.0) * FIST_R)
+		pieces.append(circ)
+	var cur := pieces[0]
+	for k in range(1, pieces.size()):
+		for r in Geometry2D.merge_polygons(cur, pieces[k]):
+			if not Geometry2D.is_polygon_clockwise(r):
+				cur = r
+				break
+	return cur
+
+
 func _arm_fist(a: int, th: float) -> Vector2:
 	var s := 1.0 if a == 1 else -1.0
 	return SHOULDERS[a] + Vector2(s * cos(th), sin(th)) * SWING_L
@@ -646,13 +682,26 @@ func _step_swing(dt: float, ppos: Vector2) -> void:
 	var th0: float = atk["th0"]
 	var th1: float = atk["th1"]
 	match atk["phase"]:
-		"wind":
-			if tt < SWING_WIND * 0.6:
-				_aim_swing(a, ppos)                # 처음엔 플레이어를 따라 조준, 이후 고정
-			var wind_th := th0 - 0.35 * sin(minf(1.0, tt / SWING_WIND) * PI)   # 휘두르기 전 살짝 뒤로 젖힘
-			atk["th"] = wind_th
-			fists[a] = fists[a].lerp(_arm_fist(a, wind_th), minf(1.0, dt * 6.0))
-			if tt >= SWING_WIND:
+		"prep":                                    # 준비 모션: 뒤로 젖혔다가 목표 위치로. 앞부분에서만 플레이어를 따라간다
+			var k := minf(1.0, tt / SWING_PREP)
+			if k < SWING_PREP_TRACK:
+				_aim_swing(a, ppos)
+			th0 = atk["th0"]
+			var pre_th := th0 - 0.35 * sin(k * PI)
+			atk["th"] = pre_th
+			var from: Vector2 = atk.get("from", fists[a])
+			fists[a] = from.lerp(_arm_fist(a, pre_th), smoothstep(0.0, 0.4, k))
+			if tt >= SWING_PREP:
+				atk["phase"] = "set"; atk["t"] = 0.0
+		"set":                                     # 팔 고정 (이후 플레이어가 움직여도 경로는 바뀌지 않는다)
+			atk["th"] = th0
+			fists[a] = _arm_fist(a, th0)
+			if tt >= SWING_SET:
+				atk["phase"] = "warn"; atk["t"] = 0.0
+		"warn":                                    # 실제 공격 범위가 붉게 점멸
+			atk["th"] = th0
+			fists[a] = _arm_fist(a, th0)
+			if tt >= SWING_WARN:
 				atk["phase"] = "swing"; atk["t"] = 0.0
 				events.append({"type": "swing", "pos": fists[a]})
 		"swing":
@@ -1076,62 +1125,83 @@ func _draw_telegraphs() -> void:
 		for k in range(-2, 3):                       # 곧 날아올 5갈래 조준선
 			var d := Vector2.from_angle(float(atk["aim"]) + k * 0.28)
 			draw_line(org, org + d * 900.0, Color(C_WARN, 0.05 + 0.22 * gl), 2.0)
-	if atk.get("kind", "") == "swing" and atk["phase"] == "wind":
-		# 휩쓸 부채꼴 경고: 이 안에 있으면 팔에 맞는다
+	if atk.get("kind", "") == "swing" and ["prep", "set", "warn"].has(atk["phase"]):
+		# 실제 판정과 같은 범위: 준비 중엔 옅은 윤곽, 고정되면 또렷한 윤곽, 경고에서는 붉게 점멸
 		var a: int = atk["arm"]
 		var s := 1.0 if a == 1 else -1.0
 		var sh: Vector2 = SHOULDERS[a]
-		var k := clampf(float(atk["t"]) / SWING_WIND, 0.0, 1.0)
-		var locked := float(atk["t"]) >= SWING_WIND * 0.6
+		var ph: String = atk["phase"]
 		var th0: float = atk["th0"]
 		var th1: float = atk["th1"]
-		var pts := PackedVector2Array([sh])
-		for j in 25:
-			var th := lerpf(th0, th1, j / 24.0)
-			pts.append(sh + Vector2(s * cos(th), sin(th)) * SWING_L)
-		# 시작 쪽이 진하고 끝으로 갈수록 옅은 부채꼴 → 어디서부터 쓸어오는지 보인다
-		for j in 24:
-			var fa := lerpf(0.26, 0.04, j / 23.0) * (0.35 + 0.65 * k)
-			draw_colored_polygon(PackedVector2Array([sh, pts[j + 1], pts[j + 2]]), Color(C_WARN, fa))
-		var c := Color(1, 1, 1, 0.9) if locked else Color(C_WARN, 0.35 + 0.5 * k)
-		draw_line(sh, pts[1], Color(1.0, 0.85, 0.55, 0.25 + 0.3 * k), 16.0)   # 시작선: 굵고 밝게
-		draw_line(sh, pts[1], Color(1.0, 0.95, 0.8, 0.95) if locked else Color(1.0, 0.6, 0.35, 0.6 + 0.4 * k), 7.0)
-		draw_line(sh, pts[pts.size() - 1], Color(c, 0.45), 2.0)
-		draw_polyline(pts.slice(1), Color(c, 0.7), 3.0)
-		for f in [0.3, 0.5, 0.7]:                # 휩쓰는 방향을 가리키는 화살표
-			var th2: float = lerpf(th0, th1, f)
-			var radial := Vector2(s * cos(th2), sin(th2))
-			var tangent := Vector2(-s * sin(th2), cos(th2))
-			var at := sh + radial * SWING_L * 0.8
-			draw_colored_polygon(PackedVector2Array([at + tangent * 40.0, at - tangent * 12.0 + radial * 26.0, at - tangent * 12.0 - radial * 26.0]), Color(1, 0.9, 0.7, 0.3 + 0.45 * k))
+		var area := swing_area(a, th0, th1)
+		var outline := area.duplicate()
+		outline.append(area[0])
+		if ph == "warn":
+			var blink := 0.5 + 0.5 * sin(t * 26.0)
+			var kw := clampf(float(atk["t"]) / SWING_WARN, 0.0, 1.0)
+			draw_colored_polygon(area, Color(C_WARN, (0.14 + 0.3 * blink) * (0.6 + 0.4 * kw)))
+			draw_polyline(outline, Color(1.0, 0.5, 0.4, 0.45 + 0.5 * blink), 4.0)
+		elif ph == "set":
+			draw_colored_polygon(area, Color(C_WARN, 0.06))
+			draw_polyline(outline, Color(1.0, 0.85, 0.75, 0.75), 3.0)
+		else:
+			draw_polyline(outline, Color(C_WARN, 0.2 + 0.2 * float(atk["t"]) / SWING_PREP), 2.0)
+		if ph != "prep":
+			for f in [0.3, 0.5, 0.7]:                # 휩쓰는 방향을 가리키는 화살표
+				var th2: float = lerpf(th0, th1, f)
+				var radial := Vector2(s * cos(th2), sin(th2))
+				var tangent := Vector2(-s * sin(th2), cos(th2))
+				var at := sh + radial * SWING_L * 0.8
+				draw_colored_polygon(PackedVector2Array([at + tangent * 40.0, at - tangent * 12.0 + radial * 26.0, at - tangent * 12.0 - radial * 26.0]), Color(1, 0.9, 0.7, 0.6))
+
+
+## 레이저가 지나갈 부채꼴을 각도 구간별로 칠한다 (a0 → a1 로 옅어짐). 벽·바닥까지 이어져 머리가 안 보여도 보인다
+func _beam_fan(from_th: float, to_th: float, a0: float, a1: float, n: int) -> void:
+	var prev := beam_end(from_th)
+	for j in range(1, n + 1):
+		var cur := beam_end(lerpf(from_th, to_th, j / float(n)))
+		draw_colored_polygon(PackedVector2Array([HEAD_POS, prev, cur]), Color(C_UNPARRY, lerpf(a0, a1, (j - 0.5) / n)))
+		prev = cur
 
 
 ## 눈 레이저 (패리 불가 = 검붉은 보라)
 func _draw_beam() -> void:
-	if atk["phase"] == "wind":
-		# 경고: 시작선이 점점 진해지고, 긋는 방향(왼→아래→오른)을 화살표로 보여준다
-		var k := clampf(float(atk["t"]) / BEAM_WIND, 0.0, 1.0)
-		var blink := 0.6 + 0.4 * sin(t * 30.0)
+	var wind: bool = atk["phase"] == "wind"
+	var th: float = atk["th"]
+	var kk := clampf(float(atk["t"]) / BEAM_WIND, 0.0, 1.0)
+	var blink := 0.65 + 0.35 * sin(t * 24.0)
+	# 지나갈 부채꼴 (남은 구간). 가까운 쪽이 진하다
+	if wind:
+		_beam_fan(BEAM_FROM, BEAM_TO, (0.18 + 0.2 * kk) * blink, 0.04, 48)
+	else:
+		_beam_fan(th, BEAM_TO, 0.3, 0.04, maxi(4, int(48.0 * (th - BEAM_TO) / (BEAM_FROM - BEAM_TO))))
+	# 벽·바닥을 따라가는 도착 경로 띠 + 일정 간격의 눈금선
+	var path := PackedVector2Array()
+	var from_th := BEAM_FROM if wind else th
+	for j in 41:
+		path.append(beam_end(lerpf(from_th, BEAM_TO, j / 40.0)))
+	draw_polyline(path, Color(C_UNPARRY_CORE, (0.18 + 0.3 * kk) if wind else 0.5), 10.0)
+	for j in 13:
+		var tth := lerpf(BEAM_FROM, BEAM_TO, j / 12.0)
+		if wind or tth < th:
+			draw_line(HEAD_POS, beam_end(tth), Color(C_UNPARRY, 0.14 + 0.1 * kk), 3.0)
+	if wind:
+		# 시작선 + 긋는 방향 화살표
 		for e in EYES:
-			draw_line(e, beam_end(BEAM_FROM), Color(C_UNPARRY, (0.15 + 0.5 * k) * blink), 2.0 + 6.0 * k)
+			draw_line(e, beam_end(BEAM_FROM), Color(C_UNPARRY_CORE, (0.3 + 0.6 * kk) * blink), 3.0 + 7.0 * kk)
 		for f in [0.2, 0.4, 0.6, 0.8]:
-			var th: float = lerpf(BEAM_FROM, BEAM_TO, f)
-			var radial := Vector2.from_angle(th)
-			var tangent := Vector2.from_angle(th - PI * 0.5)
+			var ath: float = lerpf(BEAM_FROM, BEAM_TO, f)
+			var radial := Vector2.from_angle(ath)
+			var tangent := Vector2.from_angle(ath - PI * 0.5)
 			var at := HEAD_POS + radial * 700.0
-			draw_colored_polygon(PackedVector2Array([at + tangent * 40.0, at - tangent * 12.0 + radial * 24.0, at - tangent * 12.0 - radial * 24.0]), Color(C_UNPARRY, 0.15 + 0.4 * k))
+			draw_colored_polygon(PackedVector2Array([at + tangent * 46.0, at - tangent * 14.0 + radial * 28.0, at - tangent * 14.0 - radial * 28.0]), Color(C_UNPARRY_CORE, 0.25 + 0.5 * kk))
 		return
-	var end := beam_end(float(atk["th"]))
+	var end := beam_end(th)
 	var fl := randf_range(0.9, 1.1)
 	for e in EYES:
 		draw_line(e, end, Color(C_UNPARRY, 0.22), 70.0 * fl)
 		draw_line(e, end, Color(C_UNPARRY, 0.75), 30.0 * fl)
 		draw_line(e, end, Color(C_UNPARRY_CORE, 0.95), 9.0)
-	# 지나간 자리의 잔광
-	var trail_th: float = minf(BEAM_FROM, float(atk["th"]) + 0.25)
-	for j in 5:
-		var th := lerpf(float(atk["th"]), trail_th, (j + 1) / 5.0)
-		draw_line(HEAD_POS, beam_end(th), Color(C_UNPARRY, 0.08 * (1.0 - j / 5.0)), 24.0)
 	draw_circle(end, 60.0 * fl, Color(C_UNPARRY, 0.35))
 	draw_circle(end, 26.0, Color(C_UNPARRY_CORE, 0.9))
 

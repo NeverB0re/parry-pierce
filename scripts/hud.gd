@@ -81,14 +81,10 @@ func _draw() -> void:
 
 		else:
 			draw_arc(c, 8.0, 0.0, TAU, 20, Color(0.7, 0.7, 0.75, 0.5), 2.0)
-	# 차지 쿨다운: 다시 차지할 수 있을 때까지 주황 링이 차오른다
-	var cc := Vector2(86 + Player.GAUGE_MAX * 24 + 10, 94)
-	if pl.charge_cd > 0.0:
-		draw_arc(cc, 7.0, -PI * 0.5, -PI * 0.5 + TAU * (1.0 - pl.charge_cd / Player.CHARGE_COOLDOWN), 20, Color(1.0, 0.55, 0.2, 0.6), 2.5)
-	else:
-		draw_circle(cc, 5.0, Color(1.0, 0.55, 0.2, 0.9))
 
 	_draw_target_marker(s, boss)
+	if not boss.dead and boss.atk.get("kind", "") == "beam" and s.x >= 300.0:   # 레이저 중 머리가 화면 밖이면 방향 표시
+		_edge_arrow(s, main.get_viewport().get_canvas_transform() * boss.HEAD_POS, Color(0.85, 0.2, 0.55))
 
 	# 상태 정보
 	var left: String = ("부위 %d" % boss.parts_left()) if boss.phase == 1 else ("갑옷 %d" % boss.plates_left())
@@ -122,9 +118,13 @@ func _draw_target_marker(s: Vector2, boss) -> void:
 	if boss.dead or s.x < 300.0 or s.y < 300.0:
 		return
 	var sp: Vector2 = main.get_viewport().get_canvas_transform() * boss.target_pos(main.player.position)
+	_edge_arrow(s, sp, Color(1.0, 0.5, 0.25))
+
+
+## 화면 밖의 지점 sp 를 가리키는 가장자리 화살표
+func _edge_arrow(s: Vector2, sp: Vector2, col: Color) -> void:
 	var m := 36.0
-	var inside := Rect2(Vector2.ZERO, s)   # 심장이 화면 밖일 때만 표시
-	if inside.has_point(sp):
+	if Rect2(Vector2.ZERO, s).has_point(sp):
 		return
 	var center := s * 0.5
 	var d := sp - center
@@ -134,7 +134,7 @@ func _draw_target_marker(s: Vector2, boss) -> void:
 	var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.008)
 	var a := dir * 14.0
 	var o := dir.orthogonal() * (9.0 + 1.0 * pulse)
-	draw_colored_polygon(PackedVector2Array([p + a, p - a * 0.6 + o, p - a * 0.2, p - a * 0.6 - o]), Color(1.0, 0.5, 0.25, 0.75 + 0.25 * pulse))
+	draw_colored_polygon(PackedVector2Array([p + a, p - a * 0.6 + o, p - a * 0.2, p - a * 0.6 - o]), Color(col, 0.75 + 0.25 * pulse))
 
 
 func _draw_vignette(s: Vector2) -> void:
