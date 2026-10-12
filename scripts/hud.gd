@@ -71,9 +71,16 @@ func _text(pos: Vector2, s: String, size: int, c: Color, align := HORIZONTAL_ALI
 	tl.draw(get_canvas_item(), top, c)
 
 
+const UI_SCALE_TOUCH := 1.7           # 작은 폰 화면에서 좌상단 UI가 PC와 비슷한 크기로 보이도록
+var ui_k := 1.0                       # 현재 UI 배율 (그리기 좌표는 논리 좌표)
+
+
 func _draw() -> void:
-	var s := get_viewport_rect().size
-	_draw_vignette(s)
+	var real := get_viewport_rect().size
+	_draw_vignette(real)
+	ui_k = UI_SCALE_TOUCH if main.touch_ui != null else 1.0
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2(ui_k, ui_k))
+	var s := real / ui_k
 	var pl = main.player
 	var boss = main.boss
 
@@ -84,20 +91,9 @@ func _draw() -> void:
 		var hz := Color(1.0, 0.25, 0.05, 0.0)
 		draw_polygon(PackedVector2Array([Vector2(0, s.y * 0.45), Vector2(s.x, s.y * 0.45), s, Vector2(0, s.y)]), PackedColorArray([hz, hz, hc, hc]))
 
-	# 목숨 (가면)
+	# 목숨: 플레이어와 같은 로켓. 잃은 목숨은 박살난 회색 잔해
 	for i in main.LIVES:
-		var o := Vector2(46 + i * 46, 46)
-		var mask := PackedVector2Array([o + Vector2(-14, -10), o + Vector2(-18, -26), o + Vector2(-6, -16), o + Vector2(0, -18),
-			o + Vector2(6, -16), o + Vector2(18, -26), o + Vector2(14, -10), o + Vector2(14, 8), o + Vector2(6, 18),
-			o + Vector2(-6, 18), o + Vector2(-14, 8)])
-		if i < main.lives:
-			draw_colored_polygon(mask, Color(0.93, 0.92, 0.88))
-			draw_circle(o + Vector2(-6, 0), 4.0, Color(0.05, 0.05, 0.08))
-			draw_circle(o + Vector2(6, 0), 4.0, Color(0.05, 0.05, 0.08))
-		else:
-			var closed := mask.duplicate()
-			closed.append(mask[0])
-			draw_polyline(closed, Color(0.6, 0.6, 0.65, 0.5), 2.0)
+		_draw_life(Vector2(46 + i * 46, 50), i < main.lives)
 
 	# 추진 게이지
 	_text(Vector2(28, 100), "추진", 16, Color(0.8, 0.82, 0.86, 0.8))
@@ -114,7 +110,7 @@ func _draw() -> void:
 
 	_draw_target_marker(s, boss)
 	if not boss.dead and boss.atk.get("kind", "") == "beam" and s.x >= 300.0:   # 레이저 중 머리가 화면 밖이면 방향 표시
-		_edge_arrow(s, main.get_viewport().get_canvas_transform() * boss.HEAD_POS, Color(0.85, 0.2, 0.55))
+		_edge_arrow(s, (main.get_viewport().get_canvas_transform() * boss.HEAD_POS) / ui_k, Color(0.85, 0.2, 0.55))
 
 	# 상태 정보
 	var left: String = ("부위 %d" % boss.parts_left()) if boss.phase == 1 else ("갑옷 %d" % boss.plates_left())
@@ -160,7 +156,7 @@ func _draw() -> void:
 func _draw_target_marker(s: Vector2, boss) -> void:
 	if boss.dead or s.x < 300.0 or s.y < 300.0:
 		return
-	var sp: Vector2 = main.get_viewport().get_canvas_transform() * boss.target_pos(main.player.position)
+	var sp: Vector2 = (main.get_viewport().get_canvas_transform() * boss.target_pos(main.player.position)) / ui_k
 	_edge_arrow(s, sp, Color(1.0, 0.5, 0.25))
 
 
@@ -178,6 +174,50 @@ func _edge_arrow(s: Vector2, sp: Vector2, col: Color) -> void:
 	var a := dir * 14.0
 	var o := dir.orthogonal() * (9.0 + 1.0 * pulse)
 	draw_colored_polygon(PackedVector2Array([p + a, p - a * 0.6 + o, p - a * 0.2, p - a * 0.6 - o]), Color(col, 0.75 + 0.25 * pulse))
+
+
+## 목숨 아이콘: 플레이어 로켓(위를 보게). alive=false 면 쪼개져 흩어진 회색 비활성 잔해
+func _rk(p: Vector2, o: Vector2, off := Vector2.ZERO, rot := 0.0, pivot := Vector2.ZERO) -> Vector2:
+	var q := pivot + (p - pivot).rotated(rot) + off
+	return o + Vector2(q.y, -q.x) * 0.62
+
+
+func _rk_poly(pts: Array, o: Vector2, col: Color, off := Vector2.ZERO, rot := 0.0, pivot := Vector2.ZERO, edge := Color(0, 0, 0, 0)) -> void:
+	var out := PackedVector2Array()
+	for p in pts:
+		out.append(_rk(p as Vector2, o, off, rot, pivot))
+	draw_colored_polygon(out, col)
+	if edge.a > 0.0:
+		var closed := out.duplicate()
+		closed.append(out[0])
+		draw_polyline(closed, edge, 1.5)
+
+
+func _draw_life(o: Vector2, alive: bool) -> void:
+	var body := [Vector2(30, 0), Vector2(16, -7), Vector2(-16, -7), Vector2(-21, -5), Vector2(-21, 5), Vector2(-16, 7), Vector2(16, 7)]
+	var nose := [Vector2(30, 0), Vector2(16, -7), Vector2(16, 7)]
+	var fin_a := [Vector2(-8, -7), Vector2(-25, -16), Vector2(-21, -7)]
+	var fin_b := [Vector2(-8, 7), Vector2(-25, 16), Vector2(-21, 7)]
+	if alive:
+		var trim := Color(0.45, 0.8, 1.0)
+		_rk_poly(fin_a, o, trim * 0.8)
+		_rk_poly(fin_b, o, trim * 0.8)
+		_rk_poly(body, o, Color(0.93, 0.94, 0.96))
+		_rk_poly(nose, o, trim)
+		draw_circle(_rk(Vector2(4, 0), o), 2.4, Color(0.08, 0.1, 0.16))
+		return
+	# 박살난 로켓: 코가 꺾여 떨어지고, 몸통은 들쭉날쭉하게 갈라지고, 날개 한쪽이 떨어져 나간다
+	var g1 := Color(0.36, 0.37, 0.41, 0.85)
+	var g2 := Color(0.27, 0.28, 0.32, 0.85)
+	var ed := Color(0.12, 0.12, 0.15, 0.9)
+	_rk_poly([Vector2(-8, -7), Vector2(-25, -16), Vector2(-21, -7)], o, g2, Vector2(-6, -8), -0.5, Vector2(-18, -10), ed)
+	_rk_poly([Vector2(-8, 7), Vector2(-15, 12), Vector2(-12, 7)], o, g2, Vector2.ZERO, 0.0, Vector2.ZERO, ed)
+	_rk_poly([Vector2(-21, -5), Vector2(-16, -7), Vector2(-1, -7), Vector2(-3, -3), Vector2(-8, 0), Vector2(-4, 4), Vector2(-9, 7), Vector2(-16, 7), Vector2(-21, 5)],
+		o, g1, Vector2(-3, 0), -0.12, Vector2(-10, 0), ed)
+	_rk_poly([Vector2(16, -7), Vector2(4, -7), Vector2(7, -3), Vector2(2, 1), Vector2(6, 4), Vector2(3, 7), Vector2(16, 7)], o, g2, Vector2(3, 3), 0.18, Vector2(10, 0), ed)
+	_rk_poly(nose, o, g1, Vector2(9, -6), 0.7, Vector2(20, 0), ed)
+	for d in [Vector2(-2, -12), Vector2(8, 13), Vector2(24, 10), Vector2(-14, 12)]:
+		draw_circle(_rk(d, o), 1.6, Color(0.4, 0.41, 0.45, 0.8))
 
 
 func _draw_vignette(s: Vector2) -> void:

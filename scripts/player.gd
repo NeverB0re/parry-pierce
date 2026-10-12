@@ -36,26 +36,21 @@ const PARRY_HOLD_MAX := 0.28     # 꾹 누르고 있을 때 패리 판정 최대
 const PARRY_COOLDOWN := 0.55     # 끝까지 버틴 뒤 재입력 대기 (남발 방지)
 const PARRY_RELEASE_CD := 0.25   # 중간에 뗐을 때 재입력 대기
 const PARRY_REACH := 30.0        # 패리 판정은 몸보다 이만큼 넓다
-const AIM_TIME := 0.84           # 패리 성공 후 방향을 정하는 슬로우 시간(실시간 초)
-const AIM_TIME_PERFECT := 1.2
+const AIM_TIME := 1.4            # 패리 성공 후 방향을 정하는 슬로우 시간(실시간 초) = 발사 유예
+const AIM_TIME_PERFECT := 1.9
 const PARRY_DASH_SPEED := 3600.0 # 패리 돌진: 주력 공격. 월드가 느려져도 플레이어는 실시간
 const PARRY_DASH_SPEED_PERFECT := 4000.0
 const PARRY_DASH_TIME := 0.22
 const POWER_DAMAGE := 3
 const POWER_RADIUS := 8.0        # 패리 돌진은 타격 범위도 넓다
 const POWER_GRACE := 0.7
-# 타격 직후 BOUNCE_BOOST_TIME 동안 조준 방향에 따라 세 구간 중 하나로 튕겨나간다 (애매한 구간 없음)
-const BOUNCE_BOOST_TIME := 0.12  # 이 시간 동안 조준을 바꿀 수 있다
-const BOUNCE_BRAKE_SPEED := 1000.0   # ① 역추진: 맞은 표적 쪽을 (넓게) 가리키면 반사 방향 그대로 짧게
-const BOUNCE_TURN_SPEED := 1350.0    # ② 방향 틀기: 그 밖의 방향이면 가리킨 쪽으로 튕겨난다
-const BOUNCE_FAST_SPEED := 1900.0    # ③ 고속: 반사 방향과 비슷한 쪽을 가리키면 그쪽으로 빠르게
-const BOUNCE_BRAKE_COS := 0.57       # 들어온 방향에서 ±55도 이내를 가리키면 역추진
-const BOUNCE_FAST_COS := 0.64        # 반사 방향에서 ±50도 이내를 가리키면 고속
+# 직격 후: 들어온 방향(좌/우)을 유지하며 수평 기준 약 50도 위로 튕기고, 마우스 좌우로 약하게 조종한다
+const BOUNCE_SPEED := 1350.0     # 튕겨나는 속도 (패리 돌진은 ×1.15)
+const BOUNCE_ANGLE := 0.87       # 수평 기준 약 50도 위로
+const BOUNCE_STEER := 300.0      # 튕길 때 마우스 좌우 방향으로 더하는 가로 속도
 const ASSIST_CONE := 0.42            # 에임 어시스트: 표적 가장자리에서 이 각도(약 24도) 안이면 표적 중심으로 달라붙는다
 const ASSIST_CONE_TOUCH := 0.70      # 터치(스틱은 민감하므로 더 넓게, 약 40도)
 const ASSIST_SLACK := 60.0           # 사거리 여유
-const BOUNCE_UP_MIN := 0.35      # 표적 아래쪽 200도(수평보다 10도 위까지)에서 칠 때의 최소 상향 성분(정규화)
-const BOUNCE_UP_ARC := 0.1736    # sin(10도): 맞은 면의 법선이 이보다 아래쪽이면 상향 보정
 const BOUNCE_THRUST := 2.0       # 튕겨나는 동안 좌우 추진 배율
 const STRIKE_SHIELD := 0.9       # 직격 후 튕겨나는 동안 무적 시간
 const STUN_TIME := 0.9           # 피격(공격/표적 접촉) → 조작 불가
@@ -95,10 +90,6 @@ var evade_rewarded := false      # 이번 회피에서 이미 보상 받음 (퍼
 var assist_lock := false          # 에임 어시스트가 표적에 붙어 있음
 var assist_pos := Vector2.ZERO   # 붙은 표적 위치
 var assist_r := 0.0
-var boost_t := 0.0               # 타격 직후 방향 선택 시간이 남은 시간
-var bounce_in := Vector2.ZERO    # 맞을 때의 진행 방향
-var bounce_out := Vector2.ZERO   # 반사 방향
-var bounce_k := 1.0
 var dash_held := false           # 좌클릭을 누르고 있는 중 (스턴 중 선입력 판단용)
 var buffed := false              # 퍼펙트 회피 버프: 다음 차지 공격 피해 3배, 차지 시간 절반
 var queued_press := false        # 회피 도중 누른 좌클릭: 회피 무적이 끝나면 차지 시작
@@ -143,7 +134,6 @@ func reset(pos: Vector2, platform := false) -> void:
 	evade_window = 0.0
 	regen_t = 0.0
 	evade_rewarded = false
-	boost_t = 0.0
 	dash_held = false
 	buffed = false
 	queued_press = false
@@ -249,7 +239,6 @@ func _dash(kind: String) -> void:
 	dash_cd = dash_total + DASH_COOLDOWN
 	evade_window = PERFECT_EVADE_WINDOW if kind == "evade" else 0.0
 	evade_rewarded = false
-	boost_t = 0.0
 	vel = aim * spd
 	bouncing = false
 	main.on_dash(position, aim, kind)
@@ -286,7 +275,6 @@ func parry_reach() -> float:
 func on_parry_success(perfect: bool) -> void:
 	parry_active = false
 	parry_cd = 0.0
-	boost_t = 0.0
 	dash_t = 0.0
 	_end_dash()
 	on_platform = false
@@ -336,7 +324,6 @@ func try_evade_reward() -> void:
 ## 피격: 잠시 조작 불가(스턴), 살짝 솟구친 뒤 추락
 func on_hurt(push: Vector2) -> void:
 	cancel_charge()
-	boost_t = 0.0
 	buffed = false
 	queued_press = dash_held                       # 누르고 있었다면 스턴이 끝나자마자 차지 시작
 	evade_window = 0.0
@@ -373,9 +360,6 @@ func step(dt: float) -> void:
 	dash_cd = maxf(0.0, dash_cd - dt)
 	charge_cd = maxf(0.0, charge_cd - dt)
 	evade_window = maxf(0.0, evade_window - dt)
-	if boost_t > 0.0:                          # 타격 직후: 지금 조준한 방향에 맞는 구간 속도로 정해진다
-		boost_t = maxf(0.0, boost_t - dt)
-		vel = _bounce_vel()
 	if gauge > 0:
 		regen_t = 0.0
 	elif not charging and dash_t <= 0.0:       # 바닥나면 1칸까지만 천천히 되살아난다
@@ -561,30 +545,10 @@ func _on_strike(hit: Dictionary) -> void:
 	parry_cd = 0.0                               # 튕겨나오는 즉시 패리·회피 등 모든 조작이 가능
 	dash_cd = 0.0
 	parry_queue = 0.0
-	# 입사각 = 반사각: 맞은 표면의 법선으로 반사. 아래에서 위로 칠 때만 상향 보정(반사하면 아래로 가므로 위로 뒤집는다)
-	var n: Vector2 = boss.hit_normal(hit, position)
-	if dir.dot(n) > 0.0:
-		n = -n
-	var out := dir.bounce(n)
-	if n.y > -BOUNCE_UP_ARC:                      # 표적 아래쪽 200도에서 친 경우: 상향 성분을 준다 (위 160도는 순수 반사)
-		out.y = minf(-absf(out.y), -BOUNCE_UP_MIN)
-		if absf(out.x) < 0.25:                    # 거의 수직이면 마우스 쪽으로 살짝
-			out.x += (signf(aim.x) if absf(aim.x) > 0.1 else (1.0 if randf() < 0.5 else -1.0)) * 0.25
-	out = out.normalized()
-	bounce_in = dir
-	bounce_out = out
-	bounce_k = 1.15 if power else 1.0
-	boost_t = BOUNCE_BOOST_TIME
-	vel = _bounce_vel()
-
-
-## 튕김 속도: 조준 방향에 따라 ① 역추진 ② 방향 틀기 ③ 고속 중 하나
-func _bounce_vel() -> Vector2:
-	if aim.dot(bounce_in) > BOUNCE_BRAKE_COS:         # 맞은 표적 쪽(들어온 방향)을 넓게 가리킴
-		return bounce_out * BOUNCE_BRAKE_SPEED * bounce_k
-	if aim.dot(bounce_out) > BOUNCE_FAST_COS:         # 반사 방향과 비슷한 쪽
-		return aim * BOUNCE_FAST_SPEED * bounce_k
-	return aim * BOUNCE_TURN_SPEED * bounce_k
+	# 들어온 방향(좌/우)을 유지하며 약 50도로 뜬다. 거의 수직으로 들어왔으면 마우스 쪽으로
+	var sx := signf(dir.x) if absf(dir.x) > 0.2 else (signf(aim.x) if absf(aim.x) > 0.1 else (1.0 if randf() < 0.5 else -1.0))
+	var k := 1.15 if power else 1.0
+	vel = Vector2(sx * cos(BOUNCE_ANGLE), -sin(BOUNCE_ANGLE)) * BOUNCE_SPEED * k + Vector2(aim.x * BOUNCE_STEER, 0.0)
 
 
 ## 에임 어시스트: 사거리 안에서 조준선이 표적 가장자리 일정 각도(PC 24도, 터치 40도) 이내면 표적 중심으로 달라붙는다.

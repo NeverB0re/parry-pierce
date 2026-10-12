@@ -14,7 +14,7 @@ const Quality := preload("res://scripts/quality.gd")
 
 const SPAWN := Vector2(650, -52)   # 시작 발판 위 (Player.PLAT_CENTER - 반지름)
 const CAM_ZOOM := 0.72             # 기본 줌아웃 (튕겨 올라가도 표적이 시야에 남도록)
-const MOBILE_ZOOM := 0.8            # 모바일은 화면이 작으므로 더 넓게 보이도록 물러난다
+const MOBILE_AREA := 1.2             # 모바일 시야 면적 = PC 화면의 이 배수 (폰 화면 비율에 맞춰 줌을 계산)
 const AIM_ZOOM := 0.82             # 방향 지정 중엔 물러나 표적을 넓게 본다
 const CHARGE_ZOOM := 0.85            # 차징 중에만 물러난다
 const AIM_SLOW := 0.08             # 방향 지정 중 월드 시간 배율
@@ -59,6 +59,7 @@ func _ready() -> void:
 	Quality.low = touch_mode                      # 모바일: 연출 일부를 줄여 프레임을 지킨다
 	if touch_mode:
 		Engine.max_fps = 60
+		DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_LANDSCAPE)   # 가로 화면 고정
 	for a in OS.get_cmdline_user_args():
 		if a == "--touch":                        # 데스크톱에서 터치 UI 시험
 			touch_mode = true
@@ -112,6 +113,7 @@ func _ready() -> void:
 	sfx = Sfx.new()
 	add_child(sfx)
 	menu = PauseMenu.new()
+	menu.ui_scale = 1.7 if touch_mode else 1.0
 	add_child(menu)
 	menu.restart_requested.connect(reset_run)
 	if touch_mode:
@@ -267,6 +269,14 @@ func _update_platform(dt: float) -> void:
 	lava.plat_crack = clampf(plat_sink * 3.0, 0.0, 1.0) if plat_dir > 0.0 else 0.0
 
 
+## 모바일 줌 보정: 폰은 화면비가 가로로 넓어 시야가 PC보다 넓게 잡히므로, 총 시야 면적이 PC의 MOBILE_AREA 배가 되도록 맞춘다
+func _mobile_view_k() -> float:
+	if touch_ui == null:
+		return 1.0
+	var vp := get_viewport_rect().size
+	return sqrt(vp.x * vp.y / (1280.0 * 720.0 * MOBILE_AREA))
+
+
 func _update_camera(delta: float) -> void:
 	var v: Vector2 = player.vel
 	var target: Vector2 = player.position + Vector2(v.x * 0.05, -80.0 + clampf(v.y * 0.1, -100.0, 100.0))
@@ -277,7 +287,7 @@ func _update_camera(delta: float) -> void:
 	cam.position = cam.position.lerp(target, 1.0 - exp(-6.0 * delta))
 	cam.offset = Vector2(randf_range(-1, 1), randf_range(-1, 1)) * shake
 	shake = move_toward(shake, 0.0, 60.0 * delta)
-	var z := CAM_ZOOM * mode * (MOBILE_ZOOM if touch_ui != null else 1.0)
+	var z := CAM_ZOOM * mode * _mobile_view_k()
 	cam.zoom = cam.zoom.lerp(Vector2(z, z), 1.0 - exp(-8.0 * delta))
 	bg.cam = cam.get_screen_center_position()
 

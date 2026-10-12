@@ -4,6 +4,7 @@ extends CanvasLayer
 signal restart_requested
 
 var font: SystemFont
+var ui_scale := 1.0                  # 터치 기기에서는 키운다
 
 
 func _ready() -> void:
@@ -29,7 +30,7 @@ func _ready() -> void:
 	title.text = "일시정지"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_override("font", font)
-	title.add_theme_font_size_override("font_size", 44)
+	title.add_theme_font_size_override("font_size", int(44 * ui_scale))
 	box.add_child(title)
 
 	_button(box, "계속하기", resume)
@@ -42,9 +43,9 @@ func _ready() -> void:
 func _button(parent: Control, text: String, cb: Callable) -> void:
 	var b := Button.new()
 	b.text = text
-	b.custom_minimum_size = Vector2(260, 54)
+	b.custom_minimum_size = Vector2(260, 54) * ui_scale
 	b.add_theme_font_override("font", font)
-	b.add_theme_font_size_override("font_size", 24)
+	b.add_theme_font_size_override("font_size", int(24 * ui_scale))
 	b.pressed.connect(cb)
 	parent.add_child(b)
 

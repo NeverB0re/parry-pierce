@@ -324,20 +324,6 @@ func hit_center(hit: Dictionary) -> Vector2:
 	return cell_rect(idx % GRID_N, idx / GRID_N).get_center()
 
 
-## 타격 지점의 표면 법선 (플레이어가 튕겨나갈 반사 기준). 부위는 원, 갑옷은 칸 사각형
-func hit_normal(hit: Dictionary, p: Vector2) -> Vector2:
-	match hit["kind"]:
-		"part":
-			var d := p - part_pos(int(hit["idx"]))
-			return d.normalized() if d.length() > 0.001 else Vector2.UP
-		"plate":
-			var idx: int = hit["idx"]
-			var h := _rect_hit(p, 1000.0, cell_rect(idx % GRID_N, idx / GRID_N).grow(-2.0))
-			if not h.is_empty():
-				return h["n"]
-	return Vector2.UP
-
-
 static func _rect_hit(p: Vector2, r: float, rc: Rect2) -> Dictionary:
 	var q := Vector2(clampf(p.x, rc.position.x, rc.end.x), clampf(p.y, rc.position.y, rc.end.y))
 	var d := p - q
