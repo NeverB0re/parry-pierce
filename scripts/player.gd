@@ -44,9 +44,15 @@ const PARRY_DASH_TIME := 0.22
 const POWER_DAMAGE := 3
 const POWER_RADIUS := 8.0        # 패리 돌진은 타격 범위도 넓다
 const POWER_GRACE := 0.7
-const BOUNCE_SPEED := 1650.0     # 직격 후 반사 속도 (타격감: 빠르게 튕겨나간다). 입사각 = 반사각
-const BOUNCE_BOOST := 600.0      # 타격 직후 마우스 방향으로 따로 얹는 추진력. 표적을 계속 가리키면 반대로 작용해 덜 튕기고(≈1050), 다른 곳을 가리키면 그쪽으로 휜다
-const BOUNCE_BOOST_TIME := 0.12  # 추진력이 가해지는 시간 (이동하는 동안 마우스를 바꿀 수 있다)
+# 타격 직후 BOUNCE_BOOST_TIME 동안 조준 방향에 따라 세 구간 중 하나로 튕겨나간다 (애매한 구간 없음)
+const BOUNCE_BOOST_TIME := 0.12  # 이 시간 동안 조준을 바꿀 수 있다
+const BOUNCE_BRAKE_SPEED := 1000.0   # ① 역추진: 맞은 표적 쪽을 (넓게) 가리키면 반사 방향 그대로 짧게
+const BOUNCE_TURN_SPEED := 1350.0    # ② 방향 틀기: 그 밖의 방향이면 가리킨 쪽으로 튕겨난다
+const BOUNCE_FAST_SPEED := 1900.0    # ③ 고속: 반사 방향과 비슷한 쪽을 가리키면 그쪽으로 빠르게
+const BOUNCE_BRAKE_COS := 0.57       # 들어온 방향에서 ±55도 이내를 가리키면 역추진
+const BOUNCE_FAST_COS := 0.64        # 반사 방향에서 ±50도 이내를 가리키면 고속
+const ASSIST_CONE := 0.25            # 에임 어시스트: 표적 가장자리에서 이 각도(약 14도) 안이면 끌어당긴다
+const ASSIST_PULL := 0.65            # 어긋난 각도 중 이만큼을 끌어당긴다 (살짝)
 const BOUNCE_UP_MIN := 0.35      # 표적 아래쪽 200도(수평보다 10도 위까지)에서 칠 때의 최소 상향 성분(정규화)
 const BOUNCE_UP_ARC := 0.1736    # sin(10도): 맞은 면의 법선이 이보다 아래쪽이면 상향 보정
 const BOUNCE_THRUST := 2.0       # 튕겨나는 동안 좌우 추진 배율
@@ -85,7 +91,10 @@ var charge_cd := 0.0             # 차지 쿨다운
 var regen_t := 0.0               # 게이지 0일 때 재생 진행
 var evade_window := 0.0          # 퍼펙트 회피 판정이 남은 시간
 var evade_rewarded := false      # 이번 회피에서 이미 보상 받음 (퍼펙트 또는 일반)
-var boost_t := 0.0               # 타격 직후 추진력이 남은 시간
+var boost_t := 0.0               # 타격 직후 방향 선택 시간이 남은 시간
+var bounce_in := Vector2.ZERO    # 맞을 때의 진행 방향
+var bounce_out := Vector2.ZERO   # 반사 방향
+var bounce_k := 1.0
 var dash_held := false           # 좌클릭을 누르고 있는 중 (스턴 중 선입력 판단용)
 var buffed := false              # 퍼펙트 회피 버프: 다음 차지 공격 피해 3배, 차지 시간 절반
 var queued_press := false        # 회피 도중 누른 좌클릭: 회피 무적이 끝나면 차지 시작
@@ -344,9 +353,13 @@ func step(dt: float) -> void:
 	if frozen:
 		queue_redraw()
 		return
-	var m := get_global_mouse_position() - position
+	var m: Vector2 = main.aim_offset(position)
 	if m.length() > AIM_DEADZONE:
 		aim = m.normalized()
+		if aim_phase:                                 # 에임 어시스트: 사거리 안 표적이 조준선 가까이 있으면 살짝 끌어당긴다
+			aim = _assisted(aim, (PARRY_DASH_SPEED_PERFECT if aim_perfect else PARRY_DASH_SPEED) * PARRY_DASH_TIME, POWER_RADIUS)
+		elif is_charged():
+			aim = _assisted(aim, CHARGE_SPEED * CHARGE_DASH_TIME, 0.0)
 	if aim_phase:
 		facing = lerp_angle(facing, aim.angle(), 1.0 - exp(-ROT_SPEED * 2.0 * dt))
 		queue_redraw()
@@ -355,10 +368,9 @@ func step(dt: float) -> void:
 	dash_cd = maxf(0.0, dash_cd - dt)
 	charge_cd = maxf(0.0, charge_cd - dt)
 	evade_window = maxf(0.0, evade_window - dt)
-	if boost_t > 0.0:                          # 타격 후 추진력: 지금 가리키는 방향으로 (표적을 다시 가리키면 반대로 작용)
-		var bdt := minf(dt, boost_t)
-		boost_t -= bdt
-		vel += aim * (BOUNCE_BOOST / BOUNCE_BOOST_TIME) * bdt
+	if boost_t > 0.0:                          # 타격 직후: 지금 조준한 방향에 맞는 구간 속도로 정해진다
+		boost_t = maxf(0.0, boost_t - dt)
+		vel = _bounce_vel()
 	if gauge > 0:
 		regen_t = 0.0
 	elif not charging and dash_t <= 0.0:       # 바닥나면 1칸까지만 천천히 되살아난다
@@ -554,9 +566,41 @@ func _on_strike(hit: Dictionary) -> void:
 		if absf(out.x) < 0.25:                    # 거의 수직이면 마우스 쪽으로 살짝
 			out.x += (signf(aim.x) if absf(aim.x) > 0.1 else (1.0 if randf() < 0.5 else -1.0)) * 0.25
 	out = out.normalized()
-	var k := 1.15 if power else 1.0
-	vel = out * BOUNCE_SPEED * k
+	bounce_in = dir
+	bounce_out = out
+	bounce_k = 1.15 if power else 1.0
 	boost_t = BOUNCE_BOOST_TIME
+	vel = _bounce_vel()
+
+
+## 튕김 속도: 조준 방향에 따라 ① 역추진 ② 방향 틀기 ③ 고속 중 하나
+func _bounce_vel() -> Vector2:
+	if aim.dot(bounce_in) > BOUNCE_BRAKE_COS:         # 맞은 표적 쪽(들어온 방향)을 넓게 가리킴
+		return bounce_out * BOUNCE_BRAKE_SPEED * bounce_k
+	if aim.dot(bounce_out) > BOUNCE_FAST_COS:         # 반사 방향과 비슷한 쪽
+		return aim * BOUNCE_FAST_SPEED * bounce_k
+	return aim * BOUNCE_TURN_SPEED * bounce_k
+
+
+## 에임 어시스트: 사거리 안에서 조준선이 표적 가장자리 14도 이내로 빗나가면 어긋난 각도의 일부를 끌어당긴다
+func _assisted(a: Vector2, reach: float, extra_r: float) -> Vector2:
+	var ang := a.angle()
+	var best := a
+	var best_err := ASSIST_CONE
+	for t in boss.assist_targets():
+		var d: Vector2 = t["pos"] - position
+		var dist := d.length()
+		var r: float = float(t["r"]) + RADIUS + extra_r
+		if dist < 1.0 or dist - r > reach:
+			continue
+		var da := wrapf(d.angle() - ang, -PI, PI)
+		var err := absf(da) - asin(minf(1.0, r / dist))
+		if err <= 0.0:
+			return a                               # 이미 맞는 조준
+		if err < best_err:
+			best_err = err
+			best = a.rotated(signf(da) * err * ASSIST_PULL)
+	return best
 
 
 # ── 그리기 ─────────────────────────────────────────────

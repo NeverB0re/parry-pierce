@@ -9,6 +9,7 @@ const Background := preload("res://scripts/background.gd")
 const Hud := preload("res://scripts/hud.gd")
 const Sfx := preload("res://scripts/sfx.gd")
 const PauseMenu := preload("res://scripts/pause_menu.gd")
+const TouchControls := preload("res://scripts/touch_controls.gd")
 
 const SPAWN := Vector2(650, -52)   # 시작 발판 위 (Player.PLAT_CENTER - 반지름)
 const CAM_ZOOM := 0.72             # 기본 줌아웃 (튕겨 올라가도 표적이 시야에 남도록)
@@ -31,6 +32,8 @@ var hud
 var sfx
 var bg
 var cam: Camera2D
+var touch_ui                          # 모바일 터치 조작 (없으면 마우스·키보드)
+var menu
 
 var state := State.PLAY
 var hitstop := 0.0
@@ -50,7 +53,12 @@ var spawn_on_platform := true
 
 func _ready() -> void:
 	randomize()
-	Input.mouse_mode = Input.MOUSE_MODE_CONFINED   # 플레이 중엔 창 밖으로 못 나감 (ESC 메뉴에서 해제)
+	var touch_mode := OS.has_feature("mobile")
+	for a in OS.get_cmdline_user_args():
+		if a == "--touch":                        # 데스크톱에서 터치 UI 시험
+			touch_mode = true
+	if not touch_mode:
+		Input.mouse_mode = Input.MOUSE_MODE_CONFINED   # 플레이 중엔 창 밖으로 못 나감 (ESC 메뉴에서 해제)
 	for a in OS.get_cmdline_user_args():      # 테스트용: -- --spawn=x,y
 		if a.begins_with("--spawn="):
 			var xy := a.trim_prefix("--spawn=").split(",")
@@ -96,9 +104,16 @@ func _ready() -> void:
 
 	sfx = Sfx.new()
 	add_child(sfx)
-	var menu := PauseMenu.new()
+	menu = PauseMenu.new()
 	add_child(menu)
 	menu.restart_requested.connect(reset_run)
+	if touch_mode:
+		var touch_layer := CanvasLayer.new()
+		touch_layer.layer = 20
+		add_child(touch_layer)
+		touch_ui = TouchControls.new()
+		touch_ui.main = self
+		touch_layer.add_child(touch_ui)
 	reset_run()
 
 
@@ -124,8 +139,44 @@ func _raise_platform(instant: bool) -> void:
 	plat_sink = 0.0 if instant else 1.0
 
 
+## 조준 입력: 마우스(플레이어 기준 오프셋) 또는 터치 스틱. 길이가 AIM_DEADZONE 이하면 이전 방향을 유지한다
+func aim_offset(from: Vector2) -> Vector2:
+	if touch_ui != null:
+		return touch_ui.stick * 160.0
+	return player.get_global_mouse_position() - from
+
+
+func touch_dash(pressed: bool) -> void:
+	if state != State.PLAY:
+		return
+	if pressed:
+		if player.aim_phase:
+			player.launch_parry_dash()
+		else:
+			player.press_dash()
+	else:
+		player.release_dash()
+
+
+func touch_parry(pressed: bool) -> void:
+	if state == State.PLAY:
+		_parry_input(pressed)
+
+
+func touch_pause() -> void:
+	if not get_tree().paused:
+		menu.open()
+
+
+func _buzz(ms: int) -> void:
+	if touch_ui != null:
+		Input.vibrate_handheld(ms)
+
+
 func _unhandled_input(e: InputEvent) -> void:
 	if e is InputEventMouseButton:
+		if touch_ui != null and e.device == InputEvent.DEVICE_ID_EMULATION:
+			return                            # 터치가 만든 가짜 마우스 클릭은 무시 (터치 UI가 따로 처리)
 		if state != State.PLAY:
 			return
 		if e.button_index == MOUSE_BUTTON_LEFT:
@@ -279,6 +330,7 @@ func touch_hurt(hit: Dictionary, pos: Vector2) -> void:
 func _parry_feedback(p: Vector2, perfect: bool, hb: Dictionary) -> void:
 	var hp_pos: Vector2 = hb["pos"]
 	var contact := p.lerp(hp_pos, 0.25) if not hb.has("rect") else p
+	_buzz(70 if perfect else 40)
 	if perfect:
 		hitstop = 0.2
 		shake = 24.0
@@ -434,6 +486,7 @@ func _respawn() -> void:
 func on_perfect_evade(pos: Vector2) -> void:
 	slowmo = maxf(slowmo, 0.45)
 	shake = maxf(shake, 5.0)
+	_buzz(60)
 	hud.warp(0.45)
 	sfx.play("bolt", 0.0, 0.0)
 	sfx.play("dash", -4.0, 0.0)
@@ -447,6 +500,7 @@ func on_perfect_evade(pos: Vector2) -> void:
 ## 일반 회피 성공(회피 무적으로 공격을 통과): 짧은 슬로우와 가벼운 이펙트, 게이지 1칸 환급
 func on_evade_dodge(pos: Vector2) -> void:
 	slowmo = maxf(slowmo, 0.2)
+	_buzz(25)
 	sfx.play("dash", -8.0, 0.0)
 	fx.ring(pos, Color(0.5, 0.9, 1.0), 110.0, 0.3, 4.0, true)
 	fx.burst(pos, 8, Color(0.6, 0.9, 1.0), 400.0, 0.3, 2.0)

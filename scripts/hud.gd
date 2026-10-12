@@ -117,7 +117,8 @@ func _draw() -> void:
 		draw_rect(Rect2(bx, s.y * 0.7, bw * frac, 8), Color(0.8, 0.92, 1.0, 0.95))
 
 	# 조작
-	_text(Vector2(28, s.y - 24), "마우스: 방향(위=활공)   좌클릭: 회피 돌진 / 꾹: 차지 공격   우클릭·Space 꾹: 패리 → 슬로우 조준 → 패리 돌진   R: 재시작   Esc: 메뉴", 15, Color(0.75, 0.77, 0.82, 0.55))
+	if main.touch_ui == null:
+		_text(Vector2(28, s.y - 24), "마우스: 방향(위=활공)   좌클릭: 회피 돌진 / 꾹: 차지 공격   우클릭·Space 꾹: 패리 → 슬로우 조준 → 패리 돌진   R: 재시작   Esc: 메뉴", 15, Color(0.75, 0.77, 0.82, 0.55))
 
 	if warp_t > 0.0:                          # 퍼펙트 회피: 청록 틴트 + 가장자리에서 모여드는 선
 		var wk := clampf(warp_t / warp_max, 0.0, 1.0)

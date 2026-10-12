@@ -297,6 +297,23 @@ func strike_hit(p: Vector2, r: float) -> Dictionary:
 	return {}
 
 
+## 에임 어시스트용 표적 목록 (중심, 반지름)
+func assist_targets() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if dead or phase == 2:
+		return out
+	if phase == 1:
+		for i in 4:
+			if part_alive(i):
+				out.append({"pos": part_pos(i), "r": float(PART_R[i])})
+		return out
+	for i in plates.size():
+		if plates[i] > 0:
+			out.append({"pos": cell_rect(i % GRID_N, i / GRID_N).get_center(), "r": CELL * 0.55})
+	out.append({"pos": heart_pos(), "r": HEART_R})
+	return out
+
+
 func hit_center(hit: Dictionary) -> Vector2:
 	match hit["kind"]:
 		"heart":
