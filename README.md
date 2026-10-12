@@ -1,7 +1,7 @@
 # Parry Pierce — Godot 프로토타입
 
 배경에 선 거대한 적의 공격을 **패리**해 날아오르고, 부위를 부수고, 마지막에 열린 가슴의 **코어**를 부수는 2D 액션 프로토타입.
-아이디어와 변경 기록은 [docs/DESIGN.md](docs/DESIGN.md).
+아이디어와 변경 기록은 [docs/DESIGN.md](docs/DESIGN.md). 배경 스토리·세계관은 [docs/STORY.md](docs/STORY.md).
 
 > 이 문서는 `dash-rework` 브랜치 기준입니다 (무제한 돌진·코어 체력제). 기획: [docs/PLAN_dash_rework.md](docs/PLAN_dash_rework.md). 빌드는 프리릴리즈 `v0.30-a*`.
 

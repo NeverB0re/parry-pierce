@@ -348,16 +348,22 @@ class Stage extends Control:
 			var u := tt - 3.0
 			var y := 150.0
 			var bx := lerpf(680.0, 20.0, _smooth(0.0, 2.4, u))
-			var d0 := 0.62
-			var sx := 470.0
+			var x0 := 200.0                              # ①과 같은 방향(오른쪽)으로 돌진한다
+			var d0 := (680.0 - (x0 + 58.0)) / 660.0 * 2.4   # 탄이 바로 코앞까지 왔을 때 돌진을 시작
 			var dashing := u >= d0 and u < d0 + 0.28
+			var sx := x0
 			if u >= d0:
-				sx = 470.0 - 170.0 * _smooth(d0, d0 + 0.28, u)
+				sx = x0 + 190.0 * _smooth(d0, d0 + 0.28, u)
 			if dashing:
 				for k in 3:
-					_ship(Vector2(sx + 26.0 * (k + 1), y), PI, 0.18, "b")
-			_ship(Vector2(sx, y), PI, 0.5 if dashing else 1.0)
+					_ship(Vector2(sx - 26.0 * (k + 1), y), 0.0, 0.18, "b")
+			_ship(Vector2(sx, y), 0.0, 0.5 if dashing else 1.0)
+			if u < d0:
+				_flame(Vector2(sx, y), 0.0)
 			_bolt(Vector2(bx, y), Vector2.LEFT)
+			if u >= d0 - 0.4 and u < d0 + 0.05:
+				_txt("좌클릭!", Vector2(x0 - 30.0, y + 52.0), 16, GOLD)
+				_mouse(Vector2(x0 + 40.0, y + 60.0), u >= d0, false)
 			if u >= d0 + 0.05:
 				var k := _smooth(d0 + 0.05, d0 + 0.55, u)
 				_ring(Vector2(sx, y), 60.0 - 40.0 * k, Color(MINT, 1.0 - k * 0.5), 2.0)
