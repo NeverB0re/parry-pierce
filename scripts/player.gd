@@ -31,6 +31,7 @@ const PERFECT_EVADE_WINDOW := 0.12  # 돌진 시작 후 이 시간 안에 공격
 const PERFECT_EVADE_GRAZE := 16.0   # 퍼펙트 회피로 인정하는 근접 여유 (몸 반지름에 더함)
 const PERFECT_EVADE_INVULN := 0.8   # 퍼펙트 회피 성공 시 추가 무적 (회피 직후 다른 곳에 맞는 일 방지)
 const EVADE_BUFF_MULT := 2          # 퍼펙트 회피 버프: 다음 차지 공격 피해 배율 (차지 시간도 절반)
+const EVADE_BUFF_MULT_STRONG := 4   # 패리 불가 공격(레이저)을 퍼펙트 회피하면 4배
 const PARRY_BUFFER := 0.15          # 패리 쿨다운 중 누른 입력을 이만큼 기억
 const PARRY_PUSH := 1100.0          # 휩쓰는 팔을 그냥 패리하면: 피해 없이 반대쪽으로 튕겨나기만 한다
 const PARRY_PUSH_SHIELD := 0.5
@@ -94,6 +95,8 @@ var assist_pos := Vector2.ZERO   # 붙은 표적 위치
 var assist_r := 0.0
 var dash_held := false           # 좌클릭을 누르고 있는 중 (스턴 중 선입력 판단용)
 var buffed := false              # 퍼펙트 회피 버프: 다음 차지 공격 피해 2배, 차지 시간 절반
+var buff_strong := false         # 패리 불가 공격을 퍼펙트 회피해 얻은 강한 버프 (4배)
+var last_hit_strong := false     # 방금 일격이 강한 버프를 소모했는가 (main.gd 가 이펙트에 사용)
 var queued_press := false        # 스턴 중 누른 좌클릭: 회복하면 차지 시작
 var pending_kind := ""           # 쿨다운 중에 뗀 돌진: 쿨다운이 끝나는 즉시 나간다
 var parry_queue := 0.0           # 패리 쿨다운 중 누른 입력 기억
@@ -142,6 +145,7 @@ func reset(pos: Vector2, platform := false) -> void:
 	evade_rewarded = false
 	dash_held = false
 	buffed = false
+	buff_strong = false
 	queued_press = false
 	pending_kind = ""
 	parry_queue = 0.0
@@ -331,20 +335,22 @@ func can_evade_reward() -> bool:
 
 ## 퍼펙트 회피 (돌진 시작 직후 공격이 스침): 다음 차지 강화 + 무적 연장 + 돌진 쿨다운 즉시 초기화.
 ## 그냥 무적으로 통과한 것은 보상·연출이 없다
-func try_evade_reward() -> void:
+func try_evade_reward(strong := false) -> void:
 	if evade_window <= 0.0:
 		return
 	evade_rewarded = true
 	buffed = true
-	invuln = maxf(invuln, PERFECT_EVADE_INVULN)    # 성공 직후 다른 공격에 맞지 않도록 무적 연장
+	buff_strong = buff_strong or strong            # 이미 강한 버프가 있으면 약한 회피로 내려가지 않는다
+	invuln = maxf(invuln, PERFECT_EVADE_INVULN * (1.5 if strong else 1.0))   # 성공 직후 다른 공격에 맞지 않도록 무적 연장
 	dash_cd = dash_t                               # 이 돌진이 끝나는 즉시 다시 돌진할 수 있다
-	main.on_perfect_evade(position)
+	main.on_perfect_evade(position, strong)
 
 
 ## 피격: 잠시 조작 불가(스턴), 살짝 솟구친 뒤 추락
 func on_hurt(push: Vector2) -> void:
 	cancel_charge()
 	buffed = false
+	buff_strong = false
 	queued_press = dash_held                       # 누르고 있었다면 스턴이 끝나자마자 모으기 시작
 	evade_window = 0.0
 	var sx := signf(push.x) if absf(push.x) > 0.05 else (1.0 if randf() < 0.5 else -1.0)
@@ -539,8 +545,14 @@ func _strike_damage() -> int:
 		"power":
 			return POWER_DAMAGE_PERFECT if perfect_dash else POWER_DAMAGE
 		"charge":
-			return CHARGE_DAMAGE * (EVADE_BUFF_MULT if buffed else 1)
+			return CHARGE_DAMAGE * _buff_mult()
 	return DASH_DAMAGE
+
+
+func _buff_mult() -> int:
+	if buffed:
+		return EVADE_BUFF_MULT_STRONG if buff_strong else EVADE_BUFF_MULT
+	return 1
 
 
 func _on_strike(hit: Dictionary) -> void:
@@ -548,9 +560,11 @@ func _on_strike(hit: Dictionary) -> void:
 	var kind := dash_kind
 	var dmg := _strike_damage()
 	var was_buffed := buffed and kind == "charge"
+	last_hit_strong = was_buffed and buff_strong
 	if was_buffed:                               # 퍼펙트 회피 버프는 차지 공격 한 번에 소모된다
 		buffed = false
-	main.on_strike(hit, dmg, position, dir, kind, was_buffed)
+		buff_strong = false
+	main.on_strike(hit, dmg, position, dir, kind, was_buffed, last_hit_strong)
 	if frozen:
 		return
 	bounce_off(dir, kind)
@@ -558,8 +572,10 @@ func _on_strike(hit: Dictionary) -> void:
 
 ## 받아치기: 휩쓰는 팔에 차지 돌진이 부딪힘 → 피해량 반환 (버프가 있으면 2배, 소모)
 func clash_damage() -> int:
-	var dmg := CLASH_DAMAGE * (EVADE_BUFF_MULT if buffed else 1)
+	var dmg := CLASH_DAMAGE * _buff_mult()
+	last_hit_strong = buffed and buff_strong
 	buffed = false
+	buff_strong = false
 	return dmg
 
 
@@ -635,7 +651,7 @@ func _laser(dir: Vector2, reach: float, c: Color) -> void:
 
 
 ## 기체 스프라이트 (64×64, 기수가 위쪽이라 +x 기준 각도에서 90도 더 돌린다)
-const SHIP_SIZE := 88.0           # 원본 64px 을 1.375배 (카메라 줌아웃을 감안한 크기)
+const SHIP_SIZE := 72.0           # 원본 64px 을 약 1.1배
 
 
 func _draw_rocket(off: Vector2, ang: float, tint: Color) -> void:
@@ -645,11 +661,13 @@ func _draw_rocket(off: Vector2, ang: float, tint: Color) -> void:
 	draw_set_transform(Vector2.ZERO, 0.0)
 
 
-## 노즐 화염: 추진 상태에 따라 길이가 변한다 (활공 = 길고 밝게, 낙하 = 짧게 + 속도선)
+## 노즐 화염: 기체 뒤쪽 중심선(기수 반대 방향)에서 나온다. 붉은 바깥불꽃 → 주황 → 노란 심.
+## 마우스를 위로(활공·역추진) 두고 떨어지는 중이면 낙하를 상쇄하느라 불꽃이 크게 솟고 불똥이 튄다.
 func _draw_flame(off: Vector2) -> void:
 	if stun > 0.0 or frozen:
 		return
 	var power := 0.35
+	var retro := 0.0                    # 역추진 강도 0~1: 위를 향해 낙하 속도를 줄이는 중
 	if dash_t > 0.0 or launch_t > 0.0:
 		power = 1.5
 	elif on_platform:
@@ -658,17 +676,30 @@ func _draw_flame(off: Vector2) -> void:
 		power = 0.8
 	elif aim.y < 0.0:
 		power = 0.35 + 0.65 * -aim.y
+		retro = clampf(vel.y / 500.0, 0.0, 1.0) * -aim.y
+		power += 0.9 * retro
 	else:
 		power = 0.35 - 0.2 * aim.y
 	if dash_cd > 0.0 and dash_t <= 0.0:   # 돌진 쿨다운 중엔 화염이 약하다
 		power *= 0.6
-	var frame := int(Time.get_ticks_msec() / 55) % 5 + 1
-	var sc := SHIP_SIZE / 64.0 * (0.7 + 0.4 * minf(power, 1.4))     # 추진이 셀수록 화염이 커진다 (가로세로 같은 비율)
-	draw_set_transform(off, facing + PI * 0.5)
-	var nozzle := 12.0 * SHIP_SIZE / 64.0
-	var top := nozzle - 26.0 * sc        # 화염 그림의 시작(약 y 26)이 노즐에 오도록
-	draw_texture_rect(Sprites.exhaust(frame), Rect2(-32.0 * sc, top, 64.0 * sc, 64.0 * sc), false, Color(1, 1, 1, 0.55 + 0.4 * minf(power, 1.0)))
-	draw_set_transform(Vector2.ZERO, 0.0)
+	var back := Vector2.from_angle(facing + PI)      # 기체 뒤쪽 (기수 반대)
+	var side := back.orthogonal()
+	var base := off + back * SHIP_SIZE * 0.27        # 노즐
+	var t := Time.get_ticks_msec() * 0.001
+	var flick := 0.85 + 0.15 * sin(t * 60.0) + 0.08 * sin(t * 37.0)
+	var len := (14.0 + 52.0 * power) * flick
+	var w := (5.0 + 5.0 * minf(power, 1.3)) * 0.5 * SHIP_SIZE / 64.0
+	var wob := side * sin(t * 45.0) * 2.0
+	# 바깥 붉은 불꽃 / 주황 / 노랑·흰 심 (겹쳐서 선명하게)
+	draw_colored_polygon(PackedVector2Array([base + side * w * 1.5, base - side * w * 1.5, base + back * len * 1.15 + wob]), Color(0.95, 0.1, 0.05, 0.95))
+	draw_colored_polygon(PackedVector2Array([base + side * w * 1.1, base - side * w * 1.1, base + back * len * 0.8 - wob]), Color(1.0, 0.4, 0.05, 1.0))
+	draw_colored_polygon(PackedVector2Array([base + side * w * 0.6, base - side * w * 0.6, base + back * len * 0.5 + wob * 0.5]), Color(1.0, 0.88, 0.35, 1.0))
+	draw_circle(base, w * 1.1, Color(1.0, 0.95, 0.7, 0.9))
+	if retro > 0.15:                     # 역추진: 불똥이 뒤로 튄다
+		for k in 6:
+			var ph := fmod(t * (3.0 + k * 0.7) + k * 0.37, 1.0)
+			var sp := base + back * (len * (0.4 + ph * 0.9)) + side * sin(k * 2.3 + t * 8.0) * w * (1.0 + ph * 2.5)
+			draw_circle(sp, 2.0 * (1.0 - ph) + 0.8, Color(1.0, 0.55 + 0.35 * (1.0 - ph), 0.15, 0.9 * (1.0 - ph)))
 	# 아래로 향해 낙하 중: 몸 주변 속도선
 	if aim.y > 0.3 and dash_t <= 0.0 and vel.y > 200.0:
 		var a := clampf((aim.y - 0.3) * 1.4, 0.0, 0.7)
@@ -697,22 +728,29 @@ func _draw() -> void:
 			if k < trail.size():
 				_draw_rocket(trail[k] - position, facing, Color(C_EVADE, 0.28 - k * 0.018))
 
-	# 퍼펙트 회피 버프: 다음 공격이 강화됐음을 알리는 청백 오라
-	if buffed:
+	# 퍼펙트 회피 버프: 다음 공격이 강화됐음을 알리는 청백 오라. 패리 불가 공격을 피해 얻은 강한 버프(4배)는
+	# 금빛 이중 링 + 회전하는 불꽃 입자 + 위로 솟는 빛으로 확연히 다르게 보인다
+	if buffed and not buff_strong:
 		var bp := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.02)
 		draw_circle(Vector2.ZERO, 26.0, Color(0.7, 0.95, 1.0, 0.12 + 0.1 * bp))
 		draw_arc(Vector2.ZERO, 30.0 + 3.0 * bp, 0.0, TAU, 32, Color(0.8, 0.97, 1.0, 0.55 + 0.35 * bp), 2.5)
 		for k in 3:
 			var ba := Time.get_ticks_msec() * 0.006 + k * TAU / 3.0
 			draw_circle(Vector2(cos(ba), sin(ba)) * 34.0, 2.6, Color(1, 1, 1, 0.9))
-
-	# 무적 보호막 (발사·공격 돌진·직격 후·돌진 여유)
-	if shield_t > 0.0 or attack or launch_t > 0.0:
-		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.03)
-		draw_circle(Vector2.ZERO, 30.0 + 3.0 * pulse, Color(1.0, 0.85, 0.45, 0.14 + 0.1 * pulse))
-		draw_arc(Vector2.ZERO, 32.0, 0.0, TAU, 32, Color(1.0, 0.9, 0.6, 0.4 + 0.3 * pulse), 2.0)
-	if attack:
-		draw_circle(Vector2.ZERO, 26.0, Color(C_ATTACK, 0.3))
+	elif buffed:
+		var tms := Time.get_ticks_msec()
+		var sp := 0.5 + 0.5 * sin(tms * 0.03)
+		draw_circle(Vector2.ZERO, 46.0 + 4.0 * sp, Color(1.0, 0.85, 0.4, 0.14 + 0.1 * sp))
+		draw_arc(Vector2.ZERO, 40.0 + 3.0 * sp, 0.0, TAU, 40, Color(1.0, 0.95, 0.7, 0.9), 3.5)
+		draw_arc(Vector2.ZERO, 54.0 - 3.0 * sp, 0.0, TAU, 40, Color(0.6, 1.0, 0.9, 0.7), 2.5)
+		for k in 8:
+			var ba := tms * 0.008 * (1.0 if k % 2 == 0 else -1.0) + k * TAU / 8.0
+			var rr := 48.0 if k % 2 == 0 else 60.0
+			draw_circle(Vector2(cos(ba), sin(ba)) * rr, 3.4, Color(1.0, 0.9, 0.5, 0.95))
+		for k in 4:                                # 위로 솟는 빛줄기
+			var lx := (k - 1.5) * 18.0
+			var lh := 30.0 + 20.0 * sin(tms * 0.02 + k * 1.7)
+			draw_line(Vector2(lx, -30.0), Vector2(lx * 1.3, -30.0 - lh), Color(1.0, 0.95, 0.65, 0.7), 3.0)
 
 	_ship_col = "r" if attack else "b"
 	_draw_flame(jitter)
@@ -720,6 +758,14 @@ func _draw() -> void:
 	var alpha := 0.45 if evade else (0.35 if blink else 1.0)
 	var tint := Color(1, 1, 1, alpha)
 	_draw_rocket(jitter, facing, tint)
+
+	# 무적 보호막 (발사·공격 돌진·직격 후·돌진 여유): 기체 위에 그려 가려지지 않게, 기체보다 넓게
+	if shield_t > 0.0 or attack or launch_t > 0.0:
+		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.03)
+		draw_circle(Vector2.ZERO, 44.0 + 3.0 * pulse, Color(1.0, 0.85, 0.45, 0.10 + 0.08 * pulse))
+		draw_arc(Vector2.ZERO, 46.0, 0.0, TAU, 40, Color(1.0, 0.9, 0.6, 0.55 + 0.35 * pulse), 3.0)
+	if attack:
+		draw_arc(Vector2.ZERO, 40.0, 0.0, TAU, 40, Color(C_ATTACK, 0.8), 2.0)
 
 	# 스턴: 연기
 	if stun > 0.0:

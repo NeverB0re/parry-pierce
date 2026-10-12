@@ -294,7 +294,7 @@ func _check_attacks() -> void:
 	var p: Vector2 = player.position
 	var graze: float = Player.RADIUS + Player.PERFECT_EVADE_GRAZE
 	if player.can_evade_reward() and boss.beam_hit(p, graze) != Vector2.ZERO:
-		player.try_evade_reward()                       # 돌진 직후 레이저가 스침 = 퍼펙트 회피
+		player.try_evade_reward(true)                   # 패리 불가 레이저를 돌진 직후 스침 = 강한 퍼펙트 회피 (4배)
 	var beam_push: Vector2 = boss.beam_hit(p, Player.RADIUS)   # 패리 불가: 돌진 무적으로만 피한다
 	if beam_push != Vector2.ZERO and not player.is_immune():
 		hurt_player(beam_push)
@@ -325,13 +325,33 @@ func _check_attacks() -> void:
 			return
 
 
-## 받아치기: 차지 돌진이 휩쓰는 팔에 부딪힘 (player.gd 가 이동 중에 호출). 그 팔 관절에 즉시 피해 + 팔이 밀려나 멈춘다
+## 받아치기 / 사전 저지: 차지 돌진이 팔에 부딪힘 (player.gd 가 이동 중에 호출). 팔이 위치를 잡고 멈춰 있을 때(set·warn)도,
+## 휘두르는 중에도 가능. 그 팔 관절에 즉시 피해 + 공격이 끊기고 팔이 밀려나 멈춘다
 func try_clash(p: Vector2) -> bool:
-	for hb in boss.hitboxes(p):
-		if hb["id"] == "arm" and boss.overlaps(hb, p, Player.RADIUS):
-			_clash(hb, p)
-			return true
+	var hb: Dictionary = boss.clash_box(p)
+	if not hb.is_empty() and boss.overlaps(hb, p, Player.RADIUS):
+		_clash(hb, p)
+		return true
 	return false
+
+
+## 퍼펙트 패리 급 임팩트 (적에게 가하는 일격에 쓴다)
+func _perfect_impact(at: Vector2, dir: Vector2) -> void:
+	_buzz(80)
+	hitstop = maxf(hitstop, 0.2)
+	shake = maxf(shake, 24.0)
+	hud.flash(0.28, Color(1.0, 0.95, 0.85))
+	fx.burst(at, 60, Color(1.0, 0.9, 0.6), 1500.0, 0.6, 4.5)
+	fx.burst(at, 28, Color(1, 1, 1), 900.0, 0.4, 3.5)
+	fx.rays_burst(at, 18, Color(1.0, 0.95, 0.8), 520.0, 0.45, 7.0)
+	fx.rays_burst(at, 9, Color(1.0, 0.6, 0.3), 340.0, 0.35, 5.0)
+	fx.ring(at, Color(1, 0.95, 0.8), 300.0, 0.5, 10.0)
+	fx.ring(at, Color(1, 0.6, 0.3), 190.0, 0.4, 7.0)
+	fx.ring(at, Color(0.7, 0.9, 1.0), 110.0, 0.3, 5.0)
+	fx.sprite(at, 2, 440.0, 0.5)                 # 적이 입는 피해 표시
+	fx.sprite(at, 1, 300.0, 0.45, false, Color.WHITE, 0.05)
+	sfx.play("perfect", 4.0)
+	sfx.play("parry", 0.0)
 
 
 func _clash(hb: Dictionary, p: Vector2) -> void:
@@ -356,6 +376,8 @@ func _clash(hb: Dictionary, p: Vector2) -> void:
 	fx.ring(at, Color(1.0, 0.55, 0.25), 180.0, 0.35, 7.0)
 	fx.sprite(at, 2, 380.0, 0.45)
 	fx.sprite(at, 1, 240.0, 0.4, false, Color.WHITE, 0.05)
+	if player.last_hit_strong:                   # 4배 버프가 실린 받아치기: 퍼펙트 패리 급
+		_perfect_impact(at, dir)
 
 
 ## 피격 = 목숨 −1 + 스턴. 잠시 조작을 잃고 추락 → 용암 위험
@@ -390,8 +412,6 @@ func _parry_feedback(p: Vector2, perfect: bool, hb: Dictionary) -> void:
 		fx.ring(contact, Color(1, 0.95, 0.8), 300.0, 0.5, 10.0)
 		fx.ring(contact, Color(1, 0.6, 0.3), 190.0, 0.4, 7.0)
 		fx.ring(contact, Color(0.7, 0.9, 1.0), 110.0, 0.3, 5.0)
-		fx.sprite(contact, 2, 420.0, 0.5)                       # 도트 폭발: 주황 링 + 불꽃
-		fx.sprite(contact, 1, 260.0, 0.45, false, Color.WHITE, 0.05)
 		sfx.play("perfect", 4.0)
 		sfx.play("parry", 0.0)
 	else:
@@ -402,7 +422,6 @@ func _parry_feedback(p: Vector2, perfect: bool, hb: Dictionary) -> void:
 		fx.rays_burst(contact, 12, Color(0.85, 0.92, 1.0), 380.0, 0.4, 6.0)
 		fx.ring(contact, Color(0.85, 0.92, 1.0), 200.0, 0.4, 8.0)
 		fx.ring(contact, Color(0.6, 0.75, 1.0), 120.0, 0.3, 5.0)
-		fx.sprite(contact, 2, 240.0, 0.4)
 		sfx.play("parry", 2.0)
 
 
@@ -553,21 +572,28 @@ func _respawn() -> void:
 	sfx.play("land", 0.0)
 
 
-## 퍼펙트 회피: 패리(금·백, 바깥으로 터짐)와 구별되는 청록 '시간 정지' 연출 — 안으로 모이는 링, 화면 틴트·수렴선, 긴 슬로우
-func on_perfect_evade(pos: Vector2) -> void:
-	slowmo = maxf(slowmo, 0.45)
-	shake = maxf(shake, 5.0)
-	_buzz(60)
-	hud.warp(0.45)
+## 퍼펙트 회피: 일반은 과하지 않게(짧은 슬로우, 옅은 틴트, 얇은 링 하나).
+## strong(패리 불가 공격을 피함)은 확실히 더 크게 — 긴 슬로우, 금빛·청록 이중 링, 입자
+func on_perfect_evade(pos: Vector2, strong := false) -> void:
+	var mint := Color(0.5, 1.0, 0.88)
+	if not strong:
+		slowmo = maxf(slowmo, 0.25)
+		_buzz(40)
+		hud.warp(0.25)
+		sfx.play("bolt", -4.0, 0.0)
+		fx.ring(pos, mint, 90.0, 0.3, 2.0, true)
+		fx.burst(pos, 6, Color(0.6, 1.0, 0.9), 320.0, 0.3, 2.0, 0.0, Vector2.ZERO, PI)
+		return
+	slowmo = maxf(slowmo, 0.5)
+	_buzz(90)
+	hud.warp(0.5)
+	shake = maxf(shake, 8.0)
+	sfx.play("perfect", 0.0, 0.0)
 	sfx.play("bolt", 0.0, 0.0)
-	sfx.play("dash", -4.0, 0.0)
-	var mint := Color(0.35, 1.0, 0.85)
-	fx.ring(pos, mint, 300.0, 0.45, 8.0, true)
-	fx.ring(pos, mint, 190.0, 0.4, 6.0, true)
-	fx.ring(pos, Color(0.7, 1.0, 0.95), 70.0, 0.5, 3.0)
-	fx.burst(pos, 14, Color(0.5, 1.0, 0.9), 500.0, 0.5, 2.5, 0.0, Vector2.ZERO, PI)
-	fx.sprite(pos, 3, 380.0, 0.4, true)                          # 도트 청록 링: 거꾸로 재생 = 안으로 모인다
-	fx.sprite(pos, 3, 200.0, 0.35, false, Color.WHITE, 0.4)       # 그리고 가볍게 터진다
+	fx.ring(pos, mint, 240.0, 0.45, 5.0, true)
+	fx.ring(pos, Color(1.0, 0.92, 0.55), 150.0, 0.4, 4.0, true)
+	fx.ring(pos, Color(1.0, 0.95, 0.75), 80.0, 0.5, 3.0)
+	fx.burst(pos, 16, Color(1.0, 0.92, 0.6), 600.0, 0.5, 2.5, 0.0, Vector2.ZERO, PI)
 
 
 ## 패리 돌진 종료(적중 또는 빗나감): 패리로 밀려난 팔은 바로 제자리로
@@ -581,13 +607,14 @@ func on_parry_launch(pos: Vector2, dir: Vector2) -> void:
 	hud.flash(0.1, Color(0.8, 0.9, 1.0))
 	fx.burst(pos, 30, Color(0.8, 0.92, 1.0), 1300.0, 0.4, 3.0, 0.0, -dir, 0.5)
 	fx.ring(pos, Color(0.8, 0.92, 1.0), 160.0, 0.3, 6.0)
-	fx.sprite(pos, 2, 180.0, 0.3)
 
 
 ## 돌진 적중. kind: "dash"(피해 1, 가볍게) / "charge"(3, 주황) / "power"(패리 돌진 12·16, 크게)
-func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, kind := "dash", buffed := false) -> void:
+func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, kind := "dash", buffed := false, strong := false) -> void:
 	var contact := pos + dir * Player.RADIUS
-	if buffed:                                 # 퍼펙트 회피 버프가 실린 차지 일격
+	if strong:                                 # 패리 불가 공격을 퍼펙트 회피한 4배 일격: 퍼펙트 패리에 준하는 임팩트
+		_perfect_impact(contact, dir)
+	elif buffed:                               # 퍼펙트 회피 버프가 실린 차지 일격
 		shake = maxf(shake, 20.0)
 		sfx.play("perfect", -2.0, 0.0)
 		fx.ring(contact, Color(0.75, 0.96, 1.0), 240.0, 0.35, 8.0)

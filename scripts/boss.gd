@@ -460,25 +460,43 @@ func hitboxes(ppos: Vector2) -> Array[Dictionary]:
 		return out
 	if atk.get("kind", "") == "swing" and atk["phase"] == "swing":
 		var a: int = atk["arm"]
-		var sh: Vector2 = SHOULDERS[a]
-		var el := elbow_of(a)
-		var segs := [[sh, el, UPPER_W], [el, fists[a], FORE_W], [fists[a], fists[a], FIST_R]]
-		var best := fists[a]
-		var best_d := INF
-		for sg in segs:
-			var q := _seg_closest(ppos, sg[0], sg[1])
-			var d := q.distance_to(ppos) - float(sg[2])
-			if d < best_d:
-				best_d = d
-				best = q
 		var th: float = atk["th"]
 		var s := 1.0 if a == 1 else -1.0
 		var tangent := Vector2(-s * sin(th), cos(th))
-		out.append({"id": "arm", "segs": segs, "pos": best, "push": (tangent + Vector2(0, -0.5)).normalized()})
+		var hb := _arm_box(a, ppos)
+		hb["push"] = (tangent + Vector2(0, -0.5)).normalized()
+		out.append(hb)
 	for b in bolts:
 		var bv: Vector2 = b["vel"]
 		out.append({"id": "bolt", "pos": b["pos"], "r": BOLT_R, "push": bv.normalized(), "bolt": b})
 	return out
+
+
+## 팔 전체(위팔·아래팔·주먹) 판정 상자. pos = ppos 에 가장 가까운 지점
+func _arm_box(a: int, ppos: Vector2) -> Dictionary:
+	var sh: Vector2 = SHOULDERS[a]
+	var el := elbow_of(a)
+	var segs := [[sh, el, UPPER_W], [el, fists[a], FORE_W], [fists[a], fists[a], FIST_R]]
+	var best := fists[a]
+	var best_d := INF
+	for sg in segs:
+		var q := _seg_closest(ppos, sg[0], sg[1])
+		var d := q.distance_to(ppos) - float(sg[2])
+		if d < best_d:
+			best_d = d
+			best = q
+	return {"id": "arm", "segs": segs, "pos": best}
+
+
+## 차지 돌진으로 저지할 수 있는 팔: 위치를 잡고 공격 직전 멈춰 있을 때(set·warn)와 휘두르는 중(swing).
+## 들어올리는 중(prep)은 아니다.
+func clash_box(ppos: Vector2) -> Dictionary:
+	if dead or atk.get("kind", "") != "swing":
+		return {}
+	var ph: String = atk["phase"]
+	if ph != "set" and ph != "warn" and ph != "swing":
+		return {}
+	return _arm_box(int(atk["arm"]), ppos)
 
 
 static func _seg_closest(p: Vector2, a: Vector2, b: Vector2) -> Vector2:
