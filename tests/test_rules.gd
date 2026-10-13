@@ -97,6 +97,19 @@ func _run() -> void:
 	_step(8)
 	_check("buffered dash fires when ready", p.dash_kind == "dash" and p.dash_t > 0.0)
 	_check("unlimited: no gauge left in player", not ("gauge" in p))
+	# 짧게 누르는 연속 돌진: 카메라 줌이 거의 변하지 않는다
+	_air(Vector2(-900, -1500))
+	main.cam.zoom = Vector2(main.CAM_ZOOM, main.CAM_ZOOM)
+	var zmin := 9.0
+	var zmax := 0.0
+	for k in 6:
+		main._dash_input(true)
+		_step(6)
+		main._dash_input(false)
+		_step(40)
+		zmin = minf(zmin, main.cam.zoom.x)
+		zmax = maxf(zmax, main.cam.zoom.x)
+	_check("tap dashes don't pump the camera zoom (%.3f..%.3f)" % [zmin, zmax], zmax - zmin < 0.01)
 
 	# 위쪽 관성은 남기지 않는다
 	_air(Vector2(-900, -1500))
@@ -140,8 +153,11 @@ func _run() -> void:
 	_dash_dir("charge", Vector2.RIGHT)
 	_step(int(0.75 / DT))
 	main._dash_input(true)
-	_step(int((p.charge_cd + 0.05) / DT))
-	_check("held charge completes right when charge cooldown ends", p.is_charged() and p.charge_cd <= 0.0)
+	_check("no charge hover while charge cooldown runs (t %.2f)" % p.charge_t, p.charge_t == 0.0 and not p.is_hovering_charge())
+	_step(int((p.charge_cd + 0.1) / DT))
+	_check("charge starts only after charge cooldown (t %.2f)" % p.charge_t, not p.is_charged() and p.charge_t > 0.0)
+	_step(int(p.charge_need() / DT))
+	_check("then completes after a full charge time", p.is_charged())
 	main._dash_input(false)
 	_check("then fires a charge assault", p.dash_kind == "charge")
 

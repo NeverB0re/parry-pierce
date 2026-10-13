@@ -163,6 +163,14 @@ func is_attacking() -> bool:
 	return dash_t > 0.0 and dash_kind != ""
 
 
+## 카메라용: 차지가 절반 넘게 모였을 때부터 0 → 1 (짧게 누르는 연속 돌진에는 카메라가 움직이지 않게)
+func charge_view() -> float:
+	if not charging:
+		return 0.0
+	var need := charge_need()
+	return clampf((charge_t - need * 0.5) / (need * 0.5), 0.0, 1.0)
+
+
 ## 차지 완료에 필요한 시간 (퍼펙트 회피 버프가 있으면 절반)
 func charge_need() -> float:
 	return stats.charge_time * (0.5 if buffed else 1.0)
@@ -399,8 +407,8 @@ func step(dt: float) -> void:
 		_dash(pending_kind)
 	if charging:
 		charge_t += dt
-		if charge_cd > 0.0:                   # 차지 쿨다운 중: 쿨다운이 끝나는 순간 완료되도록만 모인다 (그 전에 떼면 일반 돌진)
-			charge_t = minf(charge_t, maxf(0.0, charge_need() - charge_cd))
+		if charge_cd > 0.0:                   # 차지 쿨다운 중: 모이지 않는다 (감속·떨림도 없음). 끝나면 0부터 모인다. 그 전에 떼면 일반 돌진
+			charge_t = 0.0
 		if charge_t >= charge_need() and not charged_notified:
 			charged_notified = true
 			main.on_charged(position)

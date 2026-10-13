@@ -334,9 +334,13 @@ func _update_camera(delta: float) -> void:
 	var v: Vector2 = player.vel
 	var target: Vector2 = player.position + Vector2(v.x * 0.05, -80.0 + clampf(v.y * 0.1, -100.0, 100.0))
 	var mode := 1.0
-	if player.aim_phase or player.charging:       # 줌아웃 + 조준 방향 보여주기는 이때만
+	if player.aim_phase:                          # 줌아웃 + 조준 방향 보여주기는 조준·차지 중에만
 		target += player.aim * 160.0
-		mode = AIM_ZOOM if player.aim_phase else CHARGE_ZOOM
+		mode = AIM_ZOOM
+	else:
+		var cv: float = player.charge_view()      # 차지는 절반 넘게 모였을 때부터 서서히 (짧게 누르는 돌진에선 카메라가 출렁이지 않게)
+		target += player.aim * 160.0 * cv
+		mode = lerpf(1.0, CHARGE_ZOOM, cv)
 	cam.position = cam.position.lerp(target, 1.0 - exp(-6.0 * delta))
 	cam.offset = Vector2(randf_range(-1, 1), randf_range(-1, 1)) * shake
 	shake = move_toward(shake, 0.0, 60.0 * delta)
