@@ -1,53 +1,62 @@
 extends "res://scripts/attacks/attack.gd"
-## 나선 탄막: 포대가 달아오르며(회전 방향 예고) 잔탄을 양쪽으로 돌려 뿌리고, 그 사이 주탄을 플레이어에게 쏜다.
-## 잔탄은 피하거나 패리로 흡수하고, 주탄을 패리해 리버스 드라이브를 연다.
-## hard(코어 페이즈): 갈래 3개, 더 오래, 주탄도 더 자주.
+## 회전 탄막: 포대가 달아오르는 동안(예고: 휘두를 부채꼴이 표시되고 플레이어 쪽을 겨눈다) 잔탄 줄기를 그 부채꼴 안에서
+## 한쪽 끝에서 반대쪽 끝까지 휘둘렀다 돌아오며 뿌리고, 그 사이 주탄을 플레이어에게 쏜다. 부채꼴 밖(특히 반대쪽)은 비어 있어
+## 거기로 빠져나갈 수 있다. 잔탄은 피하거나 패리로 흡수하고, 주탄을 패리해 리버스 드라이브를 연다.
+## hard(코어 페이즈): 줄기 2개(서로 반대로 휘두름, 같은 부채꼴 안), 조금 더 촘촘하고 오래, 주탄도 더 자주.
+## 다른 패턴이 쉬는 동안에만 혼자 쓴다 (고르기는 fortress.gd).
 ## boss 에 필요한 것: set_glow(c, v), bolt_mult()
 
 const Projectiles := preload("res://scripts/projectiles.gd")
-const WIND := 0.8
-const DURATION := 2.4
-const RATE := 0.075                  # 잔탄 간격 (한 번에 반대 방향 둘)
-const TURN := 0.33                   # 잔탄마다 도는 각도
-const MAIN_EVERY := 0.6              # 주탄 간격
+const WIND := 0.9
+const DURATION := 2.8
+const RATE := 0.11                   # 잔탄 간격 (줄기마다 한 발)
+const RATE_HARD := 0.09
+const SWEEP := 0.8                   # 부채꼴 반각 (라디안, 전체 약 92도)
+const MAIN_EVERY := 0.7              # 주탄 간격
+const MAIN_EVERY_HARD := 0.5
 const SMALL_SPEED := 270.0
 const MAIN_SPEED := 340.0
 const C_WARN := Color(1.0, 0.3, 0.25)
 
 var cannon := -1                     # 발사점 번호 (-1 = 첨탑). 부서지면 끊긴다
 var origin := Vector2.ZERO
-var ang := 0.0
-var spin := 1.0
+var center := 0.0                    # 부채꼴 가운데 방향 (예고 동안 플레이어를 따라가다 쏘기 시작할 때 고정)
+var spin := 1.0                      # +1 / -1: 어느 끝에서 시작하는가
 var smalls := 0
 var mains := 0
-var arms := 2                        # 한 번에 뿌리는 갈래 수 (반대 방향으로 고르게)
+var arms := 1
+var rate := RATE
 var duration := DURATION
 var main_every := MAIN_EVERY
 
 
-func _init(c: int, o: Vector2, hard := false) -> void:
+func _init(c: int, o: Vector2, ppos := Vector2(0.0, -1500.0), hard := false) -> void:
 	kind = "spiral"
 	cannon = c
 	part = c
 	origin = o
-	ang = randf() * TAU
+	center = (ppos - o).angle()
 	spin = 1.0 if randf() < 0.5 else -1.0
 	if hard:
-		arms = 3
-		duration = 3.2
-		main_every = 0.45
+		arms = 2
+		rate = RATE_HARD
+		duration = 3.4
+		main_every = MAIN_EVERY_HARD
 
 
 func step(_dt: float, ppos: Vector2) -> void:
 	if t < WIND:
 		boss.set_glow(cannon, t / WIND)
+		center = (ppos - origin).angle()        # 부채꼴이 플레이어를 따라가다가 쏘기 직전에 고정된다
 		return
 	var ft := t - WIND
 	var m: float = boss.bolt_mult()
-	while smalls * RATE <= ft and smalls * RATE < duration:
+	while smalls * rate <= ft and smalls * rate < duration:
+		var ph := cos(TAU * smalls * rate / duration)       # 한쪽 끝에서 시작해 반대쪽 끝까지 갔다 돌아온다
 		for k in arms:
-			boss.shots.spawn(origin, Vector2.from_angle(ang + k * TAU / arms) * SMALL_SPEED * m, 9.0, 0.0, 0.0, Projectiles.Kind.SMALL)
-		ang += TURN * spin
+			var sgn := 1.0 if k == 0 else -1.0
+			var a := center - spin * sgn * SWEEP * ph
+			boss.shots.spawn(origin, Vector2.from_angle(a) * SMALL_SPEED * m, 9.0, 0.0, 0.0, Projectiles.Kind.SMALL)
 		smalls += 1
 	while mains * main_every <= ft and mains * main_every < duration:
 		boss.shots.spawn(origin, (ppos - origin).normalized() * MAIN_SPEED * m, 9.0)
@@ -58,18 +67,22 @@ func step(_dt: float, ppos: Vector2) -> void:
 		boss.finish_attack()
 
 
-## 예고: 포구 둘레를 도는 화살표 (회전 방향)
+## 예고: 휘두를 부채꼴(옅은 붉은 면 + 양 끝 선)과 시작 끝에서 휘두르는 방향 화살표
 func draw() -> void:
-	if t >= WIND:
+	if t >= WIND + 0.4:
 		return
 	var c: CanvasItem = boss
-	var k := t / WIND
-	var r := 90.0 + 30.0 * (1.0 - k)
-	var base: float = boss.t * 4.0 * spin
-	c.draw_arc(origin, r, 0.0, TAU, 40, Color(C_WARN, 0.25 + 0.35 * k), 3.0)
-	for j in 4:
-		var a := base + j * TAU / 4.0
-		var p := origin + Vector2.from_angle(a) * r
-		var tg := Vector2.from_angle(a + PI * 0.5 * spin)
-		var n := Vector2.from_angle(a)
-		c.draw_colored_polygon(PackedVector2Array([p + tg * 22.0, p - tg * 8.0 + n * 12.0, p - tg * 8.0 - n * 12.0]), Color(1.0, 0.85, 0.6, 0.4 + 0.5 * k))
+	var k := clampf(t / WIND, 0.0, 1.0)
+	var a0 := center - SWEEP
+	var a1 := center + SWEEP
+	var pts := PackedVector2Array([origin])
+	for j in 13:
+		pts.append(origin + Vector2.from_angle(lerpf(a0, a1, j / 12.0)) * 1100.0)
+	c.draw_colored_polygon(pts, Color(C_WARN, 0.04 + 0.08 * k))
+	for a in [a0, a1]:
+		c.draw_line(origin, origin + Vector2.from_angle(a) * 1100.0, Color(C_WARN, 0.2 + 0.35 * k), 2.0)
+	var start := center - spin * SWEEP
+	var p := origin + Vector2.from_angle(start) * 140.0
+	var tg := Vector2.from_angle(start + PI * 0.5 * spin)
+	var n := Vector2.from_angle(start)
+	c.draw_colored_polygon(PackedVector2Array([p + tg * 26.0, p - tg * 8.0 + n * 14.0, p - tg * 8.0 - n * 14.0]), Color(1.0, 0.85, 0.6, 0.4 + 0.5 * k))

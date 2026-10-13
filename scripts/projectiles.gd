@@ -13,8 +13,8 @@ const R := 16.0                       # 주탄 판정 반지름
 const RADII := [16.0, 16.0, 10.0, 24.0]  # 종류별 판정 반지름
 const WARMUP := 0.3                   # 발사 직후 50% 속도에서 출발해 이 시간 동안 100%까지
 const WARMUP_FLOOR := 0.5
-const HOMING_TIME := 3.2              # 유도탄은 발사 후 이 시간 동안만 방향을 튼다
-const HOMING_TURN := 1.7              # 초당 회전 (라디안)
+const HOMING_TIME := 3.6              # 유도탄은 발사 후 이 시간 동안만 방향을 튼다
+const HOMING_TURN := 2.0              # 초당 회전 (라디안)
 const REFLECT_SPEED := 1500.0         # 반사된 탄 속도
 const REFLECT_DMG := [1, 1, 1, 3]     # 반사된 탄의 피해 (유도탄은 되돌리면 크게)
 const KILL_X := 1250.0                # 이 밖으로 나가면 사라진다 (벽 너머 / 용암 / 천장 위)
@@ -23,6 +23,7 @@ const KILL_TOP := -3100.0
 const C_BOLT := Color(1.0, 0.88, 0.35)
 const C_LAVA := Color(1.0, 0.35, 0.12)
 const C_MINE := Color(0.7, 0.95, 1.0)  # 반사된(플레이어) 탄
+const C_HOMING := Color(1.0, 0.3, 0.12)  # 유도탄: 금색 몸에 붉은 불길 (쫓아오는 위험한 주탄)
 const C_SMALL := Color(1.0, 0.58, 0.12)  # 잔탄: 붉은 기가 도는 노랑(주황) — 패리 가능 = 금색 계열, 주탄 금색보다 붉게
 
 var pos := PackedVector2Array()
@@ -36,6 +37,7 @@ var mine := PackedByteArray()         # 1 = 플레이어 것 (반사됨)
 static var _tex_bolt: Texture2D
 static var _tex_lava: Texture2D
 static var _tex_small: Texture2D
+static var _tex_homing: Texture2D
 
 
 func size() -> int:
@@ -171,10 +173,12 @@ func draw(ci: CanvasItem) -> void:
 		_tex_bolt = _make_tex(C_BOLT)
 		_tex_lava = _make_tex(C_LAVA)
 		_tex_small = _make_small_tex()
+		_tex_homing = _make_homing_tex()
 	var tails := PackedVector2Array()
 	var lava_tails := PackedVector2Array()
 	var mine_tails := PackedVector2Array()
 	var small_tails := PackedVector2Array()
+	var homing_tails := PackedVector2Array()
 	for i in pos.size():
 		var p := pos[i]
 		var tail := p - vel[i].normalized() * (26.0 if kind[i] == Kind.SMALL else 50.0)
@@ -182,12 +186,16 @@ func draw(ci: CanvasItem) -> void:
 			mine_tails.append_array(PackedVector2Array([p, tail]))
 		elif kind[i] == Kind.SMALL:
 			small_tails.append_array(PackedVector2Array([p, tail]))
+		elif kind[i] == Kind.HOMING:
+			homing_tails.append_array(PackedVector2Array([p, tail]))
 		elif kind[i] == Kind.LAVA:
 			lava_tails.append_array(PackedVector2Array([p, tail]))
 		else:
 			tails.append_array(PackedVector2Array([p, tail]))
 	if not tails.is_empty():
 		ci.draw_multiline(tails, Color(C_BOLT, 0.35), 10.0)
+	if not homing_tails.is_empty():
+		ci.draw_multiline(homing_tails, Color(C_HOMING, 0.5), 14.0)
 	if not lava_tails.is_empty():
 		ci.draw_multiline(lava_tails, Color(C_LAVA, 0.35), 10.0)
 	if not mine_tails.is_empty():
@@ -196,6 +204,7 @@ func draw(ci: CanvasItem) -> void:
 		ci.draw_multiline(small_tails, Color(C_SMALL, 0.4), 4.0)
 	var blink := 0.82 + 0.18 * float(int(Time.get_ticks_msec() / 70) % 2)
 	var spin := Time.get_ticks_msec() * 0.006
+	var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.012)
 	for i in pos.size():
 		var k := kind[i]
 		var half: Vector2 = Vector2.ONE * float(RADII[k]) * 1.8
@@ -206,12 +215,19 @@ func draw(ci: CanvasItem) -> void:
 				mod = Color(1, 1, 1, blink)
 			ci.draw_texture_rect(_tex_small, Rect2(pos[i] - half, half * 2.0), false, mod)
 			continue
-		ci.draw_texture_rect(_tex_lava if k == Kind.LAVA else _tex_bolt, Rect2(pos[i] - half, half * 2.0), false, mod)
-		if k == Kind.HOMING:                      # 유도탄: 바깥에서 도는 끊긴 고리 (쫓아온다는 모양 단서)
+		var hot: bool = k == Kind.HOMING and mine[i] == 0
+		if hot:
+			half = Vector2.ONE * float(RADII[k]) * 2.1
+		var tex: Texture2D = _tex_lava if k == Kind.LAVA else (_tex_homing if hot else _tex_bolt)
+		ci.draw_texture_rect(tex, Rect2(pos[i] - half, half * 2.0), false, mod)
+		if k == Kind.HOMING:                      # 유도탄: 바깥에서 도는 끊긴 고리 (쫓아온다는 모양 단서). 적 것은 붉게 맥동한다
 			var rr: float = RADII[k] + 9.0
-			for j in 3:
-				var a0 := spin + j * TAU / 3.0
-				ci.draw_arc(pos[i], rr, a0, a0 + 1.3, 8, Color(C_MINE, 0.9) if mine[i] == 1 else Color(1.0, 0.95, 0.7, 0.9), 3.0)
+			if hot:
+				ci.draw_arc(pos[i], rr + 7.0 + 4.0 * pulse, 0.0, TAU, 20, Color(C_HOMING, 0.4), 2.0)
+			var segs := 4 if hot else 3
+			for j in segs:
+				var a0 := spin * (1.6 if hot else 1.0) + j * TAU / float(segs)
+				ci.draw_arc(pos[i], rr, a0, a0 + (1.0 if hot else 1.3), 8, Color(C_MINE, 0.9) if mine[i] == 1 else Color(1.0, 0.45, 0.2, 0.95), 4.0 if hot else 3.0)
 
 
 ## 잔탄 텍스처: 네 갈래로 뾰족한 주황 별 (가운데는 밝은 노랑, 테두리는 짙은 갈색, 번짐 없음) — 금색 둥근 주탄과 모양부터 다르게
@@ -230,6 +246,27 @@ static func _make_small_tex() -> Texture2D:
 				col = C_SMALL
 			elif d <= 1.0:
 				col = Color(0.5, 0.17, 0.02)
+			img.set_pixel(x, y, col)
+	return ImageTexture.create_from_image(img)
+
+
+## 유도탄 텍스처: 흰 심 + 주황 금색 몸 + 붉은 테두리와 붉은 불길 번짐 (금색 = 패리 가능은 그대로, 더 눈에 띄고 위험해 보이게)
+static func _make_homing_tex() -> Texture2D:
+	var n := 64
+	var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
+	var c := (n - 1) * 0.5
+	for y in n:
+		for x in n:
+			var d := Vector2(x - c, y - c).length() / (n * 0.5)
+			var col := Color(0, 0, 0, 0)
+			if d <= 0.25:
+				col = Color(1, 1, 0.85)
+			elif d <= 0.5:
+				col = Color(1.0, 0.7, 0.14)
+			elif d <= 0.66:
+				col = Color(1.0, 0.28, 0.08, 0.95)
+			elif d <= 1.0:
+				col = Color(C_HOMING, 0.3)
 			img.set_pixel(x, y, col)
 	return ImageTexture.create_from_image(img)
 

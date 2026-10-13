@@ -28,6 +28,7 @@ func _process(_d: float) -> bool:
 	_v034_test()
 	_v035_test()
 	_v036_test()
+	_v037_test()
 	_telemetry_test()
 	print("FAILS ", fails)
 	quit(fails)
@@ -572,7 +573,8 @@ func _fortress_test() -> void:
 	p.reset(Vector2(-300, -1300), false)
 	p.invuln = 99.0
 	p.stats.reflect = true
-	p.reflect_t = 0.3
+	p.dash_kind = "power"                              # 반사는 리버스 드라이브로 돌진하는 동안만
+	p.dash_t = 0.3
 	var tgt: Vector2 = b.target_pos(p.position)
 	var ti := -1
 	for i in 4:
@@ -649,7 +651,7 @@ func _v034_test() -> void:
 	while p.shield_t > 0.0 and frames < 120:
 		_step(1)
 		frames += 1
-	_check("bounce shield ends when control returns (%.2fs, before dash cooldown %.2f)" % [frames * DT, p.stats.dash_cooldown], frames * DT < p.stats.dash_cooldown - 0.28 and not p.bouncing)
+	_check("bounce shield ends when control returns (%.2fs, before dash cooldown %.2f)" % [frames * DT, p.stats.dash_cooldown], frames * DT < p.stats.dash_cooldown - 0.28 and frames * DT >= 0.7 and not p.bouncing)
 
 	# 잔탄 흡수 → 판정이 끝나도 쿨다운 없음
 	main.start_stage(1)
@@ -914,7 +916,7 @@ func _v035_test() -> void:
 			mains += 1
 	_check("overload: dense rings with main shots, then ends (max %d, mains %d)" % [most, mains], done and most >= ov.RINGS * ov.COUNT * 0.8 and mains >= 2)
 	# 코어 페이즈엔 기존 탄막도 강해진다
-	_check("hard spiral has 3 arms, hard fan 4 waves, hard mines 5", b.Spiral.new(-1, b.SPIRE_TOP, true).arms == 3 and b.Fan.new(-1, b.SPIRE_TOP, Vector2.ZERO, true).wave_n == 4 and b.Mines.new(Vector2.ZERO, true).mines.size() == 5)
+	_check("hard spiral has 2 arms, hard fan 4 waves, hard mines 5", b.Spiral.new(-1, b.SPIRE_TOP, Vector2.ZERO, true).arms == 2 and b.Fan.new(-1, b.SPIRE_TOP, Vector2.ZERO, true).wave_n == 4 and b.Mines.new(Vector2.ZERO, true).mines.size() == 5)
 	main.start_stage(0)
 
 
@@ -974,4 +976,216 @@ func _v036_test() -> void:
 	b.atk = null
 	b.lingering.clear()
 	_check("no press, no temporary target", b.assist_targets(Vector2(400, -2500)).size() == 4)
+	main.start_stage(0)
+
+
+## v0.37: 잔탄 피격 = 과열 게이지, 돌진 직후 잔탄 무적, 퍼펙트 회피 무적 갱신, 반사는 돌진하는 동안만,
+## 회전 탄막은 부채꼴 안에서만·다른 패턴이 쉴 때만, 유도탄 상향, 관측자의 잔탄
+func _v037_test() -> void:
+	var p = main.player
+	main.start_stage(1)
+	var b = main.boss
+	var K = b.shots.Kind
+	b.next_t = 99.0
+	# 과열 게이지: 잔탄은 셀을 바로 깨지 않고 제어 불능도 없다. 동조는 유지
+	p.reset(Vector2(-700, -1500), false)
+	p.buffed = true
+	p.buff_t = 3.0
+	var lives0: int = main.lives
+	for n in 3:
+		p.position = Vector2(-700, -1500)
+		p.vel = Vector2.ZERO
+		p.invuln = 0.0
+		b.shots.spawn(p.position + Vector2(5, 0), Vector2.ZERO, 5.0, 0.0, 0.0, K.SMALL)
+		_step(1)
+		if n == 0:
+			_check("small bullet: gauge +1, no cell lost, no stun, sync kept, brief invuln (heat %d, lives %d, stun %.2f, invuln %.2f)" % [main.heat, main.lives, p.stun, p.invuln],
+				main.heat == 1 and main.lives == lives0 and p.stun <= 0.0 and p.invuln > 0.0 and p.buffed and b.shots.is_empty())
+	_check("3 small hits break one cell, gauge resets, still no stun (heat %d, lives %d)" % [main.heat, main.lives], main.heat == 0 and main.lives == lives0 - 1 and p.stun <= 0.0)
+	p.position = Vector2(-700, -1500)
+	p.vel = Vector2.ZERO
+	p.invuln = 0.0
+	main.hitstop = 0.0
+	b.shots.spawn(p.position + Vector2(5, 0), Vector2.ZERO, 5.0)
+	_step(1)
+	_check("main bolt still hurts fully (lives %d, stun %.2f)" % [main.lives, p.stun], main.lives == lives0 - 2 and p.stun > 0.0)
+	# 식는다
+	main.start_stage(1)
+	b = main.boss
+	b.next_t = 99.0
+	p.reset(Vector2(-700, -1500), false)
+	main.heat = 2
+	main.heat_t = main.HEAT_COOL
+	for k in int((main.HEAT_COOL + 0.3) / DT):
+		p.position = Vector2(-700, -1500)
+		p.vel = Vector2.ZERO
+		p.invuln = 999.0
+		_step(1)
+	_check("gauge cools one notch after %.0fs (heat %d)" % [main.HEAT_COOL, main.heat], main.heat == 1)
+	# 일반 돌진 직후 0.25초는 잔탄 무적, 그 뒤엔 맞는다
+	p.reset(Vector2(-700, -1500), false)
+	p.invuln = 0.0
+	_dash_dir("dash", Vector2.RIGHT)
+	_step(int(0.3 / DT))
+	_check("small guard after a normal dash (%.2f)" % p.small_guard, p.small_guard > 0.0 and p.dash_t <= 0.0)
+	var h0: int = main.heat
+	main.hitstop = 0.0
+	b.shots.spawn(p.position + Vector2(3, 0), Vector2.ZERO, 5.0, 0.0, 0.0, K.SMALL)
+	_step(1)
+	_check("small bullet ignored during the guard (heat %d)" % main.heat, main.heat == h0 and b.shots.size() == 1)
+	_step(int(0.3 / DT))
+	p.position = b.shots.pos[0]
+	p.vel = Vector2.ZERO
+	_step(1)
+	_check("hits once the guard is over (heat %d)" % main.heat, main.heat == h0 + 1)
+	b.shots.clear()
+
+	# 퍼펙트 회피한 돌진 중 다른 탄에 닿으면 추가 무적이 처음 길이로 되돌아온다
+	p.reset(Vector2(-700, -1500), false)
+	b.shots.clear()
+	_dash_dir("dash", Vector2.RIGHT)
+	b.shots.spawn(p.position + Vector2(20, 0), Vector2.ZERO, 5.0)
+	_step(1)
+	_check("perfect evade granted (invuln %.2f)" % p.invuln, p.evade_rewarded and p.invuln > 0.75)
+	_step(8)
+	var low: float = p.invuln
+	b.shots.spawn(p.position + Vector2(30, 0), Vector2.ZERO, 5.0)       # 이번 프레임에 기체가 앞으로 나아가며 닿는다
+	var lv: int = main.lives
+	_step(1)
+	_check("touching another bullet mid-dash resets the invuln (%.2f -> %.2f), no damage" % [low, p.invuln], p.invuln > low + 0.1 and p.invuln > 0.75 and main.lives == lv and p.dash_t > 0.0)
+	b.shots.clear()
+
+	# 반사 코어: 리버스 드라이브로 돌진하는 동안만 (적중해 튕겨나면 끝)
+	main.start_stage(1)
+	b = main.boss
+	b.next_t = 99.0
+	p.stats.reflect = true
+	p.reset(b.part_pos(0) + Vector2(-200, 0), false)
+	p.aim_phase = true
+	p.aim = Vector2.RIGHT
+	_check("reflect is off before the dash", not p.is_reflecting())
+	p.launch_parry_dash()
+	_check("reflect is on during the reverse drive", p.is_reflecting())
+	_step(6)
+	_check("hit -> bouncing: reflect ends right away (bouncing %s)" % p.bouncing, p.bouncing and not p.is_reflecting())
+	b.shots.spawn(p.position + Vector2(30, 0), Vector2.ZERO, 5.0)
+	_step(1)
+	_check("bullet near the bouncing ship is not returned", b.shots.size() == 1 and b.shots.mine[0] == 0)
+	p.stats.reflect = false
+	b.shots.clear()
+
+	# 회전 탄막: 부채꼴 안에서만, 줄기 하나, 옛날보다 훨씬 성김
+	main.start_stage(1)
+	b = main.boss
+	b.next_t = 99.0
+	p.reset(Vector2(500, -1500), false)
+	var sp = b.Spiral.new(-1, b.SPIRE_TOP, p.position)
+	b.start_attack(sp)
+	var maxdev := 0.0
+	for k in 330:
+		p.position = Vector2(500, -1500)
+		p.vel = Vector2.ZERO
+		p.invuln = 999.0
+		main._physics_process(DT)
+		for j in b.shots.size():
+			if b.shots.kind[j] == K.SMALL:
+				maxdev = maxf(maxdev, absf(wrapf(b.shots.vel[j].angle() - sp.center, -PI, PI)))
+		if b.atk == null:
+			break
+	var toward: float = (p.position - b.SPIRE_TOP).angle()
+	_check("spiral: aimed at the player, sweeps only inside its fan (dev %.2f <= %.2f)" % [maxdev, sp.SWEEP], absf(wrapf(sp.center - toward, -PI, PI)) < 0.05 and maxdev <= sp.SWEEP + 0.02 and maxdev > sp.SWEEP * 0.8)
+	_check("spiral: sparse (%d small bullets, was ~64)" % sp.smalls, sp.smalls >= 20 and sp.smalls <= 30 and sp.arms == 1)
+	# 다른 패턴이 쉬는 동안에만 혼자
+	var calm_seen := false
+	var busy_seen := false
+	var dummy = b.Rings.new(b.REACTOR_POS)
+	for k in 150:
+		b.atk = null
+		b.last = ""
+		b.since_special = 0
+		b.since_homing = 0
+		b.shots.clear()
+		b.lingering.clear()
+		b._choose(Vector2(-500, -1500))
+		if b.atk != null and b.atk.kind == "spiral":
+			calm_seen = true
+		b.atk = null
+		b.last = ""
+		b.since_special = 0
+		b.lingering = [dummy]
+		b._choose(Vector2(-500, -1500))
+		if b.atk != null and b.atk.kind == "spiral":
+			busy_seen = true
+	b.lingering.clear()
+	_check("spiral is used only when nothing else is going on (calm %s, with another pattern %s)" % [calm_seen, busy_seen], calm_seen and not busy_seen)
+	# 많은 탄이 떠 있어도 안 쓴다 / 쓰는 순간엔 유도탄을 같이 쏘지 않는다
+	var many_seen := false
+	var homing_with_spiral := false
+	for k in 150:
+		b.atk = null
+		b.last = ""
+		b.since_special = 0
+		b.since_homing = 99
+		b.shots.clear()
+		b.lingering.clear()
+		b._choose(Vector2(-500, -1500))
+		if b.atk != null and b.atk.kind == "spiral" and b.is_lingering("homing"):
+			homing_with_spiral = true
+		b.atk = null
+		b.last = ""
+		b.since_special = 0
+		b.lingering.clear()
+		for j in 12:
+			b.shots.spawn(Vector2(300, -1500), Vector2.ZERO, 5.0)
+		b._choose(Vector2(-500, -1500))
+		if b.atk != null and b.atk.kind == "spiral":
+			many_seen = true
+	b.shots.clear()
+	b.lingering.clear()
+	b.atk = null
+	_check("spiral skipped while many bullets are out; never started with homing (many %s, homing+spiral %s)" % [many_seen, homing_with_spiral], not many_seen and not homing_with_spiral)
+
+	# 유도탄: 더 빠르고 더 잘 쫓는다
+	b.last = ""
+	var hm = b.Homing.new()
+	b.start_attack(hm)
+	for k in int(1.2 / DT):
+		main._physics_process(DT)
+		if b.shots.size() > 0:
+			break
+	_check("homing is faster (%.0f px/s) and turns harder (%.1f rad/s)" % [b.shots.vel[0].length() if b.shots.size() > 0 else 0.0, b.shots.HOMING_TURN],
+		b.shots.size() > 0 and b.shots.vel[0].length() >= 265.0 and b.shots.HOMING_TURN >= 2.0)
+	b.shots.clear()
+	b.atk = null
+
+	# 관측자: 주탄 일부를 잔탄으로
+	main.start_stage(0)
+	b = main.boss
+	b.next_t = 99.0
+	p.reset(Vector2(-700, -1500), false)
+	var vo = b.Volley.new(-1, b.HEAD_POS, p.position)
+	b.start_attack(vo)
+	for k in int(2.0 / DT):
+		p.invuln = 999.0
+		main._physics_process(DT)
+		if b.shots.size() > 0:
+			break
+	var vs := 0
+	for j in b.shots.size():
+		if b.shots.kind[j] == K.SMALL:
+			vs += 1
+	_check("observer volley: 3 main + 2 small per wave (%d small of %d)" % [vs, b.shots.size()], b.shots.size() == 5 and vs == 2)
+	b.shots.clear()
+	b.atk = null
+	b.start_attack(b.Burst.new(-1, b.HEAD_POS))
+	for k in int(2.0 / DT):
+		p.invuln = 999.0
+		main._physics_process(DT)
+		if b.shots.size() > 0:
+			break
+	vs = 0
+	for j in b.shots.size():
+		if b.shots.kind[j] == K.SMALL:
+			vs += 1
+	_check("observer burst: 12 main + 6 small (%d small of %d)" % [vs, b.shots.size()], b.shots.size() == 18 and vs == 6)
 	main.start_stage(0)

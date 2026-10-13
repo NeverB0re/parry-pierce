@@ -8,6 +8,7 @@ extends "res://scripts/colossus_base.gd"
 ##       · 반응로 폭주(코어 페이즈 전용). 코어 페이즈에선 기존 탄막도 강해진다(hard).
 ## 탄막형이라 화면이 비지 않게: 쉬는 시간이 짧고, 유도탄은 다른 공격과 겹쳐 쏘며(보조 공격),
 ## 동심원 파동·올라가는 프레스는 판정을 남긴 채 다음 공격에 자리를 내준다. 같은 탄막을 연달아 쓰지 않는다.
+## 회전형(spiral)은 반대로 다른 패턴이 쉴 때만 혼자 쓰고, 부채꼴 안에서만 뿌려 반대쪽이 비어 있다.
 ## 바닥 y=0, 위쪽이 음수. 몸 중심 x=0.
 
 const ArmoredCore := preload("res://scripts/armored_core.gd")
@@ -48,6 +49,8 @@ const OPEN_TIME := 1.6
 const LOW_ZONE_Y := -1000.0          # 이보다 아래면 기뢰 위주
 const GAP := Vector2(0.35, 0.7)      # 공격 사이 쉬는 시간 (짧게: 탄막형이라 화면이 비지 않게)
 const GAP_CORE := Vector2(0.2, 0.45) # 코어 페이즈는 더 몰아친다
+const GAP_SPIRAL := Vector2(1.0, 1.4) # 회전형 탄막 뒤: 남은 탄이 지나갈 시간을 준다 (겹치지 않게)
+const CALM_SHOTS := 8                # 회전형 탄막은 필드의 탄이 이 이하이고 겹쳐 도는 공격이 없을 때만
 const SPECIAL_EVERY := 5             # 특수기(프레스·동심원)는 이만큼 공격한 뒤에야 다시 (드물게, 연달아 쓰지 않음)
 const HOMING_EVERY := 3              # 유도탄(보조 공격)은 공격 이만큼마다 (코어 페이즈는 2)
 
@@ -138,6 +141,8 @@ func _step_effects(dt: float) -> void:
 
 func _step_phase(dt: float) -> void:
 	attack_gap = GAP_CORE if phase == 3 else GAP
+	if last == "spiral":
+		attack_gap = GAP_SPIRAL
 	for i in glow.size():
 		glow[i] = move_toward(glow[i], 0.0, dt * 2.0)
 
@@ -146,30 +151,41 @@ func _choose(ppos: Vector2) -> void:
 	var hard := phase == 3
 	since_special += 1
 	since_homing += 1
-	if since_homing >= (2 if hard else HOMING_EVERY) and not homing_origins().is_empty():   # 유도탄은 다른 공격과 겹쳐 쏜다
-		since_homing = 0
-		start_side(Homing.new())
+	var calm: bool = lingering.is_empty() and shots.size() <= CALM_SHOTS    # 회전형 탄막은 다른 패턴이 쉴 때만 혼자
+	var want_homing := since_homing >= (2 if hard else HOMING_EVERY) and not homing_origins().is_empty()
+	var main_kind := ""
 	if since_special >= SPECIAL_EVERY and randf() < 0.5:    # 드물게: 천장 프레스(근접, 회피 불가) / 심장부 동심원 파동(패리 불가)
 		since_special = 0
-		if randf() < 0.5 or is_lingering("rings"):
-			_pick("press", Press.new())
-		else:
-			_pick("rings", Rings.new(REACTOR_POS))
-		return
-	if ppos.y > LOW_ZONE_Y and last != "mines" and randf() < 0.6:   # 낮은 곳: 기뢰 위주
-		_pick("mines", Mines.new(ppos, hard))
-		return
-	var pool: Array[String] = ["spiral", "fan"]
-	if hard:
-		pool.append("overload")
-		pool.append("overload")
-	while pool.has(last):
-		pool.erase(last)
+		main_kind = "press" if (randf() < 0.5 or is_lingering("rings")) else "rings"
+	elif ppos.y > LOW_ZONE_Y and last != "mines" and randf() < 0.6:   # 낮은 곳: 기뢰 위주
+		main_kind = "mines"
+	else:
+		var pool: Array[String] = ["spiral", "fan"]
+		if hard:
+			pool.append("overload")
+			pool.append("overload")
+		while pool.has(last):
+			pool.erase(last)
+		if not calm:
+			while pool.has("spiral"):
+				pool.erase("spiral")
+		if pool.is_empty():
+			pool.append("fan")
+		main_kind = pool[randi() % pool.size()]
+	if want_homing and main_kind != "spiral":                # 유도탄은 다른 탄막과 겹쳐 쏜다 (회전형과는 겹치지 않는다)
+		since_homing = 0
+		start_side(Homing.new())
 	var c := _battery(ppos)
 	var org: Vector2 = SPIRE_TOP if c < 0 else BARREL_TIPS[c]
-	match pool[randi() % pool.size()]:
+	match main_kind:
+		"press":
+			_pick("press", Press.new())
+		"rings":
+			_pick("rings", Rings.new(REACTOR_POS))
+		"mines":
+			_pick("mines", Mines.new(ppos, hard))
 		"spiral":
-			_pick("spiral", Spiral.new(c, org, hard))
+			_pick("spiral", Spiral.new(c, org, ppos, hard))
 		"fan":
 			_pick("fan", Fan.new(c, org, ppos, hard))
 		_:

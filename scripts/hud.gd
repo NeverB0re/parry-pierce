@@ -96,6 +96,14 @@ func _draw() -> void:
 	# 목숨: 플레이어와 같은 로켓. 잃은 목숨은 박살난 회색 잔해
 	for i in pl.stats.shield_cells:
 		_draw_life(Vector2(46 + i * 46, 50), i < main.lives)
+	# 과열 게이지: 잔탄에 맞으면 한 칸씩 오르고 가득 차면 실드 셀 1개가 깨진다 (안 맞으면 천천히 식는다)
+	var gx: float = 46.0 + pl.stats.shield_cells * 46.0 + 8.0
+	for i in main.HEAT_MAX:
+		var lit: bool = i < main.heat
+		var gr := Rect2(gx + i * 22.0, 44.0, 18.0, 12.0)
+		draw_rect(gr, Color(1.0, 0.55, 0.15, 0.95) if lit else Color(0.3, 0.3, 0.34, 0.5))
+		draw_rect(gr, Color(0.9, 0.9, 0.95, 0.5), false, 1.0)
+	_text(Vector2(gx, 64), "과열", 12, Color(1.0, 0.75, 0.4, 0.8))
 
 	_draw_target_marker(s, boss)
 	if not boss.dead and boss.attack_kind() == "beam" and s.x >= 300.0:   # 레이저 중 머리가 화면 밖이면 방향 표시

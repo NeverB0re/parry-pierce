@@ -5,7 +5,7 @@ extends "res://scripts/attacks/attack.gd"
 
 const Projectiles := preload("res://scripts/projectiles.gd")
 const WIND := 0.9
-const SPEED := 230.0
+const SPEED := 270.0
 const LIFE := 7.0
 const AFTER := 0.6                   # 쏜 뒤 다음 공격까지
 

@@ -13,6 +13,8 @@ var plan := [
 	["rings", "rings", 150, Vector2(0, -1640), 0.3],
 	["overload", "overload", 130, Vector2(0, -1640), 0.4],
 	["shield", "shield", 20, Vector2(250, -1200), 1.6],
+	["tail", "tail", 20, Vector2(250, -1200), 1.4],
+	["spiral_warn", "spiral", 40, Vector2(0, -2000), 0.4],
 ]
 var idx := 0
 var local := 0
@@ -62,6 +64,14 @@ func _process(_d: float) -> bool:
 				b.atk = null
 				b.next_t = 999.0
 				b.start_attack(b.Overload.new(b.REACTOR_POS))
+			"tail":                                    # 금빛 꼬리(완전 동조) + 유도탄·주탄·잔탄 비교
+				p.buffed = true
+				p.buff_strong = true
+				p.buff_t = 9.0
+				var K3 = b.shots.Kind
+				b.shots.spawn(Vector2(420, -1280), Vector2(-1, 0) * 0.01, 99.0, 1.0, 0.0, K3.HOMING)
+				b.shots.spawn(Vector2(420, -1160), Vector2(-1, 0) * 0.01, 99.0, 1.0)
+				b.shots.spawn(Vector2(420, -1060), Vector2(-1, 0) * 0.01, 99.0, 1.0, 0.0, K3.SMALL)
 			"shield":                                  # 무적 실드 + 잔탄 확대
 				var K2 = b.shots.Kind
 				for k in 3:

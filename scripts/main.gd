@@ -4,6 +4,7 @@ extends Node2D
 
 const Player := preload("res://scripts/player.gd")
 const Ev := preload("res://scripts/ev.gd")
+const Projectiles := preload("res://scripts/projectiles.gd")
 const Fx := preload("res://scripts/fx.gd")
 const Ground := preload("res://scripts/ground.gd")
 const Background := preload("res://scripts/background.gd")
@@ -32,6 +33,10 @@ const RESPAWN_DELAY := 1.3         # 용암에 빠진 뒤 재출격까지
 const RESPAWN_INVULN := 1.5
 const PLAT_SINK_TIME := 1.0        # 발사 후 발판이 가라앉는 시간
 const PLAT_RISE_TIME := 0.6
+const HEAT_MAX := 3                # 잔탄에 이만큼 맞으면 실드 셀 1개가 깨진다 (과열 게이지)
+const HEAT_COOL := 5.0             # 이 시간 동안 잔탄에 안 맞으면 게이지가 한 칸 식는다
+const GRAZE_INVULN := 0.35         # 잔탄에 맞은 직후 무적
+const GRAZE_BREAK_INVULN := 0.8    # 게이지가 차서 셀이 깨진 직후 무적
 
 enum State { PLAY, WON, DEAD, RESPAWN }
 
@@ -67,6 +72,8 @@ var lava                           # 바닥(용암·발판) 노드
 var spawn := SPAWN
 var spawn_on_platform := true
 var win_t := 0.0                   # 승리 후 흐른 시간 (바로 클릭해 정비로 넘어가는 실수 방지)
+var heat := 0                      # 과열 게이지 (잔탄 피격 횟수)
+var heat_t := 0.0                  # 다음에 한 칸 식을 때까지
 
 
 func _ready() -> void:
@@ -177,6 +184,8 @@ func reset_run() -> void:
 	state = State.PLAY
 	run_time = 0.0
 	win_t = 0.0
+	heat = 0
+	heat_t = 0.0
 	lives = player.stats.shield_cells
 	hitstop = 0.0
 	slowmo = 0.0
@@ -343,6 +352,7 @@ func _physics_body(delta: float) -> void:
 	_tutorial_triggers()
 	_drain_boss_events()
 	player.step(delta)
+	_heat_cool(dt)
 	_reflect()
 	if state == State.PLAY:
 		_check_attacks()
@@ -372,6 +382,8 @@ func _tutorial_triggers() -> void:
 		tutorial.request(["press"])
 	elif kd == "rings":
 		tutorial.request(["unparry"])
+	if boss.shots.kind.has(Projectiles.Kind.SMALL):    # 잔탄이 처음 나오면 (관측자도 섞어 쏜다)
+		tutorial.request(["barrage"])
 
 
 func _tele_extra() -> Dictionary:
@@ -440,6 +452,8 @@ func _check_attacks() -> void:
 	if player.can_evade_reward() and boss.beam_hit(p, graze) != Vector2.ZERO:
 		player.try_evade_reward(true)                   # 패리 불가 레이저를 돌진 직후 스침 = 강한 퍼펙트 회피 (4배)
 	var beam_push: Vector2 = boss.beam_hit(p, Player.RADIUS)   # 패리 불가: 돌진 무적으로만 피한다
+	if beam_push != Vector2.ZERO and player.can_refresh_evade():
+		player.refresh_evade_invuln()
 	if beam_push != Vector2.ZERO and not player.is_immune():
 		hurt_player(beam_push, boss.attack_kind())
 		return
@@ -452,6 +466,8 @@ func _check_attacks() -> void:
 			continue
 		if not melee and player.can_evade_reward() and boss.overlaps(hb, p, graze):
 			player.try_evade_reward()                   # 돌진 직후 공격이 스침 = 퍼펙트 회피
+		if not melee and player.can_refresh_evade() and boss.overlaps(hb, p, Player.RADIUS):
+			player.refresh_evade_invuln()               # 퍼펙트 회피한 돌진 중 다른 탄에 닿을 때마다 추가 무적을 처음 길이로
 		if not boss.overlaps(hb, p, reach):
 			continue
 		if player.parry_active:
@@ -473,8 +489,14 @@ func _check_attacks() -> void:
 			_parried_bullet(hb)
 			_parry_feedback(p, perfect, hb)
 			return
+		var small: bool = hb.get("small", false)
+		if small and player.small_guard > 0.0:         # 일반 돌진이 끝난 직후 잠깐: 잔탄은 맞지 않는다
+			continue
 		var immune: bool = player.is_immune_melee() if melee else player.is_immune()
 		if not immune and boss.overlaps(hb, p, Player.RADIUS):
+			if small:                                  # 잔탄: 실드 셀이 바로 깨지지 않고 과열 게이지만 오른다 (제어 불능 없음)
+				_graze(hb)
+				return
 			var cause: String = hb["id"]
 			if cause == "bolt" and hb["lava"]:
 				cause = "lava_glob"
@@ -562,6 +584,46 @@ func hurt_player(push: Vector2, cause := "attack", damage := true) -> void:
 			_die()
 
 
+## 잔탄 피격: 실드 셀이 바로 깨지지 않고 과열 게이지가 한 칸 오른다. 제어 불능도, 동조·차지 취소도 없다.
+## 게이지가 가득 차면(HEAT_MAX) 셀 1개가 깨지고 비워진다. HEAT_COOL 초 동안 안 맞으면 한 칸 식는다
+func _graze(hb: Dictionary) -> void:
+	boss.on_hit_player(hb)
+	if debug.god:
+		return
+	tele.hurt_by("small")
+	var p: Vector2 = player.position
+	heat += 1
+	heat_t = HEAT_COOL
+	if heat < HEAT_MAX:
+		player.invuln = maxf(player.invuln, GRAZE_INVULN)
+		shake = maxf(shake, 5.0)
+		sfx.play("hurt", -10.0)
+		hud.flash(0.08, Color(1.0, 0.55, 0.15))
+		fx.burst(p, 8, Color(1.0, 0.6, 0.2), 420.0, 0.25, 2.5)
+		return
+	heat = 0
+	lives -= 1
+	player.invuln = maxf(player.invuln, GRAZE_BREAK_INVULN)
+	hitstop = maxf(hitstop, 0.06)
+	shake = maxf(shake, 12.0)
+	sfx.play("hurt")
+	hud.flash(0.22, Color(0.9, 0.15, 0.1))
+	fx.burst(p, 18, Color(1.0, 0.45, 0.15), 600.0)
+	if lives <= 0:
+		player.frozen = true
+		fx.burst(p, 40, Color(0.9, 0.2, 0.15), 900.0, 0.8, 5.0)
+		_die()
+
+
+func _heat_cool(dt: float) -> void:
+	if heat <= 0 or state != State.PLAY:
+		return
+	heat_t -= dt
+	if heat_t <= 0.0:
+		heat -= 1
+		heat_t = HEAT_COOL
+
+
 func _parry_feedback(p: Vector2, perfect: bool, hb: Dictionary) -> void:
 	tele.add("parry_perfect" if perfect else "parry")
 	var hp_pos: Vector2 = hb["pos"]
@@ -636,7 +698,7 @@ func _absorb_feedback(at: Vector2) -> void:
 	fx.burst(at, 5, Color(1.0, 0.7, 0.3), 260.0, 0.18, 2.0)
 
 
-## 반사 코어: 리버스 드라이브 중 기체 둘레의 탄을 표적으로 되돌린다
+## 반사 코어: 리버스 드라이브로 돌진하는 동안만 기체 둘레의 탄을 표적으로 되돌린다
 func _reflect() -> void:
 	if state != State.PLAY or not player.is_reflecting():
 		return

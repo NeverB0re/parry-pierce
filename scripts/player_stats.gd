@@ -40,4 +40,4 @@ extends Resource
 
 @export_group("코어 아이템")
 @export var counter := false                ## 반격 코어: 패리한 탄(잔탄 흡수 포함)이 사라지지 않고 표적으로 빠르게 되돌아간다
-@export var reflect := false                ## 반사 코어: 리버스 드라이브 중(과 끝난 직후 0.3초) 닿은 탄을 표적으로 되돌린다
+@export var reflect := false                ## 반사 코어: 리버스 드라이브로 돌진하는 동안만 닿은 탄을 표적으로 되돌린다

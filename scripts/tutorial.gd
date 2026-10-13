@@ -69,8 +69,9 @@ func _pages() -> Dictionary:
 		"barrage": {
 			"title": "탄막 — 주탄과 잔탄",
 			"lines": [
-				"작은 주황 별(잔탄)은 맞으면 아프지만 패리해도 흡수될 뿐, 리버스 드라이브는 열리지 않습니다. 흡수해도 패리 쿨다운이 없어 겹쳐 오는 잔탄을 연달아 막을 수 있습니다.",
-				"크고 둥근 금색 탄(주탄)과 고리가 도는 유도탄을 패리해야 리버스 드라이브가 열립니다. 유도탄은 쫓아오지만 크고 느려서 패리하기 좋습니다.",
+				"작은 주황 별(잔탄)에 맞아도 실드 셀이 바로 깨지지 않고 왼쪽 위 '과열' 게이지가 한 칸 오릅니다(제어 불능 없음). 3칸이 차면 셀 1개가 깨지고, 5초 동안 안 맞으면 한 칸 식습니다.",
+				"잔탄은 패리해도 흡수될 뿐 리버스 드라이브는 열리지 않습니다. 흡수해도 패리 쿨다운이 없어 겹쳐 오는 잔탄을 연달아 막을 수 있습니다. 일반 돌진이 끝난 직후 0.25초는 잔탄을 맞지 않습니다(옅은 실드).",
+				"크고 둥근 금색 탄(주탄)과 붉은 불길을 두른 유도탄을 패리해야 리버스 드라이브가 열립니다. 유도탄은 쫓아오지만 크고 느려서 패리하기 좋습니다.",
 				"바닥 가까이 머물면 융해 지대에 기뢰가 내려앉아 위로 터집니다.",
 			],
 		},
@@ -86,7 +87,7 @@ func _pages() -> Dictionary:
 			"title": "패리 불가 — 보라색 공격",
 			"lines": [
 				"검붉은 보라색 공격(눈 레이저·심장부에서 퍼지는 동심원 파동)은 패리할 수 없습니다. 돌진의 무적으로 통과하세요. 지나갈 부채꼴과 경로가 미리 표시됩니다.",
-				"돌진을 시작한 직후(0.12초 안)에 스치게 피하면 '강한 퍼펙트 회피'! 다음 차지 강습의 피해가 4배(완전 동조), 무적 1.2초, 눈에 띄는 금빛 오라가 붙습니다.",
+				"돌진을 시작한 직후(0.12초 안)에 스치게 피하면 '강한 퍼펙트 회피'! 다음 차지 강습의 피해가 4배(완전 동조), 무적 1.2초, 기체 뒤로 금빛 꼬리가 길게 늘어집니다(리버스 드라이브 중에도 나옵니다).",
 				"그 일격은 퍼펙트 패리에 준하는 큰 임팩트로 들어갑니다.",
 			],
 		},
@@ -606,11 +607,13 @@ class Stage extends Control:
 			_mouse(Vector2(size.x - 40.0, 70.0), tt >= dash_t0 - 0.1, false)
 		if strong and tt < 6.6:
 			var f := _smooth(dash_t0 + 0.15, dash_t0 + 0.6, tt)
-			_ring(pos, 40.0 + 3.0 * sin(t * 12.0), Color(1.0, 0.95, 0.7, 0.9), 3.0)
-			_ring(pos, 54.0 - 3.0 * sin(t * 12.0), Color(0.6, 1.0, 0.9, 0.7), 2.0)
-			for k in 6:
-				var ba := t * 2.2 * (1.0 if k % 2 == 0 else -1.0) + k * TAU / 6.0
-				draw_circle(pos + Vector2.from_angle(ba) * (48.0 if k % 2 == 0 else 60.0), 3.0, Color(1.0, 0.9, 0.5))
+			var tl := 90.0 + 6.0 * sin(t * 30.0)          # 금빛 꼬리 (기체 뒤)
+			var b0 := pos + Vector2(-16, 0)
+			for L in [[16.0, 1.0, Color(1.0, 0.72, 0.2)], [10.0, 0.75, Color(1.0, 0.86, 0.38)], [5.0, 0.5, Color(1.0, 0.97, 0.78)]]:
+				var w: float = L[0]
+				var c0: Color = L[2]
+				draw_polygon(PackedVector2Array([b0 + Vector2(0, w), b0 + Vector2(0, -w), b0 + Vector2(-tl * float(L[1]), 0)]),
+					PackedColorArray([Color(c0, 0.85), Color(c0, 0.85), Color(c0, 0.0)]))
 			_txt("완전 동조!", Vector2(pos.x - 70.0, pos.y - 70.0 - 6.0 * f), 20, GOLD)
 			_txt("다음 차지 ×4 · 무적 1.2초", Vector2(pos.x - 100.0, pos.y + 78.0), 16, Color(1.0, 0.95, 0.75))
 
@@ -667,12 +670,13 @@ class Stage extends Control:
 				var c := Vector2(560, 260)
 				var b := sp + Vector2(22, 0)
 				var hp := a.lerp(c, k).lerp(c.lerp(b, k), k)
-				draw_circle(hp, 17.0, Color(GOLD, 0.25))
-				draw_circle(hp, 12.0, GOLD)
+				draw_circle(hp, 22.0, Color(1.0, 0.25, 0.1, 0.3))
+				draw_circle(hp, 17.0, Color(1.0, 0.45, 0.1, 0.4))
+				draw_circle(hp, 12.0, Color(1.0, 0.7, 0.15))
 				draw_circle(hp, 6.0, Color(1, 1, 0.9))
-				for j in 3:
-					var a0 := t * 6.0 + j * TAU / 3.0
-					draw_arc(hp, 24.0, a0, a0 + 1.3, 8, Color(1.0, 0.95, 0.7, 0.9), 3.0)
+				for j in 4:
+					var a0 := t * 9.0 + j * TAU / 4.0
+					draw_arc(hp, 26.0, a0, a0 + 1.0, 8, Color(1.0, 0.45, 0.2, 0.95), 4.0)
 			if holding:
 				_ring(sp, 40.0, Color(1.0, 0.95, 0.75, 0.9), 2.5)
 			if parried and u < 2.0:

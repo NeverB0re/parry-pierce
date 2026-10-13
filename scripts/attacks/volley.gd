@@ -1,7 +1,9 @@
 extends "res://scripts/attacks/attack.gd"
-## 조준 연사: 포구가 달아오르는 동안 조준선이 플레이어를 따라가고, 5갈래 부채꼴을 SHOTS 번 쏜다. 탄은 패리할 수 있다.
+## 조준 연사: 포구가 달아오르는 동안 조준선이 플레이어를 따라가고, 5갈래 부채꼴을 SHOTS 번 쏜다. 가운데 3갈래는 주탄,
+## 바깥 2갈래는 잔탄 (잔탄을 일찍 접하게 한다). 탄은 패리할 수 있다.
 ## boss 에 필요한 것: set_glow(cannon, v), glow_of(cannon), bolt_mult()
 
+const Projectiles := preload("res://scripts/projectiles.gd")
 const CHARGE := 1.0
 const INTERVAL := 0.42
 const SHOTS := 3
@@ -32,7 +34,8 @@ func step(_dt: float, ppos: Vector2) -> void:
 		var base := (ppos - origin).angle()
 		aim = base
 		for k in range(-2, 3):
-			boss.shots.spawn(origin, Vector2.from_angle(base + k * SPREAD) * SPEED * boss.bolt_mult(), 8.0)
+			var kd := Projectiles.Kind.SMALL if absi(k) == 2 else Projectiles.Kind.BOLT
+			boss.shots.spawn(origin, Vector2.from_angle(base + k * SPREAD) * SPEED * boss.bolt_mult(), 8.0, 0.0, 0.0, kd)
 		boss.emit(Ev.BOLT, origin)
 		boss.set_glow(cannon, 1.0)
 		shots += 1

@@ -34,7 +34,6 @@ const PARRY_RELEASE_CD := 0.25   # 중간에 뗐을 때 재입력 대기
 const PARRY_DASH_SPEED := 3600.0 # 패리 돌진: 주력 공격. 월드가 느려져도 플레이어는 실시간
 const PARRY_DASH_SPEED_PERFECT := 4000.0
 const PARRY_DASH_TIME := 0.22
-const REFLECT_LINGER := 0.3      # 반사 코어: 리버스 드라이브가 끝난 직후에도 반사 유지
 const REFLECT_RADIUS := 70.0     # 반사 범위 (기체보다 넓게)
 const POWER_RADIUS := 8.0        # 패리 돌진은 타격 범위도 넓다
 # 직격 후: v0.6 방식 — 위로 솟구치고, 들어온 반대쪽으로 약간 밀리며, 마우스 좌우로 조종한다
@@ -43,10 +42,11 @@ const BOUNCE_STEER := 750.0      # 튕길 때 마우스 좌우 방향으로 더�
 const ASSIST_SLACK := 60.0           # 사거리 여유
 const BOUNCE_THRUST := 2.0       # 튕겨나는 동안 좌우 추진 배율
 const STRIKE_SHIELD := 0.9       # 직격 후 튕겨나는 동안 무적 (최대). 튕김이 끝나 기체 통제를 되찾으면 바로 끝난다
-const BOUNCE_END := 0.4          # 솟구치는 속도가 처음의 이 비율 아래로 떨어지면 튕김 끝 = 통제 회복
+const BOUNCE_END := 0.25         # 솟구치는 속도가 처음의 이 비율 아래로 떨어지면 튕김 끝 = 통제 회복 (v0.37: 0.4 → 0.25, 무적이 조금 더 길다)
 const PRESS_PIN_SPEED := 2300.0  # 프레스(천장 근접공격)를 패리하면 이 속도로 아래로 내리꽂힌다
 const PRESS_PIN_TIME := 1.0
 const STUN_INVULN := 0.4         # 스턴이 끝난 뒤 추가 무적
+const SMALL_GUARD := 0.25        # 일반 돌진이 끝난 직후 이 시간 동안 잔탄에 맞지 않는다 (옅은 실드)
 const HURT_PUSH := 500.0
 const HURT_POP := 380.0          # 맞으면 살짝 솟구친다
 const LAUNCH_SPEED := 1850.0     # 발판에서의 첫 돌진 = 발사. 정점 약 y -2400 (어깨 높이)
@@ -77,6 +77,7 @@ var dash_total := 0.28
 var perfect_dash := false        # PERFECT 패리 돌진
 var evade_window := 0.0          # 퍼펙트 회피 판정이 남은 시간
 var evade_rewarded := false      # 이번 돌진에서 이미 퍼펙트 회피 보상을 받음
+var evade_invuln := 0.0          # 이번 퍼펙트 회피로 얻은 추가 무적 길이 (돌진 중 다른 공격에 닿을 때마다 이 길이로 되돌린다)
 var assist_lock := false          # 에임 어시스트가 표적에 붙어 있음
 var assist_pos := Vector2.ZERO   # 붙은 표적 위치
 var assist_r := 0.0
@@ -92,7 +93,6 @@ var charging := false            # 좌클릭 누르는 중 (짧게 떼면 돌진
 var charge_t := 0.0
 var charged_notified := false
 var dash_cd := 0.0
-var reflect_t := 0.0             # 반사 코어: 리버스 드라이브가 끝난 뒤에도 반사가 남는 시간
 var charge_cd := 0.0             # 차지 강습 후 다음 차지가 완료될 수 있을 때까지
 var parry_active := false
 var parry_held := false
@@ -106,6 +106,7 @@ var bouncing := false            # 직격 후 튕겨나는 중
 var bounce_rise := 0.0           # 직격 튕김의 처음 솟구치는 속도 (0 = 직격 튕김 아님). 통제 회복 판정용
 var parry_hit := false           # 이번 패리 판정에서 무언가를 막았다 → 판정이 끝나도 패리 쿨다운 없음
 var shield_t := 0.0              # 돌진/직격 후 무적
+var small_guard := 0.0           # 일반 돌진이 끝난 직후: 잔탄만 맞지 않는 시간
 var shield_max := 1.0
 var stun := 0.0
 var launch_t := 0.0
@@ -136,7 +137,7 @@ func reset(pos: Vector2, platform := false) -> void:
 	bounce_rise = 0.0
 	parry_hit = false
 	charge_cd = 0.0
-	reflect_t = 0.0
+	small_guard = 0.0
 	evade_window = 0.0
 	evade_rewarded = false
 	dash_held = false
@@ -179,7 +180,7 @@ func is_attacking() -> bool:
 
 ## 반사 코어가 지금 탄을 되돌리는 중인가
 func is_reflecting() -> bool:
-	return stats.reflect and (dash_kind == "power" or reflect_t > 0.0)
+	return stats.reflect and dash_kind == "power" and dash_t > 0.0
 
 
 ## 카메라용: 차지가 절반 넘게 모였을 때부터 0 → 1 (짧게 누르는 연속 돌진에는 카메라가 움직이지 않게)
@@ -387,9 +388,20 @@ func try_evade_reward(strong := false) -> void:
 	buffed = true
 	buff_strong = buff_strong or strong            # 이미 강한 버프가 있으면 약한 회피로 내려가지 않는다
 	buff_t = stats.sync_time                       # 다시 얻으면 지속 시간 갱신
-	invuln = maxf(invuln, PERFECT_EVADE_INVULN * (1.5 if strong else 1.0))   # 성공 직후 다른 공격에 맞지 않도록 무적 연장
+	evade_invuln = PERFECT_EVADE_INVULN * (1.5 if strong else 1.0)
+	invuln = maxf(invuln, evade_invuln)            # 성공 직후 다른 공격에 맞지 않도록 무적 연장
 	dash_cd = dash_t                               # 이 돌진이 끝나는 즉시 다시 돌진할 수 있다
 	main.on_perfect_evade(position, strong)
+
+
+## 퍼펙트 회피에 성공한 돌진이 진행되는 동안(기본 회피 무적 시간) 다른 공격과 닿을 때마다 추가 무적을 처음 길이로 되돌린다
+## (도착한 자리에서도 무사할 확률을 높인다)
+func can_refresh_evade() -> bool:
+	return evade_rewarded and dash_kind == "dash" and dash_t > 0.0
+
+
+func refresh_evade_invuln() -> void:
+	invuln = maxf(invuln, evade_invuln)
 
 
 ## 피격: 잠시 조작 불가(스턴), 살짝 솟구친 뒤 추락
@@ -434,7 +446,7 @@ func step(dt: float) -> void:
 
 	dash_cd = maxf(0.0, dash_cd - dt)
 	charge_cd = maxf(0.0, charge_cd - dt)
-	reflect_t = maxf(0.0, reflect_t - dt)
+	small_guard = maxf(0.0, small_guard - dt)
 	evade_window = maxf(0.0, evade_window - dt)
 	parry_cd = maxf(0.0, parry_cd - dt)
 	invuln = maxf(0.0, invuln - dt)
@@ -492,6 +504,8 @@ func step(dt: float) -> void:
 		dash_t -= dt
 		if dash_t <= 0.0:
 			vel *= DASH_KEEP
+			if dash_kind == "dash":
+				small_guard = SMALL_GUARD
 			var grace := stats.power_grace if dash_kind == "power" else (CHARGE_GRACE if dash_kind == "charge" else 0.0)
 			if grace > 0.0:                   # 무적 여유는 패리 돌진/차지 돌진만
 				shield_max = grace
@@ -593,8 +607,6 @@ func _end_dash() -> void:
 	dash_kind = ""
 	perfect_dash = false
 	if was_power:
-		if stats.reflect:
-			reflect_t = REFLECT_LINGER
 		main.on_power_dash_end()
 
 
@@ -786,6 +798,27 @@ func _draw_flame(off: Vector2) -> void:
 			draw_line(st, st - vd * (26.0 + 14.0 * absf(float(k))), Color(0.85, 0.92, 1.0, a), 2.0)
 
 
+## 금빛 꼬리: 기체 뒤쪽(기수 반대)으로 길게 늘어지는 금빛 불꽃 (완전 동조 · 리버스 드라이브 중). k = 크기 배율
+func _draw_gold_tail(k: float) -> void:
+	var back := Vector2.from_angle(facing + PI)
+	var side := back.orthogonal()
+	var t := Time.get_ticks_msec() * 0.001
+	var flick := 0.9 + 0.1 * sin(t * 52.0) + 0.05 * sin(t * 29.0)
+	var base := back * SHIP_SIZE * 0.22
+	var layers := [[1.0, 1.0, Color(1.0, 0.72, 0.2)], [0.62, 0.8, Color(1.0, 0.86, 0.38)], [0.3, 0.55, Color(1.0, 0.97, 0.78)]]
+	for L in layers:
+		var w := 17.0 * k * float(L[0])
+		var ln := 105.0 * k * float(L[1]) * flick
+		var tip := base + back * ln + side * sin(t * 38.0 + float(L[0]) * 5.0) * 4.0 * k
+		var c: Color = L[2]
+		draw_polygon(PackedVector2Array([base + side * w, base - side * w, tip]),
+			PackedColorArray([Color(c, 0.85), Color(c, 0.85), Color(c, 0.0)]))
+	for j in 5:                                     # 뒤로 흩날리는 불똥
+		var ph := fmod(t * (1.6 + j * 0.37) + j * 0.31, 1.0)
+		var sp := base + back * (30.0 + 120.0 * k * ph) + side * sin(j * 2.1 + t * 9.0) * 12.0 * k * (0.4 + ph)
+		draw_circle(sp, 2.6 * (1.0 - ph) + 0.8, Color(1.0, 0.9, 0.5, 0.9 * (1.0 - ph)))
+
+
 ## 무적이 남은 시간 (실드가 끝나기 직전 깜빡임용). 돌진·조준·발사 중엔 넉넉하게 본다
 func _immune_left() -> float:
 	var left := maxf(shield_t, invuln)
@@ -813,8 +846,8 @@ func _draw() -> void:
 			if k < trail.size():
 				_draw_rocket(trail[k] - position, facing, Color(C_EVADE, 0.28 - k * 0.018))
 
-	# 퍼펙트 회피 버프: 다음 공격이 강화됐음을 알리는 청백 오라. 패리 불가 공격을 피해 얻은 강한 버프(4배)는
-	# 금빛 이중 링 + 회전하는 불꽃 입자 + 위로 솟는 빛으로 확연히 다르게 보인다
+	# 퍼펙트 회피 버프(동조): 다음 공격이 강화됐음을 알리는 청백 오라. 패리 불가 공격을 피해 얻은 강한 버프(완전 동조, 4배)와
+	# 리버스 드라이브 중에는 기체 뒤로 금빛 꼬리가 길게 늘어진다
 	var fade_ok := buff_t > 1.0 or dash_t > 0.0 or int(Time.get_ticks_msec() / 90) % 2 == 0   # 마지막 1초는 깜빡인다
 	if buffed and not buff_strong and fade_ok:
 		var bp := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.02)
@@ -823,20 +856,10 @@ func _draw() -> void:
 		for k in 3:
 			var ba := Time.get_ticks_msec() * 0.006 + k * TAU / 3.0
 			draw_circle(Vector2(cos(ba), sin(ba)) * 34.0, 2.6, Color(1, 1, 1, 0.9))
-	elif buffed and fade_ok:
-		var tms := Time.get_ticks_msec()
-		var sp := 0.5 + 0.5 * sin(tms * 0.03)
-		draw_circle(Vector2.ZERO, 46.0 + 4.0 * sp, Color(1.0, 0.85, 0.4, 0.14 + 0.1 * sp))
-		draw_arc(Vector2.ZERO, 40.0 + 3.0 * sp, 0.0, TAU, 40, Color(1.0, 0.95, 0.7, 0.9), 3.5)
-		draw_arc(Vector2.ZERO, 54.0 - 3.0 * sp, 0.0, TAU, 40, Color(0.6, 1.0, 0.9, 0.7), 2.5)
-		for k in 8:
-			var ba := tms * 0.008 * (1.0 if k % 2 == 0 else -1.0) + k * TAU / 8.0
-			var rr := 48.0 if k % 2 == 0 else 60.0
-			draw_circle(Vector2(cos(ba), sin(ba)) * rr, 3.4, Color(1.0, 0.9, 0.5, 0.95))
-		for k in 4:                                # 위로 솟는 빛줄기
-			var lx := (k - 1.5) * 18.0
-			var lh := 30.0 + 20.0 * sin(tms * 0.02 + k * 1.7)
-			draw_line(Vector2(lx, -30.0), Vector2(lx * 1.3, -30.0 - lh), Color(1.0, 0.95, 0.65, 0.7), 3.0)
+	if dash_t > 0.0 and dash_kind == "power":
+		_draw_gold_tail(1.9 if perfect_dash else 1.6)
+	elif buffed and buff_strong and fade_ok:
+		_draw_gold_tail(1.0)
 
 	_ship_col = "r" if attack else "b"
 	_draw_flame(jitter)
@@ -848,6 +871,8 @@ func _draw() -> void:
 		var left := _immune_left()
 		var sa := 1.0 if left > 0.3 or int(Time.get_ticks_msec() / 60) % 2 == 0 else 0.35
 		HexShield.draw(self, Vector2.ZERO, 44.0, sa, Time.get_ticks_msec() * 0.001)
+	elif small_guard > 0.0 and not frozen:          # 돌진 직후: 잔탄만 막아 주는 옅은 실드
+		HexShield.draw(self, Vector2.ZERO, 40.0, 0.4, Time.get_ticks_msec() * 0.001)
 	if attack:
 		draw_arc(Vector2.ZERO, 40.0, 0.0, TAU, 40, Color(C_ATTACK, 0.8), 2.0)
 
