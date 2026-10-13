@@ -328,8 +328,7 @@ func on_parry_success(perfect: bool, boosted := false) -> void:
 	dash_parry_t = 0.0
 	parry_active = false
 	parry_cd = 0.0
-	if pending_kind != "charge":                 # 차지는 패리 성공으로도 멈추지 않는다 (리버스 드라이브 뒤 이어서 발사)
-		pending_kind = ""
+	cancel_charge()                              # 패리에 성공하면 차지는 끊긴다 (리버스 드라이브가 대신 나간다)
 	queued_press = false
 	dash_t = 0.0
 	_end_dash()

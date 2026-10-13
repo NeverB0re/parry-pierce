@@ -1413,20 +1413,19 @@ func _v044_test() -> void:
 	main._parry_input(false)
 	_step(int(0.5 / DT))
 	_check("charge completes after the parry (charged %s)" % p.is_charged(), p.is_charged())
-	# 패리 성공(리버스 드라이브)으로도 멈추지 않는다: 이어서 떼면 차지 강습이 나간다
+	# 패리에 성공하면 차지는 끊긴다: 리버스 드라이브 뒤에 차지 강습이 따로 나가지 않는다
 	main.hitstop = 0.0
 	main._parry_input(true)
 	b.shots.spawn(p.position + Vector2(25, 0), Vector2.ZERO, 5.0)
 	_step(1)
-	_check("parry success keeps the charge (aim %s, charging %s)" % [p.aim_phase, p.charging], p.aim_phase and p.charging)
+	_check("parry success ends the charge (aim %s, charging %s)" % [p.aim_phase, p.charging], p.aim_phase and not p.charging and p.pending_kind == "")
 	main._parry_input(false)                            # 떼면 패리 돌진 발사
 	_step(int(0.5 / DT))
 	main._dash_input(false)
 	var fired := false
-	for k in int(2.5 / DT):
+	for k in int(2.0 / DT):
 		_step(1)
 		if p.dash_kind == "charge":
 			fired = true
-			break
-	_check("the charge is still fired after the reverse drive (fired %s)" % fired, fired)
+	_check("no charge assault follows the reverse drive (fired %s)" % fired, not fired)
 	main.start_stage(0)
