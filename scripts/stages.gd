@@ -4,7 +4,7 @@ extends RefCounted
 ## 월드 맵에는 MAP_STAGES 개의 은하(스테이지)와 마지막 목적지가 그려진다. LIST 에 없는 은하는 아직 만들지 않은 스테이지(회색).
 
 const LIST := [
-	{"id": "observer", "name": "관측자", "script": "res://scripts/colossi/observer.gd", "core": "pulse",
+	{"id": "observer", "name": "관측자", "script": "res://scripts/colossi/observer.gd", "core": "counter",
 		"coord": "퇴각 항로 1구간"},
 	{"id": "fortress", "name": "탄막 요새", "script": "res://scripts/colossi/fortress.gd", "core": "reflect",
 		"coord": "퇴각 항로 2구간"},

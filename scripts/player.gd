@@ -36,9 +36,6 @@ const PARRY_DASH_SPEED_PERFECT := 4000.0
 const PARRY_DASH_TIME := 0.22
 const REFLECT_LINGER := 0.3      # 반사 코어: 리버스 드라이브가 끝난 직후에도 반사 유지
 const REFLECT_RADIUS := 70.0     # 반사 범위 (기체보다 넓게)
-const PULSE_RADIUS := 150.0      # 파동 코어: 패리 성공 시 기체 둘레의 탄을 지우는 범위
-const PULSE_TIME := 0.3          # 파동은 기체를 따라다니며 이 시간 동안 탄을 지운다 (돌진 중이면 경로의 탄도)
-const PULSE_GROW := 0.08         # 이 시간 동안 반지름이 커진다
 const POWER_RADIUS := 8.0        # 패리 돌진은 타격 범위도 넓다
 # 직격 후: v0.6 방식 — 위로 솟구치고, 들어온 반대쪽으로 약간 밀리며, 마우스 좌우로 조종한다
 const BOUNCE_SIDE := 250.0       # 들어온 방향의 반대쪽으로 밀리는 가로 속도
@@ -96,7 +93,6 @@ var charge_t := 0.0
 var charged_notified := false
 var dash_cd := 0.0
 var reflect_t := 0.0             # 반사 코어: 리버스 드라이브가 끝난 뒤에도 반사가 남는 시간
-var pulse_t := 0.0               # 파동 코어: 남은 파동 시간 (0 = 없음)
 var charge_cd := 0.0             # 차지 강습 후 다음 차지가 완료될 수 있을 때까지
 var parry_active := false
 var parry_held := false
@@ -141,7 +137,6 @@ func reset(pos: Vector2, platform := false) -> void:
 	parry_hit = false
 	charge_cd = 0.0
 	reflect_t = 0.0
-	pulse_t = 0.0
 	evade_window = 0.0
 	evade_rewarded = false
 	dash_held = false
@@ -185,13 +180,6 @@ func is_attacking() -> bool:
 ## 반사 코어가 지금 탄을 되돌리는 중인가
 func is_reflecting() -> bool:
 	return stats.reflect and (dash_kind == "power" or reflect_t > 0.0)
-
-
-## 파동 코어: 지금 파동 반지름 (0 = 없음). 처음 PULSE_GROW 동안 커지고 그 뒤 유지
-func pulse_radius() -> float:
-	if pulse_t <= 0.0:
-		return 0.0
-	return PULSE_RADIUS * lerpf(0.4, 1.0, minf(1.0, (PULSE_TIME - pulse_t) / PULSE_GROW))
 
 
 ## 카메라용: 차지가 절반 넘게 모였을 때부터 0 → 1 (짧게 누르는 연속 돌진에는 카메라가 움직이지 않게)
@@ -447,7 +435,6 @@ func step(dt: float) -> void:
 	dash_cd = maxf(0.0, dash_cd - dt)
 	charge_cd = maxf(0.0, charge_cd - dt)
 	reflect_t = maxf(0.0, reflect_t - dt)
-	pulse_t = maxf(0.0, pulse_t - dt)
 	evade_window = maxf(0.0, evade_window - dt)
 	parry_cd = maxf(0.0, parry_cd - dt)
 	invuln = maxf(0.0, invuln - dt)
@@ -564,8 +551,8 @@ func _move(dt: float) -> void:
 			position.x = clampf(position.x, PLAT_CENTER.x - PLAT_HALF + RADIUS, PLAT_CENTER.x + PLAT_HALF - RADIUS)
 			position.y = PLAT_CENTER.y - RADIUS
 			continue
-		# 차지 돌진이 휩쓰는 팔에 부딪히면 받아치기 (부위 타격보다 먼저)
-		if dash_kind == "charge" and dash_t > 0.0 and main.try_clash(position):
+		# 차지 강습·리버스 드라이브가 근접공격(팔·프레스)에 부딪히면 요격 (부위 타격보다 먼저)
+		if (dash_kind == "charge" or dash_kind == "power") and dash_t > 0.0 and main.try_clash(position):
 			return
 		# 표적(부위·코어)은 돌진 중에만 충돌한다. 그 밖에는 통과하며 접촉 피해도 없다 (피해는 적의 공격으로만)
 		if is_attacking():
@@ -641,6 +628,14 @@ func _on_strike(hit: Dictionary) -> void:
 	bounce_off(dir, kind)
 
 
+## 요격 피해: 리버스 드라이브로 요격하면 리버스 드라이브 피해(12, PERFECT 16) 그대로, 차지 강습이면 clash_damage
+func intercept_damage() -> int:
+	if dash_kind == "power":
+		last_hit_strong = false
+		return _strike_damage()
+	return clash_damage()
+
+
 ## 받아치기: 휩쓰는 팔에 차지 돌진이 부딪힘 → 피해량 반환 (버프가 있으면 2배, 소모)
 ## 요격에는 강한 버프(4배)가 걸리지 않는다. 동조가 있으면 일반 배율(2배)만 적용하고 소모한다
 func clash_damage() -> int:
@@ -687,7 +682,7 @@ func _assisted(a: Vector2, reach: float, extra_r: float) -> Vector2:
 	var best_da := 0.0
 	var best_err := 0.0
 	var best_t := {}
-	for t in boss.assist_targets():
+	for t in boss.assist_targets(position):
 		var d: Vector2 = t["pos"] - position
 		var dist := d.length()
 		var r: float = float(t["r"]) + RADIUS + extra_r
@@ -894,14 +889,6 @@ func _draw() -> void:
 	# 차지 쿨다운: 주황 링이 차오른다 (다 차야 다음 차지가 완료된다)
 	if charge_cd > 0.0:
 		draw_arc(Vector2.ZERO, 30.0, -PI * 0.5, -PI * 0.5 + TAU * (1.0 - charge_cd / stats.charge_cooldown), 40, Color(C_ATTACK, 0.75 if charging else 0.4), 2.0)
-
-	# 파동 코어: 기체를 따라다니며 탄을 지우는 고리
-	if pulse_t > 0.0:
-		var pk := pulse_t / PULSE_TIME
-		var pr := pulse_radius()
-		draw_circle(Vector2.ZERO, pr, Color(0.7, 1.0, 0.95, 0.10 * pk))
-		draw_arc(Vector2.ZERO, pr, 0.0, TAU, 48, Color(0.75, 1.0, 0.95, 0.85 * pk), 4.0)
-		draw_arc(Vector2.ZERO, pr - 10.0, 0.0, TAU, 48, Color(0.75, 1.0, 0.95, 0.35 * pk), 2.0)
 
 	# 반사 코어: 리버스 드라이브 중 반사 범위
 	if is_reflecting():

@@ -31,6 +31,11 @@ func clash_box(_ppos: Vector2) -> Dictionary:
 	return {}
 
 
+## 에임 어시스트 임시 표적 ({pos, r}) — 요격할 수 있는 공격이 쓴다 (from = 플레이어 위치)
+func assist_targets(_from: Vector2, _out: Array[Dictionary]) -> void:
+	pass
+
+
 ## 패리 불가 판정 → 밀려날 방향 (안 맞으면 ZERO)
 func beam_hit(_p: Vector2, _r: float) -> Vector2:
 	return Vector2.ZERO

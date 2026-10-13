@@ -343,7 +343,6 @@ func _physics_body(delta: float) -> void:
 	_tutorial_triggers()
 	_drain_boss_events()
 	player.step(delta)
-	_pulse_tick()
 	_reflect()
 	if state == State.PLAY:
 		_check_attacks()
@@ -457,10 +456,9 @@ func _check_attacks() -> void:
 			continue
 		if player.parry_active:
 			if hb.get("small", false):              # 잔탄: 패리하면 흡수되어 사라지기만 한다 (조준 없음, 패리 판정은 그대로, 쿨다운 없음)
-				boss.on_parried(hb)
+				_parried_bullet(hb)
 				player.on_absorb()
 				_absorb_feedback(hb["pos"])
-				_pulse(p)
 				return
 			var perfect: bool = player.parry_t <= Player.PERFECT_WINDOW
 			if hb["id"] == "arm":                       # 팔은 그냥 패리하면 피해 없이 튕겨나기만 (받아치기는 차지 돌진)
@@ -470,12 +468,10 @@ func _check_attacks() -> void:
 					away = -Vector2(hb["push"])
 				player.on_parry_push(away)
 				_parry_push_feedback(p.lerp(hp_pos, 0.3))
-				_pulse(p)
 				return
 			player.on_parry_success(perfect)
-			boss.on_parried(hb)
+			_parried_bullet(hb)
 			_parry_feedback(p, perfect, hb)
-			_pulse(p)
 			return
 		var immune: bool = player.is_immune_melee() if melee else player.is_immune()
 		if not immune and boss.overlaps(hb, p, Player.RADIUS):
@@ -487,7 +483,7 @@ func _check_attacks() -> void:
 			return
 
 
-## 받아치기 / 사전 저지: 차지 돌진이 팔에 부딪힘 (player.gd 가 이동 중에 호출). 팔이 위치를 잡고 멈춰 있을 때(set·warn)도,
+## 요격(받아치기 / 사전 저지): 차지 강습이나 리버스 드라이브가 근접공격에 부딪힘 (player.gd 가 이동 중에 호출). 팔이 위치를 잡고 멈춰 있을 때(set·warn)도,
 ## 휘두르는 중에도 가능. 그 팔 관절에 즉시 피해 + 공격이 끊기고 팔이 밀려나 멈춘다
 func try_clash(p: Vector2) -> bool:
 	var hb: Dictionary = boss.clash_box(p)
@@ -519,12 +515,13 @@ func _perfect_impact(at: Vector2, dir: Vector2) -> void:
 func _clash(hb: Dictionary, p: Vector2) -> void:
 	var contact: Vector2 = hb["pos"]
 	var dir: Vector2 = player.vel.normalized()
+	var kind: String = player.dash_kind
+	var dmg: int = player.intercept_damage() if hb.has("part") else 0
+	player.bounce_off(dir, kind)                 # 먼저 튕긴다 (리버스 드라이브가 끝나며 풀어 주는 경직이 이번 요격의 경직을 풀지 않게)
 	boss.on_parried(hb)                          # 팔: 휩쓸던 반대쪽으로 밀려나 잠시 멈춘다 (관절 노출) / 프레스: 걸려서 도로 올라간다
-	player.bounce_off(dir, "charge")
 	var at := p.lerp(contact, 0.4)
 	if hb.has("part"):                           # 부위에 달린 공격(팔)이면 그 부위에 피해. 프레스는 끊기만 한다
-		var dmg: int = player.clash_damage()
-		tele.hit("intercept", dmg)
+		tele.hit("intercept_power" if kind == "power" else "intercept", dmg)
 		boss.damage_part(int(hb["part"]), dmg)
 	else:
 		tele.add("intercept_" + str(hb["id"]))
@@ -610,7 +607,6 @@ func _press(hb: Dictionary) -> bool:
 		player.on_press_pin()
 		_parry_push_feedback(Vector2(p.x, bottom))
 		shake = maxf(shake, 18.0)
-		_pulse(p)
 		return true
 	if p.y - Player.RADIUS >= bottom:
 		return false
@@ -623,21 +619,14 @@ func _press(hb: Dictionary) -> bool:
 	return true
 
 
-## 파동 코어: 패리에 성공하면(잔탄 흡수·근접 패리 포함) 기체 둘레의 탄을 지우는 파동. 파동은 기체 중심에 붙어 따라다니며
-## PULSE_TIME 동안 탄을 지운다 (돌진 중에 잔탄을 패리하면 경로의 잔탄도 지우며 나아간다)
-func _pulse(_at: Vector2) -> void:
-	if not player.stats.pulse:
+## 패리한 탄: 보통은 사라진다. 반격 코어가 있으면 사라지지 않고 플레이어 탄이 되어 표적으로 빠르게 되돌아간다
+func _parried_bullet(hb: Dictionary) -> void:
+	if not player.stats.counter or hb["id"] != "bolt":
+		boss.on_parried(hb)
 		return
-	tele.add("pulse")
-	player.pulse_t = Player.PULSE_TIME
-	_pulse_tick()
-
-
-func _pulse_tick() -> void:
-	if player.pulse_t <= 0.0 or state != State.PLAY:
-		return
-	for q in boss.shots.clear_near(player.position, player.pulse_radius()):
-		fx.burst(q, 4, Color(0.8, 1.0, 0.95), 200.0, 0.2, 2.0)
+	boss.shots.reflect_one(int(hb["idx"]), boss.target_pos(player.position))
+	tele.add("counter")
+	fx.ring(hb["pos"], Color(0.75, 1.0, 1.0), 60.0, 0.15, 3.0)
 
 
 ## 잔탄 흡수: 아주 작은 연출 (탄막 속에서 연달아 일어난다)

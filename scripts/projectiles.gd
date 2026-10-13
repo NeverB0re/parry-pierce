@@ -5,7 +5,7 @@ extends RefCounted
 ##  - 주탄(BOLT·LAVA·HOMING): 크고 둥근 금색 + 흰 심 + 금빛 번짐. 패리하면 리버스 드라이브 (금색 = 보상이 있는 패리)
 ##  - 잔탄(SMALL): 작고 뾰족한 주황빛(붉은 기가 도는 노랑) 별, 번짐 없음, 짧게 깜빡임. 맞으면 아프지만 패리해도 흡수될 뿐 (조준 없음).
 ##    패리할 수 있으니 금색 계열이지만, 붉은 기와 별 모양으로 둥근 금색 주탄과 구별한다
-## 반사 코어로 되돌린 탄은 플레이어 것(mine)이 되어 청백색으로 바뀌고, 표적에 닿으면 피해를 준다.
+## 반사 코어·반격 코어로 되돌린 탄은 플레이어 것(mine)이 되어 청백색으로 바뀌고, 표적에 닿으면 피해를 준다.
 
 enum Kind { BOLT, LAVA, SMALL, HOMING }   # 일반 주탄 / 용융물 덩어리(포물선) / 잔탄 / 유도탄(크고 느리게 쫓아옴)
 
@@ -128,18 +128,6 @@ func hitboxes_near(p: Vector2, reach: float, out: Array[Dictionary]) -> void:
 				"lava": kind[i] == Kind.LAVA, "small": kind[i] == Kind.SMALL, "homing": kind[i] == Kind.HOMING})
 
 
-## 파동(파동 코어): p 에서 reach 안의 적 탄을 지운다. 지운 위치들
-func clear_near(p: Vector2, reach: float) -> PackedVector2Array:
-	var gone := PackedVector2Array()
-	var i := pos.size() - 1
-	while i >= 0:
-		if mine[i] == 0 and pos[i].distance_to(p) <= reach + RADII[kind[i]]:
-			gone.append(pos[i])
-			remove(i)
-		i -= 1
-	return gone
-
-
 ## 반사: p 에서 reach 안의 적 탄을 플레이어 것으로 바꿔 target 쪽으로 되돌린다. 바꾼 개수
 func reflect_near(p: Vector2, reach: float, target: Vector2) -> int:
 	var n := 0
@@ -147,12 +135,18 @@ func reflect_near(p: Vector2, reach: float, target: Vector2) -> int:
 		if mine[i] == 1 or kind[i] == Kind.LAVA:
 			continue
 		if pos[i].distance_to(p) <= reach + RADII[kind[i]]:
-			mine[i] = 1
-			vel[i] = (target - pos[i]).normalized() * REFLECT_SPEED
-			age[i] = WARMUP
-			life[i] = 4.0
+			reflect_one(i, target)
 			n += 1
 	return n
+
+
+## 탄 하나를 플레이어 것으로 바꿔 target 쪽으로 빠르게 되돌린다 (반사 코어·반격 코어)
+func reflect_one(i: int, target: Vector2) -> void:
+	mine[i] = 1
+	vel[i] = (target - pos[i]).normalized() * REFLECT_SPEED
+	grav[i] = 0.0
+	age[i] = WARMUP
+	life[i] = 4.0
 
 
 ## 플레이어 것(반사된 탄)이 표적에 닿으면 지우고 [{pos, hit, dmg}] 로 돌려준다

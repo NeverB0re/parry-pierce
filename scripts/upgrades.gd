@@ -3,9 +3,9 @@ extends RefCounted
 ## 효과 = {수치 이름(player_stats.gd): ["set", 값] 또는 ["mul", 배율]}. 기본 수치에 얻은 순서대로 적용한다.
 
 const CORES := {
-	"pulse": {"name": "파동 코어", "from": "observer",
-		"desc": "패리에 성공하면(잔탄 흡수·근접공격 패리 포함) 기체를 따라다니며 둘레 150px 의 탄을 지우는 파동을 0.3초 동안 낸다",
-		"mods": {"pulse": ["set", true]}},
+	"counter": {"name": "반격 코어", "from": "observer",
+		"desc": "패리한 탄(잔탄 흡수 포함)이 사라지지 않고 지금 표적으로 빠르게 되돌아간다. 탄 하나당 피해 1, 유도탄은 3",
+		"mods": {"counter": ["set", true]}},
 	"reflect": {"name": "반사 코어", "from": "fortress",
 		"desc": "리버스 드라이브 중(과 끝난 직후 0.3초) 기체 둘레 70px 안에 닿은 탄을 표적으로 되돌린다. 탄 하나당 피해 1, 유도탄은 3",
 		"mods": {"reflect": ["set", true]}},

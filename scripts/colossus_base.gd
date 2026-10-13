@@ -279,17 +279,19 @@ func strike_hit(p: Vector2, r: float) -> Dictionary:
 	return core.hit(p, r)
 
 
-## 에임 어시스트용 표적 목록 (중심, 반지름)
-func assist_targets() -> Array[Dictionary]:
+## 에임 어시스트용 표적 목록 (중심, 반지름). 요격할 수 있는 공격(프레스 등)은 임시 표적을 더한다 (from = 플레이어 위치)
+func assist_targets(from := Vector2.ZERO) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
-	if dead or phase == 2:
+	if dead:
 		return out
 	if phase == 1:
 		for i in part_count():
 			if part_alive(i):
 				out.append({"pos": part_pos(i), "r": part_radius(i)})
-		return out
-	out.append({"pos": core.center, "r": core_assist_r})
+	elif phase == 3:
+		out.append({"pos": core.center, "r": core_assist_r})
+	for a in active_attacks():
+		a.assist_targets(from, out)
 	return out
 
 

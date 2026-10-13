@@ -1,7 +1,7 @@
 extends "res://scripts/attacks/attack.gd"
 ## 프레스 (근접공격 = 회피 불가): 천장 전체가 내려와 경기장을 깔아뭉갠다. 정지선(STOP_Y) 아래로 내려가 있어야 산다.
 ## 일반 돌진의 무적으로는 통과할 수 없고, 패리하면 막기는 하지만 거대한 힘에 아래로 내리꽂혀 융해 지대로 빠진다.
-## 팔처럼 차지 강습으로 요격할 수 있다: 판에 부딪히면 프레스가 걸려 도로 올라간다 (jam).
+## 팔처럼 차지 강습·리버스 드라이브로 요격할 수 있다: 판에 부딪히면 프레스가 걸려 도로 올라간다 (jam). 요격할 수 있는 동안 에임 어시스트 임시 표적이 생긴다.
 ## 단계: warn(정지선 점멸, 천장이 조금씩 내려옴) → drop(가속하며 내려옴) → hold → rise  (요격되면 → jam)
 ## 내려오는 판(drop)에 닿으면 피해 + 판 아래로 밀려난다. 다 내려온 뒤(hold·rise·jam)는 판에 막히기만 하고 피해가 없다 (main.gd 가 판정).
 ## 올라가기 시작하면 다음 공격에 자리를 내준다 (boss.detach_attack)
@@ -70,6 +70,12 @@ func clash_box(ppos: Vector2) -> Dictionary:
 	if phase != "warn" and phase != "drop" and phase != "hold":
 		return {}
 	return {"id": "press", "rect": Rect2(-HALF_W, TOP, HALF_W * 2.0, bottom - TOP), "pos": Vector2(ppos.x, bottom)}
+
+
+## 요격할 수 있는 동안 에임 어시스트가 판의 플레이어 바로 위 지점을 잡는다 (차지 강습·리버스 드라이브 조준)
+func assist_targets(from: Vector2, out: Array[Dictionary]) -> void:
+	if phase == "warn" or phase == "drop" or phase == "hold":
+		out.append({"pos": Vector2(clampf(from.x, -HALF_W + 60.0, HALF_W - 60.0), bottom - 30.0), "r": 60.0})
 
 
 func on_parried(_hb: Dictionary) -> void:

@@ -3,6 +3,7 @@ extends RefCounted
 ## 죽으면 그 스테이지부터 다시 (진행은 클리어할 때만 저장된다). 헤드리스(테스트)에서는 디스크에 쓰지 않는다.
 
 const Stages := preload("res://scripts/stages.gd")
+const Upgrades := preload("res://scripts/upgrades.gd")
 const PATH := "user://profile.cfg"
 
 var path := PATH                     # 테스트에서는 다른 파일로 바꾼다
@@ -20,11 +21,11 @@ func load_from_disk() -> void:
 		return
 	stage = clampi(int(cf.get_value("run", "stage", 0)), 0, Stages.LIST.size() - 1)
 	cleared.assign(cf.get_value("run", "cleared", []))
-	cores.assign(cf.get_value("upgrade", "cores", []))
-	var old := cores.find("mobility")                # v0.34: 관측자의 코어가 기동 코어 → 파동 코어로 바뀜
-	if old >= 0:
-		cores[old] = "pulse"
-	for st in Stages.LIST:                           # v0.35: 노드 트리 폐기. 처리한 콜로서스의 코어는 모두 가진다
+	cores.clear()
+	for id in cf.get_value("upgrade", "cores", []):  # 없어진 코어(기동·파동 등)는 버린다
+		if Upgrades.CORES.has(id):
+			cores.append(id)
+	for st in Stages.LIST:                           # 처리한 콜로서스의 코어는 모두 가진다 (코어가 바뀐 경우 포함)
 		var core: String = st.get("core", "")
 		if cleared.has(st["id"]) and core != "" and not cores.has(core):
 			cores.append(core)

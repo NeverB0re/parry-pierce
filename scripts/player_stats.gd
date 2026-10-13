@@ -5,7 +5,7 @@ extends Resource
 
 @export_group("돌진·차지")
 @export var dash_time := 0.28              ## 일반 돌진 시간 (속도 2000 → 사거리 약 560px)
-@export var dash_cooldown := 1.35           ## 돌진 시작부터 다음 돌진까지 (차지 강습도 이 쿨다운을 쓴다)
+@export var dash_cooldown := 1.15           ## 돌진 시작부터 다음 돌진까지 (차지 강습도 이 쿨다운을 쓴다)
 @export var dash_buffer := 0.2              ## 쿨다운이 이만큼 남았을 때 뗀 짧은 입력은 기억했다가 바로 돌진
 @export var charge_time := 0.6              ## 좌클릭을 이만큼 누르면 차지 완료 → 떼면 차지 강습 (덜 모으고 떼면 일반 돌진)
 @export var charge_cooldown := 1.5          ## 차지 강습을 쏜 뒤 다음 차지가 완료되기까지 최소 시간 (돌진 쿨다운과 별개). 그동안은 차지가 모이지 않는다
@@ -39,5 +39,5 @@ extends Resource
 @export var glide_fall := 140.0             ## 마우스를 위로: 활공 중 낙하 속도 상한
 
 @export_group("코어 아이템")
-@export var pulse := false                  ## 파동 코어: 패리 성공(잔탄 흡수·근접 패리 포함) 시 기체 둘레 150px 의 탄을 지운다
+@export var counter := false                ## 반격 코어: 패리한 탄(잔탄 흡수 포함)이 사라지지 않고 표적으로 빠르게 되돌아간다
 @export var reflect := false                ## 반사 코어: 리버스 드라이브 중(과 끝난 직후 0.3초) 닿은 탄을 표적으로 되돌린다
