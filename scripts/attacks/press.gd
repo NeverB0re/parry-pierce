@@ -98,11 +98,11 @@ func draw() -> void:
 		if STOP_Y - bottom > 8.0:
 			MeleeWarn.zone(c, PackedVector2Array([Vector2(-HALF_W, bottom), Vector2(HALF_W, bottom), Vector2(HALF_W, STOP_Y), Vector2(-HALF_W, STOP_Y)]), level, bt)
 		var blink := 0.5 + 0.5 * sin(bt * 20.0)
-		c.draw_rect(Rect2(-HALF_W, STOP_Y, HALF_W * 2.0, 10.0), Color(MeleeWarn.C, 0.5 + 0.5 * blink))
+		c.draw_rect(Rect2(-HALF_W, STOP_Y, HALF_W * 2.0, 10.0), Color(MeleeWarn.C, 0.35 + 0.35 * blink))
 		for k in 9:
 			var x := -1000.0 + k * 250.0
 			var y := STOP_Y + 30.0 + 18.0 * blink
-			c.draw_colored_polygon(PackedVector2Array([Vector2(x - 28, y), Vector2(x + 28, y), Vector2(x, y + 34)]), Color(MeleeWarn.C, 0.5 + 0.4 * blink))
+			c.draw_colored_polygon(PackedVector2Array([Vector2(x - 28, y), Vector2(x + 28, y), Vector2(x, y + 34)]), Color(MeleeWarn.C, 0.4 + 0.3 * blink))
 		for tx in [-800.0, 0.0, 800.0]:
 			MeleeWarn.tag(c, Vector2(tx, STOP_Y - 170.0), level, bt)
 	# 판: 강철 + 유압 기둥 + 아랫변 위험 줄무늬와 이빨
