@@ -34,6 +34,7 @@ const PARRY_RELEASE_CD := 0.25   # 중간에 뗐을 때 재입력 대기
 const PARRY_DASH_SPEED := 3600.0 # 패리 돌진: 주력 공격. 월드가 느려져도 플레이어는 실시간
 const PARRY_DASH_SPEED_PERFECT := 4000.0
 const PARRY_DASH_TIME := 0.22
+const DASH_PARRY_RANGE := 1.35  # 돌진패리 뒤 리버스 드라이브의 사거리 배율
 const REFLECT_RADIUS := 70.0     # 반사 범위 (기체보다 넓게)
 const POWER_RADIUS := 8.0        # 패리 돌진은 타격 범위도 넓다
 # 직격 후: v0.6 방식 — 위로 솟구치고, 들어온 반대쪽으로 약간 밀리며, 마우스 좌우로 조종한다
@@ -46,7 +47,7 @@ const BOUNCE_END := 0.25         # 솟구치는 속도가 처음의 이 비율 �
 const PRESS_PIN_SPEED := 2300.0  # 프레스(천장 근접공격)를 패리하면 이 속도로 아래로 내리꽂힌다
 const PRESS_PIN_TIME := 1.0
 const STUN_INVULN := 0.4         # 스턴이 끝난 뒤 추가 무적
-const DASH_PARRY_GRACE := 0.7    # 돌진패리: 퍼펙트 회피 무적이 끝난 뒤에도 이만큼 더 구간이 남는다 (무적 0.8 + 0.7 = 1.5초)
+const DASH_PARRY_GRACE := 0.12   # 돌진패리: 일반 돌진이 끝난 직후에도 이만큼은 돌진 중으로 친다
 const SMALL_GUARD := 0.25        # 일반 돌진이 끝난 직후 이 시간 동안 잔탄에 맞지 않는다 (옅은 실드)
 const HURT_PUSH := 500.0
 const HURT_POP := 380.0          # 맞으면 살짝 솟구친다
@@ -102,13 +103,15 @@ var parry_cd := 0.0
 var aim_phase := false           # 패리 성공 → 슬로우 → 방향 지정
 var aim_left := 0.0
 var aim_perfect := false
+var aim_boost := false           # 돌진패리 성공 → 이어지는 리버스 드라이브의 사거리가 늘어난다
+var power_boost := false         # 지금 리버스 드라이브가 사거리 증가 상태
 var invuln := 0.0                # 피격 후 무적
 var bouncing := false            # 직격 후 튕겨나는 중
 var bounce_rise := 0.0           # 직격 튕김의 처음 솟구치는 속도 (0 = 직격 튕김 아님). 통제 회복 판정용
 var parry_hit := false           # 이번 패리 판정에서 무언가를 막았다 → 판정이 끝나도 패리 쿨다운 없음
 var shield_t := 0.0              # 돌진/직격 후 무적
 var small_guard := 0.0           # 일반 돌진이 끝난 직후: 잔탄만 맞지 않는 시간
-var dash_parry_t := 0.0          # 돌진패리 구간: 퍼펙트 회피 직후 이 시간 안에 탄을 패리하면 타이밍과 상관없이 PERFECT 패리
+var dash_parry_t := 0.0          # 일반 돌진이 끝난 뒤 돌진패리가 아직 인정되는 시간
 var shield_max := 1.0
 var stun := 0.0
 var launch_t := 0.0
@@ -154,6 +157,8 @@ func reset(pos: Vector2, platform := false) -> void:
 	parry_held = false
 	parry_cd = 0.0
 	aim_phase = false
+	aim_boost = false
+	power_boost = false
 	invuln = 0.0
 	shield_t = 0.0
 	stun = 0.0
@@ -306,8 +311,13 @@ func parry_reach() -> float:
 
 
 ## 탄 패리 성공: 시간이 느려지고 방향을 정한다 → 패리 돌진
-func on_parry_success(perfect: bool) -> void:
-	dash_parry_t = 0.0                           # 돌진패리 구간은 한 번 쓰면 끝
+## 돌진패리: 스스로 돌진해 탄막으로 다가가며(돌진 중, 끝난 직후 잠깐 포함) 하는 패리. 성공하면 타이밍과 상관없이 PERFECT 패리
+func is_dash_parry() -> bool:
+	return (dash_t > 0.0 and dash_kind == "dash") or dash_parry_t > 0.0
+
+
+func on_parry_success(perfect: bool, boosted := false) -> void:
+	dash_parry_t = 0.0
 	parry_active = false
 	parry_cd = 0.0
 	cancel_charge()
@@ -319,6 +329,7 @@ func on_parry_success(perfect: bool) -> void:
 	vel = Vector2.ZERO
 	aim_phase = true
 	aim_perfect = perfect
+	aim_boost = boosted
 	aim_left = stats.aim_time_perfect if perfect else stats.aim_time
 	parry_flash = 1.0
 
@@ -363,6 +374,12 @@ func on_parry_push(away: Vector2) -> void:
 	parry_flash = 0.6
 
 
+## 지금 조준 중인 리버스 드라이브의 사거리 (돌진패리면 DASH_PARRY_RANGE 배)
+func parry_dash_reach() -> float:
+	var spd := PARRY_DASH_SPEED_PERFECT if aim_perfect else PARRY_DASH_SPEED
+	return spd * PARRY_DASH_TIME * (DASH_PARRY_RANGE if aim_boost else 1.0)
+
+
 ## 방향 지정 종료 → 마우스 방향으로 패리 돌진(공격 판정, 강한 데미지)
 func launch_parry_dash() -> void:
 	if not aim_phase:
@@ -370,8 +387,10 @@ func launch_parry_dash() -> void:
 	aim_phase = false
 	dash_kind = "power"
 	perfect_dash = aim_perfect
-	dash_total = PARRY_DASH_TIME
-	dash_t = PARRY_DASH_TIME
+	power_boost = aim_boost
+	aim_boost = false
+	dash_total = PARRY_DASH_TIME * (DASH_PARRY_RANGE if power_boost else 1.0)
+	dash_t = dash_total
 	dash_cd = stats.dash_cooldown
 	vel = aim * (PARRY_DASH_SPEED_PERFECT if aim_perfect else PARRY_DASH_SPEED)
 	parry_cd = PARRY_RELEASE_CD
@@ -394,7 +413,6 @@ func try_evade_reward(strong := false) -> void:
 	buff_t = stats.sync_time                       # 다시 얻으면 지속 시간 갱신
 	evade_invuln = PERFECT_EVADE_INVULN * (1.5 if strong else 1.0)
 	invuln = maxf(invuln, evade_invuln)            # 성공 직후 다른 공격에 맞지 않도록 무적 연장
-	dash_parry_t = evade_invuln + DASH_PARRY_GRACE  # 돌진패리: 무적이 끝난 뒤로도 잠시 PERFECT 패리
 	dash_cd = dash_t                               # 이 돌진이 끝나는 즉시 다시 돌진할 수 있다
 	main.on_perfect_evade(position, strong)
 
@@ -407,7 +425,6 @@ func can_refresh_evade() -> bool:
 
 func refresh_evade_invuln() -> void:
 	invuln = maxf(invuln, evade_invuln)
-	dash_parry_t = maxf(dash_parry_t, evade_invuln + DASH_PARRY_GRACE)
 
 
 ## 피격: 잠시 조작 불가(스턴), 살짝 솟구친 뒤 추락
@@ -443,7 +460,7 @@ func step(dt: float) -> void:
 	if m.length() > AIM_DEADZONE:
 		aim = m.normalized()
 		if aim_phase:                                 # 에임 어시스트: 사거리 안 표적이 조준선 가까이 있으면 살짝 끌어당긴다
-			aim = _assisted(aim, (PARRY_DASH_SPEED_PERFECT if aim_perfect else PARRY_DASH_SPEED) * PARRY_DASH_TIME, POWER_RADIUS)
+			aim = _assisted(aim, parry_dash_reach(), POWER_RADIUS)
 		elif is_charged() or pending_kind == "charge":
 			aim = _assisted(aim, CHARGE_SPEED * CHARGE_DASH_TIME, 0.0)
 	if aim_phase:
@@ -514,6 +531,7 @@ func step(dt: float) -> void:
 			vel *= DASH_KEEP
 			if dash_kind == "dash":
 				small_guard = SMALL_GUARD
+				dash_parry_t = DASH_PARRY_GRACE
 			var grace := stats.power_grace if dash_kind == "power" else (CHARGE_GRACE if dash_kind == "charge" else 0.0)
 			if grace > 0.0:                   # 무적 여유는 패리 돌진/차지 돌진만
 				shield_max = grace
@@ -614,6 +632,7 @@ func _end_dash() -> void:
 	var was_power := dash_kind == "power"
 	dash_kind = ""
 	perfect_dash = false
+	power_boost = false
 	if was_power:
 		main.on_power_dash_end()
 
@@ -844,7 +863,7 @@ func _draw() -> void:
 	var attack := dash_t > 0.0 and (dash_kind == "charge" or dash_kind == "power")
 
 	# 꼬리: 일반 돌진은 청백(무적·잔상), 차지·패리 돌진은 주황
-	var tc := C_ATTACK if attack else C_EVADE
+	var tc := (Color(0.5, 1.0, 0.88) if power_boost else C_ATTACK) if attack else C_EVADE   # 돌진패리 리버스 드라이브는 청록 꼬리
 	for i in range(trail.size() - 1):
 		var a := 1.0 - float(i) / trail.size()
 		draw_line(trail[i] - position, trail[i + 1] - position, Color(tc, a * (0.3 if evade else 0.6)), 6.0 * a + 1.0)
@@ -865,7 +884,7 @@ func _draw() -> void:
 			var ba := Time.get_ticks_msec() * 0.006 + k * TAU / 3.0
 			draw_circle(Vector2(cos(ba), sin(ba)) * 34.0, 2.6, Color(1, 1, 1, 0.9))
 	if dash_t > 0.0 and dash_kind == "power":
-		_draw_gold_tail(1.9 if perfect_dash else 1.6)
+		_draw_gold_tail((1.9 if perfect_dash else 1.6) * (1.4 if power_boost else 1.0))
 	elif buffed and buff_strong and fade_ok:
 		_draw_gold_tail(1.0)
 
@@ -894,10 +913,10 @@ func _draw() -> void:
 	# 조준
 	if aim_phase:
 		var total := stats.aim_time_perfect if aim_perfect else stats.aim_time
-		var c := Color(0.75, 0.92, 1.0, 0.95)
+		var c := Color(0.5, 1.0, 0.88, 0.95) if aim_boost else Color(0.75, 0.92, 1.0, 0.95)   # 돌진패리: 청록 + 더 길게
 		draw_arc(Vector2.ZERO, 38.0, 0.0, TAU, 32, Color(c, 0.5), 2.0)
 		draw_arc(Vector2.ZERO, 46.0, -PI * 0.5, -PI * 0.5 + TAU * clampf(aim_left / total, 0.0, 1.0), 40, c, 4.0)
-		_laser(aim, (PARRY_DASH_SPEED_PERFECT if aim_perfect else PARRY_DASH_SPEED) * PARRY_DASH_TIME, c)
+		_laser(aim, parry_dash_reach(), c)
 	elif is_hovering_charge():
 		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.03)
 		if is_charged():               # 차지 완료: 몸이 살짝 빛나고 공격 사거리 레이저. (차지 중엔 떨림만)
@@ -923,11 +942,10 @@ func _draw() -> void:
 	if charge_cd > 0.0:
 		draw_arc(Vector2.ZERO, 30.0, -PI * 0.5, -PI * 0.5 + TAU * (1.0 - charge_cd / stats.charge_cooldown), 40, Color(C_ATTACK, 0.75 if charging else 0.4), 2.0)
 
-	# 돌진패리 구간: 청록 호가 줄어든다 (다 줄면 끝). 끝나기 직전엔 깜빡인다
-	if dash_parry_t > 0.0 and not frozen:
-		var dk := clampf(dash_parry_t / maxf(evade_invuln + DASH_PARRY_GRACE, 0.01), 0.0, 1.0)
-		var da := 1.0 if dash_parry_t > 0.3 or int(Time.get_ticks_msec() / 70) % 2 == 0 else 0.3
-		draw_arc(Vector2.ZERO, 52.0, -PI * 0.5, -PI * 0.5 + TAU * dk, 40, Color(0.5, 1.0, 0.88, 0.9 * da), 3.0)
+	# 돌진패리: 돌진하는 동안 패리 자세를 잡으면 청록 고리가 겹쳐 뜬다 (이때 막으면 타이밍과 상관없이 PERFECT)
+	if parry_active and is_dash_parry():
+		var dpp := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.03)
+		draw_arc(Vector2.ZERO, RADIUS + stats.parry_reach + 8.0, 0.0, TAU, 40, Color(0.5, 1.0, 0.88, 0.7 + 0.3 * dpp), 3.0)
 
 	# 반사 코어: 리버스 드라이브 중 반사 범위
 	if is_reflecting():

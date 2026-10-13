@@ -36,6 +36,11 @@ func assist_targets(_from: Vector2, _out: Array[Dictionary]) -> void:
 	pass
 
 
+## 근접공격을 예고하는 중인가 (HUD 경고 띠). 근접공격 모듈은 true 를 돌려 주고, 예고 그림은 melee_warn.gd 로 그린다
+func melee_warning() -> bool:
+	return false
+
+
 ## 패리 불가 판정 → 밀려날 방향 (안 맞으면 ZERO)
 func beam_hit(_p: Vector2, _r: float) -> Vector2:
 	return Vector2.ZERO

@@ -5,6 +5,7 @@ extends "res://scripts/attacks/attack.gd"
 ## 단계: prep → set → warn → swing → hold → return  (요격·패리: → recoil → stagger → return)
 ## boss 에 필요한 것: SHOULDERS, FIST_IDLE, fists, SWING_L, ELBOW_AT, UPPER_W, FORE_W, FIST_R, arm_box(a, ppos)
 
+const MeleeWarn := preload("res://scripts/melee_warn.gd")
 const PREP := 0.9                    # 준비 모션: 팔이 뒤로 젖혀졌다 목표 위치로 (앞부분에서만 플레이어를 따라간다)
 const PREP_TRACK := 0.6              # 준비 모션의 이 비율까지만 조준. 이후 위치 확정
 const SET := 0.3                     # 팔 위치 고정 (예상 범위 윤곽만 표시)
@@ -125,6 +126,10 @@ func on_parried(hb: Dictionary) -> void:
 
 
 ## 리버스 드라이브가 끝나면 경직을 풀고 바로 제자리로
+func melee_warning() -> bool:
+	return phase == "prep" or phase == "set" or phase == "warn"
+
+
 func release_stagger() -> void:
 	if phase == "recoil" or phase == "stagger":
 		set_phase("return")
@@ -139,25 +144,17 @@ func draw() -> void:
 	var s := 1.0 if arm == 1 else -1.0
 	var sh: Vector2 = boss.SHOULDERS[arm]
 	var area := area_cached()
-	var outline := area.duplicate()
-	outline.append(area[0])
-	if phase == "warn":
-		var blink := 0.5 + 0.5 * sin(boss.t * 26.0)
-		var kw := clampf(t / WARN, 0.0, 1.0)
-		c.draw_colored_polygon(area, Color(C_WARN, (0.14 + 0.3 * blink) * (0.6 + 0.4 * kw)))
-		c.draw_polyline(outline, Color(1.0, 0.5, 0.4, 0.45 + 0.5 * blink), 4.0)
-	elif phase == "set":
-		c.draw_colored_polygon(area, Color(C_WARN, 0.06))
-		c.draw_polyline(outline, Color(1.0, 0.85, 0.75, 0.75), 3.0)
-	else:
-		c.draw_polyline(outline, Color(C_WARN, 0.2 + 0.2 * t / PREP), 2.0)
+	var level := 0 if phase == "prep" else (1 if phase == "set" else 2)
+	MeleeWarn.zone(c, area, level, boss.t)                 # 모든 근접공격이 같은 예고 모양(빗금 위험구간 + ⚠)을 쓴다
+	var mid := (th0 + th1) * 0.5
+	MeleeWarn.tag(c, sh + Vector2(s * cos(mid), sin(mid)) * boss.SWING_L * 0.55, level, boss.t)
 	if phase != "prep":
 		for f in [0.3, 0.5, 0.7]:                # 휩쓰는 방향을 가리키는 화살표
 			var th2: float = lerpf(th0, th1, f)
 			var radial := Vector2(s * cos(th2), sin(th2))
 			var tangent := Vector2(-s * sin(th2), cos(th2))
 			var at: Vector2 = sh + radial * boss.SWING_L * 0.8
-			c.draw_colored_polygon(PackedVector2Array([at + tangent * 40.0, at - tangent * 12.0 + radial * 26.0, at - tangent * 12.0 - radial * 26.0]), Color(1, 0.9, 0.7, 0.6))
+			c.draw_colored_polygon(PackedVector2Array([at + tangent * 40.0, at - tangent * 12.0 + radial * 26.0, at - tangent * 12.0 - radial * 26.0]), Color(MeleeWarn.C_HOT, 0.7))
 
 
 ## 같은 각도면 계산을 재사용한다 (예고 중 매 프레임 다각형 합치기를 하지 않게)

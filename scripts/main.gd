@@ -172,7 +172,7 @@ func _ready() -> void:
 		touch_layer.add_child(touch_ui)
 	_apply_loadout()
 	reset_run()
-	tutorial.request(["dodge", "parry"])        # 처음 실행: 회피 → 패리 순서로 한 장씩
+	tutorial.request(["dodge", "parry", "dashparry"])        # 처음 실행: 회피 → 패리 → 돌진패리 순서로 한 장씩
 
 
 func reset_run() -> void:
@@ -345,7 +345,7 @@ func _physics_body(delta: float) -> void:
 	boss.strike_glow = player.is_attacking()
 	boss.focus_glow = 1.0 if (player.aim_phase or player.is_charged()) else 0.0
 	boss.focus_from = player.position
-	boss.focus_reach = (Player.PARRY_DASH_SPEED_PERFECT if player.aim_perfect else Player.PARRY_DASH_SPEED) * Player.PARRY_DASH_TIME \
+	boss.focus_reach = player.parry_dash_reach() \
 		if player.aim_phase else Player.CHARGE_SPEED * Player.CHARGE_DASH_TIME
 	boss.hold_attacks = player.on_platform or debug.freeze   # 시작·부활 직후 날아오르기 전에는 공격이 시작되지 않는다 (F3: 디버그 정지)
 	boss.step(dt, player.position)
@@ -378,12 +378,8 @@ func _tutorial_triggers() -> void:
 		tutorial.request(["unparry"])
 	elif kd == "spiral" or kd == "fan" or kd == "homing" or kd == "mines":
 		tutorial.request(["barrage"])
-	elif kd == "press":
-		tutorial.request(["press"])
 	elif kd == "rings":
 		tutorial.request(["unparry"])
-	if player.dash_parry_t > 0.0:                      # 퍼펙트 회피에 처음 성공하면 돌진패리 안내
-		tutorial.request(["dashparry"])
 	if boss.shots.kind.has(Projectiles.Kind.SMALL):    # 잔탄이 처음 나오면 (관측자도 섞어 쏜다)
 		tutorial.request(["barrage"])
 
@@ -478,7 +474,7 @@ func _check_attacks() -> void:
 				player.on_absorb()
 				_absorb_feedback(hb["pos"])
 				return
-			var dash_parry: bool = player.dash_parry_t > 0.0       # 돌진패리: 퍼펙트 회피 직후 구간의 패리는 PERFECT
+			var dash_parry: bool = player.is_dash_parry()          # 돌진패리: 돌진하는 동안의 패리는 타이밍과 상관없이 PERFECT
 			var perfect: bool = dash_parry or player.parry_t <= Player.PERFECT_WINDOW
 			if hb["id"] == "arm":                       # 팔은 그냥 패리하면 피해 없이 튕겨나기만 (받아치기는 차지 돌진)
 				var hp_pos: Vector2 = hb["pos"]
@@ -488,12 +484,12 @@ func _check_attacks() -> void:
 				player.on_parry_push(away)
 				_parry_push_feedback(p.lerp(hp_pos, 0.3))
 				return
-			player.on_parry_success(perfect)
+			var dp_dir: Vector2 = player.vel.normalized() if player.vel.length() > 10.0 else player.aim
+			player.on_parry_success(perfect, dash_parry)
 			_parried_bullet(hb)
 			_parry_feedback(p, perfect, hb)
 			if dash_parry:
-				tele.add("dash_parry")
-				fx.ring(p, Color(0.5, 1.0, 0.88), 150.0, 0.35, 5.0, true)
+				_dash_parry_feedback(p, dp_dir)
 			return
 		var small: bool = hb.get("small", false)
 		if small and player.small_guard > 0.0:         # 일반 돌진이 끝난 직후 잠깐: 잔탄은 맞지 않는다
@@ -588,6 +584,21 @@ func hurt_player(push: Vector2, cause := "attack", damage := true) -> void:
 			player.frozen = true
 			fx.burst(p, 40, Color(0.9, 0.2, 0.15), 900.0, 0.8, 5.0)
 			_die()
+
+
+## 돌진패리 전용 이펙트: 청록 충격파 + 진행 방향으로 쏟아지는 불꽃. 이어지는 리버스 드라이브는 사거리가 늘고 청록 꼬리를 단다
+func _dash_parry_feedback(p: Vector2, dir: Vector2) -> void:
+	tele.add("dash_parry")
+	var mint := Color(0.5, 1.0, 0.88)
+	hud.flash(0.18, Color(0.6, 1.0, 0.9))
+	hud.warp(0.4)
+	shake = maxf(shake, 20.0)
+	sfx.play("perfect", 2.0)
+	sfx.play("dash", 0.0, 0.0)
+	fx.ring(p, mint, 240.0, 0.4, 7.0, true)
+	fx.ring(p, Color(1, 1, 1), 130.0, 0.25, 4.0)
+	fx.burst(p, 36, mint, 1700.0, 0.45, 3.5, 0.0, dir, 0.35)
+	fx.rays_burst(p, 10, Color(0.8, 1.0, 0.95), 600.0, 0.4, 6.0)
 
 
 ## 잔탄 피격: 실드 셀이 바로 깨지지 않고 과열 게이지가 한 칸 오른다. 제어 불능도, 동조·차지 취소도 없다.

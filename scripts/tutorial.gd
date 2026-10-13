@@ -5,7 +5,7 @@ extends CanvasLayer
 
 const Sprites := preload("res://scripts/sprites.gd")
 
-const ORDER := ["dodge", "parry", "dashparry", "charge", "unparry", "barrage", "press"]
+const ORDER := ["dodge", "parry", "dashparry", "charge", "unparry", "barrage"]
 const SAVE_PATH := "user://tutorial.cfg"
 
 var enabled := true                  # false: 자동 팝업·저장 없음 (테스트·헤드리스)
@@ -59,11 +59,11 @@ func _pages() -> Dictionary:
 			],
 		},
 		"dashparry": {
-			"title": "돌진패리 — 회피한 직후의 패리",
+			"title": "돌진패리 — 돌진하며 패리",
 			"lines": [
-				"퍼펙트 회피에 성공하면 잠시 '돌진패리' 구간이 열립니다(약 1.5초, 완전 동조는 약 1.9초). 기체 둘레에 청록 호가 뜨고, 호가 다 줄어들면 끝납니다.",
-				"그 안에 탄을 패리하면 누르는 타이밍과 상관없이 PERFECT 패리로 처리됩니다: 리버스 드라이브 피해 16, 조준 유예 1.9초.",
-				"퍼펙트 회피한 돌진 중 다른 탄에 닿을 때마다 구간이 다시 채워집니다. 탄막 속으로 뛰어든 뒤 곧바로 패리하세요. 한 번 쓰면 사라지고, 맞으면 사라집니다.",
+				"다가오는 탄막을 향해 스스로 돌진해 들어가며 패리하는 것이 '돌진패리'입니다. 돌진하는 동안(끝난 직후 잠깐 포함) 패리에 성공하면 누른 타이밍과 상관없이 PERFECT 패리로 처리됩니다.",
+				"PERFECT 패리: 리버스 드라이브 피해 16, 조준 유예 1.9초에 더해 리버스 드라이브의 사거리가 35% 늘어납니다(청록 조준선·꼬리). 돌진하는 동안은 무적이라 막지 못해도 그대로 통과합니다.",
+				"돌진(좌클릭)을 시작한 뒤 패리(우클릭/Space)를 누르면 됩니다. 돌진 쿨다운은 1.15초이니, 막을 탄을 보고 돌진하세요.",
 			],
 		},
 		"charge": {
@@ -72,6 +72,7 @@ func _pages() -> Dictionary:
 				"%s 으로 0.6초 모으고 떼면 차지 강습: 피해 3으로 일반 돌진(1)보다 훨씬 강합니다. 모으는 동안 기체가 떨리고 완료되면 빛납니다. 한 번 쓰면 1.5초 동안은 다시 모을 수 없습니다(주황 링). 적중(요격 포함)하면 돌진 쿨다운이 바로 돌아옵니다." % hold,
 				"적이 팔을 들어 위치를 잡고 붉게 점멸하며 멈춰 있을 때(또는 휘두르는 중) 차지 강습으로 부딪히면 요격! 공격을 끊고 구동부에 피해 8! 리버스 드라이브로 부딪혀도 요격됩니다(피해 12).",
 				"팔을 들어 올리는 중에는 요격할 수 없습니다. 근접공격(팔 휘두르기·프레스)은 일반 돌진으로 통과할 수 없습니다 — 요격하거나, 패리로 튕겨나거나, 범위 밖으로 피하세요.",
+				"근접공격은 모두 같은 표시로 예고됩니다: 붉은 빗금 위험구간 + ⚠ '근접공격' 표지 + 화면 위 경고 띠. 천장이 내려오는 프레스도 같습니다 — 정지선 아래로 피하거나 차지 강습·리버스 드라이브로 요격하세요(패리하면 아래로 내리꽂혀 융해 지대로 빠집니다).",
 			],
 		},
 		"barrage": {
@@ -81,14 +82,6 @@ func _pages() -> Dictionary:
 				"잔탄은 패리해도 흡수될 뿐 리버스 드라이브는 열리지 않습니다. 흡수해도 패리 쿨다운이 없어 겹쳐 오는 잔탄을 연달아 막을 수 있습니다. 일반 돌진이 끝난 직후 0.25초는 잔탄을 맞지 않습니다(옅은 실드).",
 				"크고 둥근 금색 탄(주탄)과 붉은 불길을 두른 유도탄을 패리해야 리버스 드라이브가 열립니다. 유도탄은 쫓아오지만 크고 느려서 패리하기 좋습니다.",
 				"바닥 가까이 머물면 융해 지대에 기뢰가 내려앉아 위로 터집니다.",
-			],
-		},
-		"press": {
-			"title": "프레스 — 천장이 내려온다 (근접, 회피 불가)",
-			"lines": [
-				"천장 전체가 내려와 경기장을 깔아뭉갭니다. 붉게 깜빡이는 정지선 아래로 내려가세요. 내려오는 판에 닿으면 피해를 입고 판 아래로 밀려납니다. 다 내려온 뒤(멈춤·올라감)에는 막히기만 하고 피해는 없습니다.",
-				"근접공격이라 돌진의 무적으로 통과할 수 없습니다. 팔처럼 차지 강습이나 리버스 드라이브로 판을 요격하면 프레스가 걸려 도로 올라갑니다 (조준 보조가 판을 잡습니다).",
-				"패리하면 막기는 하지만 거대한 힘에 아래로 내리꽂혀 융해 지대로 빠집니다. 패리하지 말고 피하세요.",
 			],
 		},
 		"unparry": {
@@ -353,8 +346,6 @@ class Stage extends Control:
 				_unparry()
 			"barrage":
 				_barrage()
-			"press":
-				_press()
 
 	func _dodge() -> void:
 		var T := 6.0
@@ -464,55 +455,42 @@ class Stage extends Control:
 		if tt >= 4.0 and tt < 4.3:
 			_txt("뗀다", Vector2(size.x - 60.0, 100.0), 15, Color(0.8, 0.9, 1.0))
 
-	## 돌진패리: 퍼펙트 회피 직후(청록 호) 패리하면 타이밍과 상관없이 PERFECT
+	## 돌진패리: 탄막을 향해 돌진하며 패리하면 타이밍과 상관없이 PERFECT
 	func _dashparry() -> void:
-		var T := 6.6
+		var T := 6.0
 		var tt := fmod(t, T)
 		var y := 150.0
-		var x0 := 180.0
-		var d0 := 1.6                                   # 돌진 시작: 첫 탄이 코앞까지 왔을 때
-		var dashing := tt >= d0 and tt < d0 + 0.28
-		var sx := x0
-		if tt >= d0:
-			sx = x0 + 150.0 * _smooth(d0, d0 + 0.28, tt)
-		if tt < 2.2:
-			_caption("① 퍼펙트 회피 성공 → 돌진패리 구간(청록 호)", MINT)
+		var x0 := 170.0
+		var d0 := 1.5                                   # 돌진 시작
+		var tm := d0 + 0.17                              # 돌진 중간에 탄과 만난다
+		var te := minf(tt, tm)
+		var sx := x0 + 300.0 * _smooth(d0, d0 + 0.28, te)
+		var dashing := tt >= d0 and tt < tm
+		var parried := tt >= tm
+		if tt < d0:
+			_caption("① 다가오는 탄막을 보고 스스로 돌진하며 패리를 누른다", MINT)
 		else:
-			_caption("② 호가 남아 있는 동안 패리하면 PERFECT", GOLD)
-		var ax := 680.0 - 660.0 * _smooth(0.0, 2.4, tt)       # 첫 탄: 스치고 지나간다
-		if tt < 2.4:
-			_bolt(Vector2(ax, y), Vector2.LEFT)
+			_caption("② 돌진하는 동안의 패리 = 타이밍과 상관없이 PERFECT", GOLD)
+		if not parried:
+			_bolt(Vector2(394.0 + 180.0 * (tm - tt), y), Vector2.LEFT)
 		if dashing:
 			for k in 3:
 				_ship(Vector2(sx - 26.0 * (k + 1), y), 0.0, 0.18, "b")
+			HexShield.draw(self, Vector2(sx, y), 34.0, 1.0, t)
 		_ship(Vector2(sx, y), 0.0)
 		if tt < d0:
 			_flame(Vector2(sx, y), 0.0)
-		if tt >= d0 and tt < d0 + 0.8:
-			HexShield.draw(self, Vector2(sx, y), 34.0, 1.0, t)
-		if tt >= d0 - 0.4 and tt < d0 + 0.05:
-			_txt("좌클릭!", Vector2(x0 - 30.0, y + 52.0), 16, GOLD)
-			_mouse(Vector2(x0 + 40.0, y + 60.0), tt >= d0, false)
-		if tt >= d0 + 0.05 and tt < d0 + 0.7:
-			_txt("PERFECT 회피", Vector2(sx - 44.0, y - 52.0), 18, MINT)
-		var parried := tt >= 2.9
-		var win := clampf(1.0 - (tt - d0) / 1.5, 0.0, 1.0) if tt >= d0 else 0.0
-		if win > 0.0 and not parried:
-			draw_arc(Vector2(sx, y), 52.0, -PI * 0.5, -PI * 0.5 + TAU * win, 40, Color(MINT, 0.9), 3.0)
-			_txt("돌진패리 구간", Vector2(sx - 46.0, y + 74.0), 15, MINT)
-		var holding := tt >= 2.5 and tt < 3.3
-		if tt >= 1.9 and not parried:                       # 둘째 탄(주탄): 구간 안에 도착한다
-			var bx := lerpf(700.0, sx + 42.0, _smooth(1.9, 2.9, tt))
-			_bolt(Vector2(bx, y), Vector2.LEFT)
-		if holding:
-			_ring(Vector2(sx, y), 40.0 + (4.0 if int(t * 10.0) % 2 == 0 else 0.0), Color(1.0, 0.95, 0.75, 0.9), 2.5)
-		if tt >= d0 - 0.4 and tt < d0 + 0.05 or holding:
-			_mouse(Vector2(size.x - 40.0, 60.0), tt < d0 + 0.05, holding)
-		if parried and tt < 5.4:
-			_spark(Vector2(sx + 30.0, y), _smooth(2.9, 3.4, tt), Color(1, 1, 1), 12, 56.0)
+		if tt >= d0 - 0.5 and tt < tm + 0.3:
+			_mouse(Vector2(size.x - 40.0, 60.0), tt >= d0 and tt < d0 + 0.15, tt >= d0 + 0.02)
+		if tt >= d0 - 0.5 and tt < d0:
+			_txt("돌진 + 패리!", Vector2(x0 - 40.0, y + 52.0), 16, GOLD)
+		if dashing:
+			_ring(Vector2(sx, y), 46.0, Color(0.5, 1.0, 0.88, 0.9), 3.0)
+		if parried and tt < 4.6:
+			_spark(Vector2(sx + 30.0, y), _smooth(tm, tm + 0.5, tt), Color(1, 1, 1), 12, 56.0)
 			_txt("돌진패리! PERFECT", Vector2(sx - 70.0, y - 62.0), 20, GOLD)
-			if tt >= 3.6:
-				_txt("피해 16 · 조준 유예 1.9초", Vector2(sx - 70.0, y + 64.0), 16, MINT)
+			if tt >= tm + 0.5:
+				_txt("피해 16 · 조준 1.9초 · 사거리 +35%", Vector2(sx - 100.0, y + 64.0), 16, MINT)
 
 	func _charge() -> void:
 		var T := 8.0
@@ -745,57 +723,6 @@ class Stage extends Control:
 			if u >= 3.05 and u < 4.0:
 				_txt("피해 12", Vector2(tgt.x - 30.0, tgt.y - 50.0), 20, GOLD)
 			_mouse(Vector2(size.x - 40.0, 60.0), false, holding)
-
-	## 프레스: 천장이 내려오고, 정지선 아래로 내려간 기체만 산다. 패리하면 아래로 내리꽂힌다
-	func _press() -> void:
-		var T := 7.0
-		var tt := fmod(t, T)
-		var s := size
-		var stop := s.y - 90.0
-		var top := 0.0
-		var bottom := top
-		if tt < 1.4:
-			bottom = top + 14.0 * tt
-		elif tt < 2.0:
-			var k := (tt - 1.4) / 0.6
-			bottom = lerpf(20.0, stop, k * k)
-		elif tt < 2.8:
-			bottom = stop
-		else:
-			bottom = lerpf(stop, top, _smooth(2.8, 3.6, tt))
-		if tt < 3.6:
-			_caption("① 붉은 정지선 아래로 피한다 — 돌진으로는 통과 못 함", Color(1.0, 0.6, 0.5))
-			var y := lerpf(80.0, stop + 40.0, _smooth(0.3, 1.5, tt))
-			_ship(Vector2(260, y), PI * 0.5 if tt < 1.5 else -PI * 0.5)
-		else:
-			_caption("② 패리하면 막기는 하지만 아래로 내리꽂힌다", Color(1.0, 0.6, 0.5))
-			var u := tt - 3.6
-			var b2 := 0.0
-			if u < 0.8:
-				b2 = lerpf(0.0, 120.0, u / 0.8)
-			else:
-				b2 = lerpf(120.0, stop, _smooth(0.8, 1.3, u))
-			bottom = b2
-			var py := 150.0
-			if u >= 0.8:
-				py = maxf(150.0, b2 + 20.0)
-			if u >= 1.3:
-				py = lerpf(stop + 20.0, s.y + 10.0, _smooth(1.3, 1.6, u))
-			_ship(Vector2(420, py), -PI * 0.5)
-			if u >= 0.6 and u < 0.95:
-				_ring(Vector2(420, py), 40.0, Color(1.0, 0.95, 0.75, 0.9), 2.5)
-				_mouse(Vector2(s.x - 40.0, 60.0), false, true)
-			if u >= 1.5 and u < 2.6:
-				_spark(Vector2(420, s.y - 22.0), _smooth(1.5, 2.2, u), Color(1.0, 0.45, 0.15), 12, 50.0)
-				_txt("융해 지대로!", Vector2(370, s.y - 60.0), 18, Color(1.0, 0.55, 0.3))
-		if tt < 2.0:
-			var blink := 0.5 + 0.5 * sin(t * 20.0)
-			draw_rect(Rect2(0, stop, s.x, 4), Color(1.0, 0.3, 0.25, 0.4 + 0.5 * blink))
-		draw_rect(Rect2(0, top, s.x, bottom - top), Color(0.16, 0.16, 0.18))
-		for k in 14:
-			var x := k * 50.0
-			draw_line(Vector2(x, bottom - 14.0), Vector2(x + 24.0, bottom), Color(1.0, 0.35, 0.18, 0.8), 6.0)
-		draw_line(Vector2(0, bottom), Vector2(s.x, bottom), Color(1.0, 0.35, 0.18), 3.0)
 
 	## 레이저 진행도 k(0~1)가 되는 시각 (sweep 가속 곡선을 이분법으로 역산)
 	func _beam_time(target_k: float) -> float:

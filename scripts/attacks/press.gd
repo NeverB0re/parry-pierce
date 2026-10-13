@@ -6,6 +6,7 @@ extends "res://scripts/attacks/attack.gd"
 ## 내려오는 판(drop)에 닿으면 피해 + 판 아래로 밀려난다. 다 내려온 뒤(hold·rise·jam)는 판에 막히기만 하고 피해가 없다 (main.gd 가 판정).
 ## 올라가기 시작하면 다음 공격에 자리를 내준다 (boss.detach_attack)
 
+const MeleeWarn := preload("res://scripts/melee_warn.gd")
 const WARN := 1.6
 const DROP := 0.9
 const HOLD := 0.7
@@ -78,6 +79,10 @@ func assist_targets(from: Vector2, out: Array[Dictionary]) -> void:
 		out.append({"pos": Vector2(clampf(from.x, -HALF_W + 60.0, HALF_W - 60.0), bottom - 30.0), "r": 60.0})
 
 
+func melee_warning() -> bool:
+	return phase == "warn" or phase == "drop"
+
+
 func on_parried(_hb: Dictionary) -> void:
 	if phase == "warn" or phase == "drop" or phase == "hold":
 		jam_from = bottom
@@ -88,15 +93,18 @@ func on_parried(_hb: Dictionary) -> void:
 func draw() -> void:
 	var c: CanvasItem = boss
 	var bt: float = boss.t
-	if phase == "warn" or phase == "drop":       # 정지선: 이 아래로!
+	if phase == "warn" or phase == "drop":       # 위험구간(판이 쓸고 지나갈 곳 전체) + 정지선: 이 아래로!
+		var level := 1 if phase == "warn" and t < WARN * 0.5 else 2
+		if STOP_Y - bottom > 8.0:
+			MeleeWarn.zone(c, PackedVector2Array([Vector2(-HALF_W, bottom), Vector2(HALF_W, bottom), Vector2(HALF_W, STOP_Y), Vector2(-HALF_W, STOP_Y)]), level, bt)
 		var blink := 0.5 + 0.5 * sin(bt * 20.0)
-		c.draw_rect(Rect2(-HALF_W, STOP_Y, HALF_W * 2.0, 10.0), Color(C_WARN, 0.35 + 0.5 * blink))
+		c.draw_rect(Rect2(-HALF_W, STOP_Y, HALF_W * 2.0, 10.0), Color(MeleeWarn.C, 0.5 + 0.5 * blink))
 		for k in 9:
 			var x := -1000.0 + k * 250.0
 			var y := STOP_Y + 30.0 + 18.0 * blink
-			c.draw_colored_polygon(PackedVector2Array([Vector2(x - 28, y), Vector2(x + 28, y), Vector2(x, y + 34)]), Color(C_WARN, 0.5 + 0.4 * blink))
-		var kw := clampf(t / WARN, 0.0, 1.0) if phase == "warn" else 1.0
-		c.draw_rect(Rect2(-HALF_W, bottom, HALF_W * 2.0, STOP_Y - bottom), Color(C_WARN, 0.04 + 0.08 * kw))
+			c.draw_colored_polygon(PackedVector2Array([Vector2(x - 28, y), Vector2(x + 28, y), Vector2(x, y + 34)]), Color(MeleeWarn.C, 0.5 + 0.4 * blink))
+		for tx in [-800.0, 0.0, 800.0]:
+			MeleeWarn.tag(c, Vector2(tx, STOP_Y - 170.0), level, bt)
 	# 판: 강철 + 유압 기둥 + 아랫변 위험 줄무늬와 이빨
 	c.draw_rect(Rect2(-HALF_W, TOP - 200.0, HALF_W * 2.0, bottom - TOP + 200.0), C_STEEL)
 	for k in 6:

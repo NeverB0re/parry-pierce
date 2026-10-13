@@ -105,6 +105,11 @@ func _draw() -> void:
 		draw_rect(gr, Color(0.9, 0.9, 0.95, 0.5), false, 1.0)
 	_text(Vector2(gx, 64), "과열", 12, Color(1.0, 0.75, 0.4, 0.8))
 
+	if not boss.dead and boss.melee_warning():         # 근접공격 예고: 화면 위 경고 띠 (위험구간·⚠ 표지와 같은 진홍)
+		var mb := 0.55 + 0.45 * sin(Time.get_ticks_msec() * 0.024)
+		draw_rect(Rect2(s.x * 0.5 - 300.0, 16.0, 600.0, 46.0), Color(0.55, 0.05, 0.04, 0.5 + 0.2 * mb))
+		draw_rect(Rect2(s.x * 0.5 - 300.0, 16.0, 600.0, 46.0), Color(1.0, 0.5, 0.4, 0.6 + 0.4 * mb), false, 3.0)
+		_text(Vector2(0, 48), "⚠ 근접공격 — 돌진 무적으로는 피할 수 없다", 22, Color(1.0, 0.9, 0.85, 0.75 + 0.25 * mb), HORIZONTAL_ALIGNMENT_CENTER, s.x)
 	_draw_target_marker(s, boss)
 	if not boss.dead and boss.attack_kind() == "beam" and s.x >= 300.0:   # 레이저 중 머리가 화면 밖이면 방향 표시
 		_edge_arrow(s, (main.get_viewport().get_canvas_transform() * boss.HEAD_POS) / ui_k, Color(0.85, 0.2, 0.55))

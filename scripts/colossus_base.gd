@@ -338,6 +338,16 @@ func on_hit_player(hb: Dictionary) -> void:
 		shots.remove(int(hb["idx"]))
 
 
+## 지금 근접공격을 예고하는 중인가 (HUD 경고 띠)
+func melee_warning() -> bool:
+	if dead:
+		return false
+	for a in active_attacks():
+		if a.melee_warning():
+			return true
+	return false
+
+
 ## 리버스 드라이브가 끝나면 패리로 밀려난 공격(팔)을 바로 풀어 준다
 func release_stagger() -> void:
 	if atk != null:

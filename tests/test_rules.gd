@@ -30,6 +30,7 @@ func _process(_d: float) -> bool:
 	_v036_test()
 	_v037_test()
 	_v038_test()
+	_v039_test()
 	_telemetry_test()
 	print("FAILS ", fails)
 	quit(fails)
@@ -1215,65 +1216,87 @@ func _v038_test() -> void:
 	b.atk = null
 	b.lingering.clear()
 
-	# 돌진패리: 퍼펙트 회피 → 무적이 끝난 뒤에도 구간이 남고, 그 안의 패리는 타이밍과 상관없이 PERFECT
+	# 돌진패리: 돌진하는 동안(과 끝난 직후 잠깐)의 패리 성공은 눌렀던 타이밍과 상관없이 PERFECT
 	p.reset(Vector2(-700, -1500), false)
+	main.hitstop = 0.0
+	main.slowmo = 0.0
 	b.shots.clear()
-	_dash_dir("dash", Vector2.RIGHT)
-	b.shots.spawn(p.position + Vector2(20, 0), Vector2.ZERO, 5.0)
-	_step(1)
-	_check("perfect evade opens the dash-parry window (%.2fs, invuln %.2f)" % [p.dash_parry_t, p.invuln], absf(p.dash_parry_t - (p.evade_invuln + p.DASH_PARRY_GRACE)) < 0.05 and p.dash_parry_t > p.invuln + 0.6)
-	b.shots.clear()
-	for k in int(1.0 / DT):
-		p.position = Vector2(-700, -1500)
-		p.vel = Vector2.ZERO
-		_step(1)
-	_check("window outlasts the invulnerability (invuln %.2f, window %.2f)" % [p.invuln, p.dash_parry_t], p.invuln <= 0.0 and p.dash_parry_t > 0.2)
-	p.position = Vector2(-700, -1500)
-	p.vel = Vector2.ZERO
 	p.parry_press()
-	_step(10)                                           # PERFECT 판정(0.07초)은 한참 지났다
-	_check("parry is past the normal perfect timing (t %.2f)" % p.parry_t, p.parry_t > p.PERFECT_WINDOW and p.parry_active)
-	b.shots.spawn(p.position + Vector2(25, 0), Vector2.ZERO, 5.0)
+	_step(10)                                           # 패리를 누른 지 0.17초 (PERFECT 판정 0.07초는 지났다)
+	_dash_dir("dash", Vector2.RIGHT)
+	_check("dash-parry state while dashing", p.is_dash_parry() and p.parry_active and p.parry_t > p.PERFECT_WINDOW)
+	b.shots.spawn(p.position + Vector2(40, 0), Vector2.ZERO, 5.0)
 	_step(1)
-	_check("late parry inside the window counts as PERFECT (aim %s, perfect %s, left %.2f)" % [p.aim_phase, p.aim_perfect, p.aim_left], p.aim_phase and p.aim_perfect and p.dash_parry_t == 0.0)
+	_check("parry while dashing is PERFECT even though pressed long ago (aim %s, perfect %s, left %.2f)" % [p.aim_phase, p.aim_perfect, p.aim_left], p.aim_phase and p.aim_perfect)
+	var normal_reach: float = p.PARRY_DASH_SPEED_PERFECT * p.PARRY_DASH_TIME
+	_check("dash-parry extends the reverse drive range (reach %.0f vs %.0f)" % [p.parry_dash_reach(), normal_reach], p.aim_boost and absf(p.parry_dash_reach() - normal_reach * p.DASH_PARRY_RANGE) < 1.0)
+	p.aim = Vector2.RIGHT
+	p.launch_parry_dash()
+	_check("boosted reverse drive lasts longer (dash %.2fs, boost %s)" % [p.dash_t, p.power_boost], p.power_boost and absf(p.dash_t - p.PARRY_DASH_TIME * p.DASH_PARRY_RANGE) < 0.001)
+	var x0: float = p.position.x
+	_step(int(0.9 / DT))                                # (퍼펙트 패리 히트스톱 0.2초 포함)
+	_check("and goes farther (%.0f px)" % (p.position.x - x0), p.position.x - x0 > normal_reach * 1.15 or p.position.x >= p.WALL_R - 20.0)
+	_check("boost ends with the dash", not p.power_boost)
 	p.parry_release()
 	p.aim_phase = false
-	# 구간 밖이면 보통 판정
+	# 돌진하지 않으면 같은 늦은 패리는 보통 판정
 	p.reset(Vector2(-700, -1500), false)
 	main.hitstop = 0.0
 	main.slowmo = 0.0
 	b.shots.clear()
 	p.parry_press()
 	_step(10)
+	_check("not dashing: no dash-parry", not p.is_dash_parry())
 	b.shots.spawn(p.position + Vector2(25, 0), Vector2.ZERO, 5.0)
 	_step(1)
-	_check("same late parry without the window is a normal parry", p.aim_phase and not p.aim_perfect)
+	_check("same late parry without a dash is normal (no extra range)", p.aim_phase and not p.aim_perfect and not p.aim_boost and absf(p.parry_dash_reach() - p.PARRY_DASH_SPEED * p.PARRY_DASH_TIME) < 1.0)
 	p.parry_release()
 	p.aim_phase = false
-	# 맞으면 사라지고, 돌진 중 닿으면 다시 채워지고, 시간이 지나면 끝난다
+	# 차지 강습·리버스 드라이브 중에는 해당 없음 (일반 돌진만)
+	p.reset(Vector2(-700, -1500), false)
+	_dash_dir("charge", Vector2.RIGHT)
+	_check("charge assault is not a dash-parry", not p.is_dash_parry())
+	# 돌진이 끝난 직후 잠깐은 인정, 곧 끝난다. 맞으면 사라진다
 	p.reset(Vector2(-700, -1500), false)
 	main.hitstop = 0.0
-	main.slowmo = 0.0
-	b.shots.clear()
 	_dash_dir("dash", Vector2.RIGHT)
-	b.shots.spawn(p.position + Vector2(20, 0), Vector2.ZERO, 5.0)
-	_step(1)
-	_step(8)
-	var low: float = p.dash_parry_t
-	b.shots.spawn(p.position + Vector2(30, 0), Vector2.ZERO, 5.0)
-	_step(1)
-	_check("touching another bullet mid-dash refills the window (%.2f -> %.2f)" % [low, p.dash_parry_t], p.dash_parry_t > low + 0.05)
-	p.on_hurt(Vector2.RIGHT)
-	_check("being hit ends it", p.dash_parry_t == 0.0)
+	_step(int(0.3 / DT))
+	_check("just after the dash: still counts (%.2f)" % p.dash_parry_t, p.dash_t <= 0.0 and p.is_dash_parry())
+	_step(int(0.2 / DT))
+	_check("grace ends shortly after (%.2f)" % p.dash_parry_t, not p.is_dash_parry())
 	p.reset(Vector2(-700, -1500), false)
-	b.shots.clear()
 	_dash_dir("dash", Vector2.RIGHT)
-	b.shots.spawn(p.position + Vector2(20, 0), Vector2.ZERO, 5.0)
-	_step(1)
-	b.shots.clear()
-	for k in int(1.7 / DT):
-		p.position = Vector2(-700, -1500)
-		p.vel = Vector2.ZERO
-		_step(1)
-	_check("window times out (%.2f)" % p.dash_parry_t, p.dash_parry_t == 0.0)
+	_step(int(0.3 / DT))
+	p.on_hurt(Vector2.RIGHT)
+	_check("being hit ends it", not p.is_dash_parry())
+	main.start_stage(0)
+
+
+## v0.39: 근접공격 예고 통일 (melee_warning), 돌진패리 사거리
+func _v039_test() -> void:
+	main.start_stage(0)
+	var b = main.boss
+	_air(Vector2(-700, -1500))
+	for ph in ["prep", "set", "warn"]:
+		_swing(ph, 0.2, 1.0, 2.0)
+		_check("arm %s phase is a melee warning" % ph, b.melee_warning())
+	for ph in ["swing", "recoil", "return"]:
+		_swing(ph, 0.2, 1.0, 2.0)
+		_check("arm %s phase is not" % ph, not b.melee_warning())
+	b.atk = null
+	_check("no attack, no melee warning", not b.melee_warning())
+	main.start_stage(1)
+	b = main.boss
+	b.next_t = 99.0
+	var pr = b.Press.new()
+	b.start_attack(pr)
+	_check("press warn is a melee warning", b.melee_warning())
+	pr.set_phase("drop")
+	_check("press drop is too", b.melee_warning())
+	pr.set_phase("hold")
+	_check("press hold is not", not b.melee_warning())
+	b.atk = null
+	b.start_attack(b.Fan.new(0, b.BARREL_TIPS[0], Vector2(0, -1500)))
+	_check("bullet attacks are not melee warnings", not b.melee_warning())
+	b.atk = null
 	main.start_stage(0)
