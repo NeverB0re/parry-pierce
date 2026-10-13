@@ -41,7 +41,7 @@ const VENTS := [Vector2(-330, -1640), Vector2(330, -1640)]          # 코어 페
 const MORTARS := [Vector2(-430, -640), Vector2(430, -640)]          # 기뢰 박격포
 
 # ── 외부 시스템 ────────────────────────────────────────
-const PART_HP := 24
+const PART_HP := 30
 const PART_R := [62.0, 62.0, 58.0, 58.0]
 const OPEN_TIME := 1.6
 

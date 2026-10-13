@@ -382,6 +382,8 @@ func _tutorial_triggers() -> void:
 		tutorial.request(["press"])
 	elif kd == "rings":
 		tutorial.request(["unparry"])
+	if player.dash_parry_t > 0.0:                      # 퍼펙트 회피에 처음 성공하면 돌진패리 안내
+		tutorial.request(["dashparry"])
 	if boss.shots.kind.has(Projectiles.Kind.SMALL):    # 잔탄이 처음 나오면 (관측자도 섞어 쏜다)
 		tutorial.request(["barrage"])
 
@@ -476,7 +478,8 @@ func _check_attacks() -> void:
 				player.on_absorb()
 				_absorb_feedback(hb["pos"])
 				return
-			var perfect: bool = player.parry_t <= Player.PERFECT_WINDOW
+			var dash_parry: bool = player.dash_parry_t > 0.0       # 돌진패리: 퍼펙트 회피 직후 구간의 패리는 PERFECT
+			var perfect: bool = dash_parry or player.parry_t <= Player.PERFECT_WINDOW
 			if hb["id"] == "arm":                       # 팔은 그냥 패리하면 피해 없이 튕겨나기만 (받아치기는 차지 돌진)
 				var hp_pos: Vector2 = hb["pos"]
 				var away: Vector2 = p - hp_pos
@@ -488,6 +491,9 @@ func _check_attacks() -> void:
 			player.on_parry_success(perfect)
 			_parried_bullet(hb)
 			_parry_feedback(p, perfect, hb)
+			if dash_parry:
+				tele.add("dash_parry")
+				fx.ring(p, Color(0.5, 1.0, 0.88), 150.0, 0.35, 5.0, true)
 			return
 		var small: bool = hb.get("small", false)
 		if small and player.small_guard > 0.0:         # 일반 돌진이 끝난 직후 잠깐: 잔탄은 맞지 않는다

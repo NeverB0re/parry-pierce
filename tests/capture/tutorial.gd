@@ -11,6 +11,7 @@ var plan := [
 	["unparry", 1.0], ["unparry", 3.2],
 	["barrage", 2.0], ["barrage", 5.6],
 	["press", 1.6], ["press", 4.9],
+	["dashparry", 1.8], ["dashparry", 2.6], ["dashparry", 3.9],
 	["dodge", 0.5],
 ]
 var idx := 0

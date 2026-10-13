@@ -46,6 +46,7 @@ const BOUNCE_END := 0.25         # 솟구치는 속도가 처음의 이 비율 �
 const PRESS_PIN_SPEED := 2300.0  # 프레스(천장 근접공격)를 패리하면 이 속도로 아래로 내리꽂힌다
 const PRESS_PIN_TIME := 1.0
 const STUN_INVULN := 0.4         # 스턴이 끝난 뒤 추가 무적
+const DASH_PARRY_GRACE := 0.7    # 돌진패리: 퍼펙트 회피 무적이 끝난 뒤에도 이만큼 더 구간이 남는다 (무적 0.8 + 0.7 = 1.5초)
 const SMALL_GUARD := 0.25        # 일반 돌진이 끝난 직후 이 시간 동안 잔탄에 맞지 않는다 (옅은 실드)
 const HURT_PUSH := 500.0
 const HURT_POP := 380.0          # 맞으면 살짝 솟구친다
@@ -107,6 +108,7 @@ var bounce_rise := 0.0           # 직격 튕김의 처음 솟구치는 속도 (
 var parry_hit := false           # 이번 패리 판정에서 무언가를 막았다 → 판정이 끝나도 패리 쿨다운 없음
 var shield_t := 0.0              # 돌진/직격 후 무적
 var small_guard := 0.0           # 일반 돌진이 끝난 직후: 잔탄만 맞지 않는 시간
+var dash_parry_t := 0.0          # 돌진패리 구간: 퍼펙트 회피 직후 이 시간 안에 탄을 패리하면 타이밍과 상관없이 PERFECT 패리
 var shield_max := 1.0
 var stun := 0.0
 var launch_t := 0.0
@@ -138,6 +140,7 @@ func reset(pos: Vector2, platform := false) -> void:
 	parry_hit = false
 	charge_cd = 0.0
 	small_guard = 0.0
+	dash_parry_t = 0.0
 	evade_window = 0.0
 	evade_rewarded = false
 	dash_held = false
@@ -304,6 +307,7 @@ func parry_reach() -> float:
 
 ## 탄 패리 성공: 시간이 느려지고 방향을 정한다 → 패리 돌진
 func on_parry_success(perfect: bool) -> void:
+	dash_parry_t = 0.0                           # 돌진패리 구간은 한 번 쓰면 끝
 	parry_active = false
 	parry_cd = 0.0
 	cancel_charge()
@@ -390,6 +394,7 @@ func try_evade_reward(strong := false) -> void:
 	buff_t = stats.sync_time                       # 다시 얻으면 지속 시간 갱신
 	evade_invuln = PERFECT_EVADE_INVULN * (1.5 if strong else 1.0)
 	invuln = maxf(invuln, evade_invuln)            # 성공 직후 다른 공격에 맞지 않도록 무적 연장
+	dash_parry_t = evade_invuln + DASH_PARRY_GRACE  # 돌진패리: 무적이 끝난 뒤로도 잠시 PERFECT 패리
 	dash_cd = dash_t                               # 이 돌진이 끝나는 즉시 다시 돌진할 수 있다
 	main.on_perfect_evade(position, strong)
 
@@ -402,10 +407,12 @@ func can_refresh_evade() -> bool:
 
 func refresh_evade_invuln() -> void:
 	invuln = maxf(invuln, evade_invuln)
+	dash_parry_t = maxf(dash_parry_t, evade_invuln + DASH_PARRY_GRACE)
 
 
 ## 피격: 잠시 조작 불가(스턴), 살짝 솟구친 뒤 추락
 func on_hurt(push: Vector2) -> void:
+	dash_parry_t = 0.0
 	cancel_charge()
 	_clear_buff()
 	queued_press = dash_held                       # 누르고 있었다면 스턴이 끝나자마자 모으기 시작
@@ -450,6 +457,7 @@ func step(dt: float) -> void:
 	evade_window = maxf(0.0, evade_window - dt)
 	parry_cd = maxf(0.0, parry_cd - dt)
 	invuln = maxf(0.0, invuln - dt)
+	dash_parry_t = maxf(0.0, dash_parry_t - dt)
 	shield_t = maxf(0.0, shield_t - dt)
 	if bounce_rise > 0.0 and vel.y > -bounce_rise * BOUNCE_END:   # 직격 튕김이 끝나 통제를 되찾음 → 무적도 끝
 		bounce_rise = 0.0
@@ -914,6 +922,12 @@ func _draw() -> void:
 	# 차지 쿨다운: 주황 링이 차오른다 (다 차야 다음 차지가 완료된다)
 	if charge_cd > 0.0:
 		draw_arc(Vector2.ZERO, 30.0, -PI * 0.5, -PI * 0.5 + TAU * (1.0 - charge_cd / stats.charge_cooldown), 40, Color(C_ATTACK, 0.75 if charging else 0.4), 2.0)
+
+	# 돌진패리 구간: 청록 호가 줄어든다 (다 줄면 끝). 끝나기 직전엔 깜빡인다
+	if dash_parry_t > 0.0 and not frozen:
+		var dk := clampf(dash_parry_t / maxf(evade_invuln + DASH_PARRY_GRACE, 0.01), 0.0, 1.0)
+		var da := 1.0 if dash_parry_t > 0.3 or int(Time.get_ticks_msec() / 70) % 2 == 0 else 0.3
+		draw_arc(Vector2.ZERO, 52.0, -PI * 0.5, -PI * 0.5 + TAU * dk, 40, Color(0.5, 1.0, 0.88, 0.9 * da), 3.0)
 
 	# 반사 코어: 리버스 드라이브 중 반사 범위
 	if is_reflecting():

@@ -5,7 +5,7 @@ extends CanvasLayer
 
 const Sprites := preload("res://scripts/sprites.gd")
 
-const ORDER := ["dodge", "parry", "charge", "unparry", "barrage", "press"]
+const ORDER := ["dodge", "parry", "dashparry", "charge", "unparry", "barrage", "press"]
 const SAVE_PATH := "user://tutorial.cfg"
 
 var enabled := true                  # false: 자동 팝업·저장 없음 (테스트·헤드리스)
@@ -56,6 +56,14 @@ func _pages() -> Dictionary:
 				"성공하면 시간이 느려집니다. 마우스(스틱)로 방향을 정하고 버튼을 떼면 리버스 드라이브! 받아낸 에너지를 추진기로 방출해 충돌합니다. 피해 12 (PERFECT 패리는 16). 적중하면 돌진 쿨다운이 바로 돌아와 튕겨나는 중에도 돌진할 수 있습니다.",
 				"금색 = 패리할 수 있는 공격입니다. 팔 휘두르기를 그냥 패리하면 피해만 막고 튕겨나기만 합니다.",
 				"무엇이든 막아 내면(잔탄 흡수·근접공격 패리 포함) 패리 쿨다운이 없어져 바로 다시 패리할 수 있습니다. 헛치면 잠깐 쿨다운이 생깁니다.",
+			],
+		},
+		"dashparry": {
+			"title": "돌진패리 — 회피한 직후의 패리",
+			"lines": [
+				"퍼펙트 회피에 성공하면 잠시 '돌진패리' 구간이 열립니다(약 1.5초, 완전 동조는 약 1.9초). 기체 둘레에 청록 호가 뜨고, 호가 다 줄어들면 끝납니다.",
+				"그 안에 탄을 패리하면 누르는 타이밍과 상관없이 PERFECT 패리로 처리됩니다: 리버스 드라이브 피해 16, 조준 유예 1.9초.",
+				"퍼펙트 회피한 돌진 중 다른 탄에 닿을 때마다 구간이 다시 채워집니다. 탄막 속으로 뛰어든 뒤 곧바로 패리하세요. 한 번 쓰면 사라지고, 맞으면 사라집니다.",
 			],
 		},
 		"charge": {
@@ -337,6 +345,8 @@ class Stage extends Control:
 				_dodge()
 			"parry":
 				_parry()
+			"dashparry":
+				_dashparry()
 			"charge":
 				_charge()
 			"unparry":
@@ -453,6 +463,56 @@ class Stage extends Control:
 			_txt("꾹", Vector2(size.x - 52.0, 100.0), 15, GOLD)
 		if tt >= 4.0 and tt < 4.3:
 			_txt("뗀다", Vector2(size.x - 60.0, 100.0), 15, Color(0.8, 0.9, 1.0))
+
+	## 돌진패리: 퍼펙트 회피 직후(청록 호) 패리하면 타이밍과 상관없이 PERFECT
+	func _dashparry() -> void:
+		var T := 6.6
+		var tt := fmod(t, T)
+		var y := 150.0
+		var x0 := 180.0
+		var d0 := 1.6                                   # 돌진 시작: 첫 탄이 코앞까지 왔을 때
+		var dashing := tt >= d0 and tt < d0 + 0.28
+		var sx := x0
+		if tt >= d0:
+			sx = x0 + 150.0 * _smooth(d0, d0 + 0.28, tt)
+		if tt < 2.2:
+			_caption("① 퍼펙트 회피 성공 → 돌진패리 구간(청록 호)", MINT)
+		else:
+			_caption("② 호가 남아 있는 동안 패리하면 PERFECT", GOLD)
+		var ax := 680.0 - 660.0 * _smooth(0.0, 2.4, tt)       # 첫 탄: 스치고 지나간다
+		if tt < 2.4:
+			_bolt(Vector2(ax, y), Vector2.LEFT)
+		if dashing:
+			for k in 3:
+				_ship(Vector2(sx - 26.0 * (k + 1), y), 0.0, 0.18, "b")
+		_ship(Vector2(sx, y), 0.0)
+		if tt < d0:
+			_flame(Vector2(sx, y), 0.0)
+		if tt >= d0 and tt < d0 + 0.8:
+			HexShield.draw(self, Vector2(sx, y), 34.0, 1.0, t)
+		if tt >= d0 - 0.4 and tt < d0 + 0.05:
+			_txt("좌클릭!", Vector2(x0 - 30.0, y + 52.0), 16, GOLD)
+			_mouse(Vector2(x0 + 40.0, y + 60.0), tt >= d0, false)
+		if tt >= d0 + 0.05 and tt < d0 + 0.7:
+			_txt("PERFECT 회피", Vector2(sx - 44.0, y - 52.0), 18, MINT)
+		var parried := tt >= 2.9
+		var win := clampf(1.0 - (tt - d0) / 1.5, 0.0, 1.0) if tt >= d0 else 0.0
+		if win > 0.0 and not parried:
+			draw_arc(Vector2(sx, y), 52.0, -PI * 0.5, -PI * 0.5 + TAU * win, 40, Color(MINT, 0.9), 3.0)
+			_txt("돌진패리 구간", Vector2(sx - 46.0, y + 74.0), 15, MINT)
+		var holding := tt >= 2.5 and tt < 3.3
+		if tt >= 1.9 and not parried:                       # 둘째 탄(주탄): 구간 안에 도착한다
+			var bx := lerpf(700.0, sx + 42.0, _smooth(1.9, 2.9, tt))
+			_bolt(Vector2(bx, y), Vector2.LEFT)
+		if holding:
+			_ring(Vector2(sx, y), 40.0 + (4.0 if int(t * 10.0) % 2 == 0 else 0.0), Color(1.0, 0.95, 0.75, 0.9), 2.5)
+		if tt >= d0 - 0.4 and tt < d0 + 0.05 or holding:
+			_mouse(Vector2(size.x - 40.0, 60.0), tt < d0 + 0.05, holding)
+		if parried and tt < 5.4:
+			_spark(Vector2(sx + 30.0, y), _smooth(2.9, 3.4, tt), Color(1, 1, 1), 12, 56.0)
+			_txt("돌진패리! PERFECT", Vector2(sx - 70.0, y - 62.0), 20, GOLD)
+			if tt >= 3.6:
+				_txt("피해 16 · 조준 유예 1.9초", Vector2(sx - 70.0, y + 64.0), 16, MINT)
 
 	func _charge() -> void:
 		var T := 8.0

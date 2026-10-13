@@ -29,6 +29,7 @@ func _process(_d: float) -> bool:
 	_v035_test()
 	_v036_test()
 	_v037_test()
+	_v038_test()
 	_telemetry_test()
 	print("FAILS ", fails)
 	quit(fails)
@@ -84,7 +85,7 @@ func _run() -> void:
 	main.touch_ui = FakeStick.new()
 
 	_check("numbers (cd %.2f, dmg %d/%d/%d/%d, part %d, core %d)" % [p.stats.dash_cooldown, p.DASH_DAMAGE, p.stats.charge_damage, p.stats.power_damage, p.stats.clash_damage, b.PART_HP, b.core.CORE_HP],
-		absf(p.stats.dash_cooldown - 1.15) < 0.001 and p.DASH_DAMAGE == 1 and p.stats.charge_damage == 3 and p.stats.power_damage == 12 and p.stats.power_damage_perfect == 16 and p.stats.clash_damage == 8 and b.PART_HP == 24 and b.ARMOR_HP == 160 and b.core.CORE_HP == 1)
+		absf(p.stats.dash_cooldown - 1.15) < 0.001 and p.DASH_DAMAGE == 1 and p.stats.charge_damage == 3 and p.stats.power_damage == 12 and p.stats.power_damage_perfect == 16 and p.stats.clash_damage == 8 and b.PART_HP == 30 and b.ARMOR_HP == 160 and b.core.CORE_HP == 1)
 
 	# ── 돌진: 짧게 = 돌진, 쿨다운 ──
 	_air(Vector2(-900, -1500))
@@ -173,7 +174,7 @@ func _run() -> void:
 	_dash_dir("dash", Vector2.RIGHT)
 	var cd_before: float = p.dash_cd
 	_step(6)
-	_check("dash hit part: 1 dmg (hp %d)" % b.part_hp[0], b.part_hp[0] == 23)
+	_check("dash hit part: 1 dmg (hp %d)" % b.part_hp[0], b.part_hp[0] == b.PART_HP - 1)
 	_check("rises after hit (vy %.0f, up=%.0f)" % [p.vel.y, p.stats.bounce_up], p.vel.y < -p.stats.bounce_up * 0.9 and p.vel.y > -p.stats.bounce_up * 1.4)
 	_check("pushed to opposite side of approach (vx %.0f)" % p.vel.x, p.vel.x < 0.0 and p.vel.x > -400.0)
 	_check("cooldown not reset on hit (cd %.2f)" % p.dash_cd, p.dash_cd > 0.4 and p.dash_cd <= cd_before)
@@ -205,20 +206,20 @@ func _run() -> void:
 	_air(pp + Vector2(-160, 0))
 	_dash_dir("charge", Vector2.RIGHT)
 	_step(6)
-	_check("charge hit: 3 dmg (hp %d)" % b.part_hp[0], b.part_hp[0] == 21)
+	_check("charge hit: 3 dmg (hp %d)" % b.part_hp[0], b.part_hp[0] == b.PART_HP - 3)
 	_air(pp + Vector2(-160, 0))
 	p.buffed = true
 	_dash_dir("charge", Vector2.RIGHT)
 	_step(6)
-	_check("buffed charge: x2 = 6 (hp %d)" % b.part_hp[0], b.part_hp[0] == 18 and not p.buffed)
+	_check("buffed charge: x2 = 6 (hp %d)" % b.part_hp[0], b.part_hp[0] == b.PART_HP - 6 and not p.buffed)
 	_air(pp + Vector2(-200, 0))
 	p.aim_phase = true
 	p.aim_perfect = false
 	p.aim = Vector2.RIGHT
 	p.launch_parry_dash()
 	_step(6)
-	_check("parry dash: 12 dmg (hp %d)" % b.part_hp[0], b.part_hp[0] == 12)
-	_check("part damage stage 2 at 50%% (stage %d)" % b.part_stage[0], b.part_stage[0] == 2)
+	_check("parry dash: 12 dmg (hp %d)" % b.part_hp[0], b.part_hp[0] == b.PART_HP - 12)
+	_check("part damage stage 1 at 60%% (stage %d)" % b.part_stage[0], b.part_stage[0] == 1)
 
 	# ── 접촉: 돌진 중이 아니면 표적을 통과한다 (충돌·피해·스턴 없음) ──
 	_air(pp + Vector2(-90, 0))
@@ -1188,4 +1189,91 @@ func _v037_test() -> void:
 		if b.shots.kind[j] == K.SMALL:
 			vs += 1
 	_check("observer burst: 12 main + 6 small (%d small of %d)" % [vs, b.shots.size()], b.shots.size() == 18 and vs == 6)
+	main.start_stage(0)
+
+
+## v0.38: 프레스 정지선이 위로, 돌진패리(퍼펙트 회피 직후 구간의 패리 = PERFECT), 외부 시스템 체력 30
+func _v038_test() -> void:
+	var p = main.player
+	main.start_stage(1)
+	var b = main.boss
+	var K = b.shots.Kind
+	b.next_t = 99.0
+	_check("fortress parts have 30 hp", b.PART_HP == 30 and b.part_hp[0] == 30)
+	# 프레스 정지선: 예전 정지선(-650)과 새 정지선(-900) 사이는 이제 판 아래(안전)가 아니라 안전 구역이 더 넓다
+	var pr = b.Press.new()
+	_check("press stops higher (STOP_Y %.0f)" % pr.STOP_Y, pr.STOP_Y == -900.0)
+	b.start_attack(pr)
+	p.reset(Vector2(300, -780), false)                 # 새 정지선 아래: 예전엔 정지선 위라 맞았을 높이
+	p.invuln = 0.0
+	var lives0: int = main.lives
+	for k in int((pr.WARN + pr.DROP + 0.6) / DT):
+		p.position = Vector2(300, -780)
+		p.vel = Vector2.ZERO
+		main._physics_process(DT)
+	_check("standing below the new stop line is safe (lives %d->%d, phase %s)" % [lives0, main.lives, pr.phase], main.lives == lives0 and pr.phase == "hold")
+	b.atk = null
+	b.lingering.clear()
+
+	# 돌진패리: 퍼펙트 회피 → 무적이 끝난 뒤에도 구간이 남고, 그 안의 패리는 타이밍과 상관없이 PERFECT
+	p.reset(Vector2(-700, -1500), false)
+	b.shots.clear()
+	_dash_dir("dash", Vector2.RIGHT)
+	b.shots.spawn(p.position + Vector2(20, 0), Vector2.ZERO, 5.0)
+	_step(1)
+	_check("perfect evade opens the dash-parry window (%.2fs, invuln %.2f)" % [p.dash_parry_t, p.invuln], absf(p.dash_parry_t - (p.evade_invuln + p.DASH_PARRY_GRACE)) < 0.05 and p.dash_parry_t > p.invuln + 0.6)
+	b.shots.clear()
+	for k in int(1.0 / DT):
+		p.position = Vector2(-700, -1500)
+		p.vel = Vector2.ZERO
+		_step(1)
+	_check("window outlasts the invulnerability (invuln %.2f, window %.2f)" % [p.invuln, p.dash_parry_t], p.invuln <= 0.0 and p.dash_parry_t > 0.2)
+	p.position = Vector2(-700, -1500)
+	p.vel = Vector2.ZERO
+	p.parry_press()
+	_step(10)                                           # PERFECT 판정(0.07초)은 한참 지났다
+	_check("parry is past the normal perfect timing (t %.2f)" % p.parry_t, p.parry_t > p.PERFECT_WINDOW and p.parry_active)
+	b.shots.spawn(p.position + Vector2(25, 0), Vector2.ZERO, 5.0)
+	_step(1)
+	_check("late parry inside the window counts as PERFECT (aim %s, perfect %s, left %.2f)" % [p.aim_phase, p.aim_perfect, p.aim_left], p.aim_phase and p.aim_perfect and p.dash_parry_t == 0.0)
+	p.parry_release()
+	p.aim_phase = false
+	# 구간 밖이면 보통 판정
+	p.reset(Vector2(-700, -1500), false)
+	main.hitstop = 0.0
+	main.slowmo = 0.0
+	b.shots.clear()
+	p.parry_press()
+	_step(10)
+	b.shots.spawn(p.position + Vector2(25, 0), Vector2.ZERO, 5.0)
+	_step(1)
+	_check("same late parry without the window is a normal parry", p.aim_phase and not p.aim_perfect)
+	p.parry_release()
+	p.aim_phase = false
+	# 맞으면 사라지고, 돌진 중 닿으면 다시 채워지고, 시간이 지나면 끝난다
+	p.reset(Vector2(-700, -1500), false)
+	main.hitstop = 0.0
+	main.slowmo = 0.0
+	b.shots.clear()
+	_dash_dir("dash", Vector2.RIGHT)
+	b.shots.spawn(p.position + Vector2(20, 0), Vector2.ZERO, 5.0)
+	_step(1)
+	_step(8)
+	var low: float = p.dash_parry_t
+	b.shots.spawn(p.position + Vector2(30, 0), Vector2.ZERO, 5.0)
+	_step(1)
+	_check("touching another bullet mid-dash refills the window (%.2f -> %.2f)" % [low, p.dash_parry_t], p.dash_parry_t > low + 0.05)
+	p.on_hurt(Vector2.RIGHT)
+	_check("being hit ends it", p.dash_parry_t == 0.0)
+	p.reset(Vector2(-700, -1500), false)
+	b.shots.clear()
+	_dash_dir("dash", Vector2.RIGHT)
+	b.shots.spawn(p.position + Vector2(20, 0), Vector2.ZERO, 5.0)
+	_step(1)
+	b.shots.clear()
+	for k in int(1.7 / DT):
+		p.position = Vector2(-700, -1500)
+		p.vel = Vector2.ZERO
+		_step(1)
+	_check("window times out (%.2f)" % p.dash_parry_t, p.dash_parry_t == 0.0)
 	main.start_stage(0)
