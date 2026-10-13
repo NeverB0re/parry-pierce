@@ -73,7 +73,7 @@ func _process(_dt: float) -> void:
 	lines.append("[디버그] FPS %d · 물리 %.0f µs · 탄 %d · 입자 %d" % [Engine.get_frames_per_second(), _phys_us, b.shots.size(), main.fx.parts.size()])
 	lines.append("F2 무적 %s · F3 공격 정지 %s · F4 코어로 · F5 속도 0.5x %s · F6 튜토리얼 초기화" % [_on(god), _on(freeze), _on(slow)])
 	lines.append("페이즈 %d · 외부 시스템 %s · 장갑 %d/%d · 코어 %d · 공격 %s" % [b.phase, str(b.part_hp), b.core.armor_hp, b.ARMOR_HP, b.core.core_hp, b.attack_kind()])
-	lines.append("실드 셀 %d · 돌진 쿨 %.2f · 차지 %.2f · 무적 %.2f · 제어 불능 %.2f" % [main.lives, p.dash_cd, p.charge_t if p.charging else 0.0, maxf(p.invuln, p.shield_t), p.stun])
+	lines.append("실드 셀 %d · 돌진 쿨 %.2f · 차지 쿨 %.2f · 차지 %.2f · 무적 %.2f · 제어 불능 %.2f" % [main.lives, p.dash_cd, p.charge_cd, p.charge_t if p.charging else 0.0, maxf(p.invuln, p.shield_t), p.stun])
 	lines.append("동조 %s %.2fs · 패리 %s · 시간 %.1fs" % ["완전" if p.buff_strong else ("일반" if p.buffed else "-"), p.buff_t, "열림" if p.parry_active else "-", main.run_time])
 	label.text = "\n".join(lines)
 

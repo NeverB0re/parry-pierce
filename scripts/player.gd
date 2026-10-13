@@ -89,6 +89,7 @@ var charging := false            # 좌클릭 누르는 중 (짧게 떼면 돌진
 var charge_t := 0.0
 var charged_notified := false
 var dash_cd := 0.0
+var charge_cd := 0.0             # 차지 강습 후 다음 차지가 완료될 수 있을 때까지
 var parry_active := false
 var parry_held := false
 var parry_t := 0.0
@@ -126,6 +127,7 @@ func reset(pos: Vector2, platform := false) -> void:
 	charge_t = 0.0
 	bouncing = false
 	dash_cd = 0.0
+	charge_cd = 0.0
 	evade_window = 0.0
 	evade_rewarded = false
 	dash_held = false
@@ -230,6 +232,8 @@ func _dash(kind: String) -> void:
 		dash_total = CHARGE_DASH_TIME
 	dash_t = dash_total
 	dash_cd = stats.dash_cooldown
+	if kind == "charge":
+		charge_cd = stats.charge_cooldown
 	evade_window = stats.perfect_evade_window if kind == "dash" else 0.0
 	evade_rewarded = false
 	vel = aim * spd
@@ -374,6 +378,7 @@ func step(dt: float) -> void:
 		return
 
 	dash_cd = maxf(0.0, dash_cd - dt)
+	charge_cd = maxf(0.0, charge_cd - dt)
 	evade_window = maxf(0.0, evade_window - dt)
 	parry_cd = maxf(0.0, parry_cd - dt)
 	invuln = maxf(0.0, invuln - dt)
@@ -394,6 +399,8 @@ func step(dt: float) -> void:
 		_dash(pending_kind)
 	if charging:
 		charge_t += dt
+		if charge_cd > 0.0:                   # 차지 쿨다운 중: 쿨다운이 끝나는 순간 완료되도록만 모인다 (그 전에 떼면 일반 돌진)
+			charge_t = minf(charge_t, maxf(0.0, charge_need() - charge_cd))
 		if charge_t >= charge_need() and not charged_notified:
 			charged_notified = true
 			main.on_charged(position)
@@ -797,6 +804,10 @@ func _draw() -> void:
 		var ca := 1.0 if charging or pending_kind != "" else 0.7   # 누르고 기다리는 중이면 또렷하게
 		draw_arc(Vector2.ZERO, 36.0, 0.0, TAU, 40, Color(C_EVADE, 0.15), 2.5)
 		draw_arc(Vector2.ZERO, 36.0, -PI * 0.5, -PI * 0.5 + TAU * (1.0 - dash_cd / stats.dash_cooldown), 40, Color(C_EVADE, ca), 2.5)
+
+	# 차지 쿨다운: 주황 링이 차오른다 (다 차야 다음 차지가 완료된다)
+	if charge_cd > 0.0:
+		draw_arc(Vector2.ZERO, 30.0, -PI * 0.5, -PI * 0.5 + TAU * (1.0 - charge_cd / stats.charge_cooldown), 40, Color(C_ATTACK, 0.75 if charging else 0.4), 2.0)
 
 	# 패리 자세
 	if parry_active:
