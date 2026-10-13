@@ -3,6 +3,7 @@ extends CanvasLayer
 ## 애니메이션은 코드로 그린 짧은 루프(움짤)다. 한 번 본 장은 다시 자동으로 뜨지 않고(user://tutorial.cfg),
 ## ESC 메뉴의 '조작법'에서 언제든 다시 볼 수 있다.
 
+const Loc := preload("res://scripts/loc.gd")
 const Sprites := preload("res://scripts/sprites.gd")
 
 const ORDER := ["dodge", "parry", "dashparry", "charge", "unparry", "barrage", "tentacle"]
@@ -37,71 +38,73 @@ func _ready() -> void:
 
 # ── 내용 ───────────────────────────────────────────────
 func _pages() -> Dictionary:
-	var dash := "화면의 큰 버튼 탭" if touch else "좌클릭"
-	var hold := "큰 버튼 꾹" if touch else "좌클릭 꾹"
-	var par := "작은 금색 버튼 꾹" if touch else "우클릭(또는 Space) 꾹"
+	var dash := Loc.t("화면의 큰 버튼 탭") if touch else Loc.t("좌클릭")
+	var hold := Loc.t("큰 버튼 꾹") if touch else Loc.t("좌클릭 꾹")
+	var par := Loc.t("작은 금색 버튼 꾹") if touch else Loc.t("우클릭(또는 Space) 꾹")
 	return {
 		"dodge": {
-			"title": "회피 — 돌진",
+			"title": Loc.t("회피 — 돌진"),
 			"lines": [
-				"%s(짧게)으로 돌진합니다. 돌진하는 동안은 무적이라 탄과 레이저를 그대로 통과할 수 있습니다. 무적인 동안은 언제나 푸른 벌집 실드가 둘러쌉니다. 단, 근접공격(팔 휘두르기·프레스)은 회피 불가 — 돌진으로 통과할 수 없습니다." % dash,
-				"돌진은 쿨다운(1.15초)만 있고 횟수 제한이 없습니다. 표적에 닿으면 피해 1을 주고 위로 솟구칩니다. 솟구치는 동안만 보호막이 있고, 기체 통제를 되찾으면 사라집니다.",
-				"돌진을 시작한 직후(0.12초 안)에 공격이 스치면 '퍼펙트 회피'! 다음 차지 강습의 피해가 2배가 되고(동조), 차지가 두 배 빨라지며, 돌진 쿨다운이 즉시 초기화되고, 실드가 0.8초 더 남습니다.",
+				Loc.t("%s(짧게)으로 돌진합니다. 돌진하는 동안은 무적이라 탄과 레이저를 통과할 수 있습니다. 단, 근접공격은 돌진으로 피할 수 없습니다.") % dash,
+				Loc.t("돌진은 횟수 제한 없이 쿨다운만 있습니다. 표적에 닿으면 피해를 주고 위로 튕겨 오릅니다."),
+				Loc.t("돌진을 시작한 직후 공격이 스치면 '퍼펙트 회피'! 다음 차지 강습이 강해지고 돌진 쿨다운이 바로 돌아옵니다."),
 			],
 		},
 		"parry": {
-			"title": "패리 — 막고 리버스 드라이브",
+			"title": Loc.t("패리 — 막고 리버스 드라이브"),
 			"lines": [
-				"금색 탄은 %s 으로 막을 수 있습니다. 누르는 순간 짧은 패리 판정이 열리니 탄이 닿기 직전에 누르세요." % par,
-				"성공하면 시간이 느려집니다. 마우스(스틱)로 방향을 정하고 버튼을 떼면 리버스 드라이브! 받아낸 에너지를 추진기로 방출해 충돌합니다. 피해 12 (PERFECT 패리는 16). 적중하면 돌진 쿨다운이 바로 돌아와 튕겨나는 중에도 돌진할 수 있고, 쌓인 잔탄 긁힘(기체 둘레 링·실드 셀의 금) 한 칸이 치료됩니다.",
-				"금색 = 패리할 수 있는 공격입니다. 팔 휘두르기 같은 근접공격을 그냥 패리하면 피해만 막고 튕겨나기만 합니다 — 둔탁한 금속음과 회색 불꽃이 '막았지만 피해는 없음' 표시입니다.",
-				"무엇이든 막아 내면(잔탄 흡수·근접공격 패리 포함) 패리 쿨다운이 없어져 바로 다시 패리할 수 있습니다. 헛치면 잠깐 쿨다운이 생깁니다.",
+				Loc.t("금색 탄은 %s(으)로 막을 수 있습니다. 탄이 닿기 직전에 누르세요.") % par,
+				Loc.t("막으면 시간이 느려집니다. 방향을 정하고 버튼을 떼면 리버스 드라이브 — 받아낸 힘으로 돌진하는 강력한 일격입니다. 적중하면 쌓인 잔탄 긁힘도 한 칸 치료됩니다."),
+				Loc.t("금색 = 패리할 수 있는 공격입니다. 근접공격을 패리하면 막기만 하고 피해는 주지 못합니다 (둔탁한 소리와 회색 불꽃)."),
+				Loc.t("막아 내면 패리 쿨다운이 없어 바로 다시 패리할 수 있습니다. 헛치면 잠깐 쿨다운이 생깁니다."),
 			],
 		},
 		"dashparry": {
-			"title": "돌진패리 — 돌진하며 패리",
+			"title": Loc.t("돌진패리 — 돌진하며 패리"),
 			"lines": [
-				"다가오는 탄막을 향해 스스로 돌진해 들어가며 패리하는 것이 '돌진패리'입니다. 돌진(차지 강습 포함)하는 동안(끝난 직후 잠깐 포함) 패리에 성공하면 누른 타이밍과 상관없이 PERFECT 패리로 처리됩니다.",
-				"PERFECT 패리: 리버스 드라이브 피해 16, 조준 유예 1.9초에 더해 리버스 드라이브의 사거리가 35% 늘어납니다(청록 조준선·꼬리). 돌진하는 동안은 무적이라 막지 못해도 그대로 통과합니다.",
-				"돌진(좌클릭)을 시작한 뒤 패리(우클릭/Space)를 누르면 됩니다. 돌진 쿨다운은 1.15초이니, 막을 탄을 보고 돌진하세요.",
+				Loc.t("탄막을 향해 돌진하면서 패리하면 '돌진패리'입니다. 타이밍과 상관없이 PERFECT 패리가 됩니다."),
+				Loc.t("PERFECT 패리는 리버스 드라이브가 더 강하고 사거리도 늘어납니다. 돌진 중에는 무적이라 못 막아도 그대로 통과합니다."),
 			],
 		},
 		"charge": {
-			"title": "차지 강습 — 강한 일격과 요격",
+			"title": Loc.t("차지 강습 — 강한 일격과 요격"),
 			"lines": [
-				"%s 으로 0.6초 모으고 떼면 차지 강습: 피해 3으로 일반 돌진(1)보다 훨씬 강합니다. 모으는 동안 기체가 떨리고 완료되면 빛납니다. 한 번 쓰면 1.5초 동안은 다시 모을 수 없습니다(주황 링). 적중하면 돌진 쿨다운이, 요격에 성공하면 차지 쿨다운도 바로 돌아옵니다." % hold,
-				"적이 팔을 들어 위치를 잡고 붉게 점멸하며 멈춰 있을 때(또는 휘두르는 중) 차지 강습으로 부딪히면 요격! 공격을 끊고 구동부에 피해 8! 리버스 드라이브로 부딪혀도 요격됩니다(피해 12).",
-				"팔을 들어 올리는 중에는 요격할 수 없습니다. 근접공격(팔 휘두르기·프레스)은 일반 돌진으로 통과할 수 없습니다 — 요격하거나, 패리로 튕겨나거나, 범위 밖으로 피하세요.",
-				"근접공격은 모두 같은 표시로 예고됩니다: 붉은 빗금 위험구간 + ⚠ 표지 + 화면 위 ⚠. 천장이 내려오는 프레스도 같습니다 — 정지선 아래로 피하거나 차지 강습·리버스 드라이브로 요격하세요(패리하면 아래로 내리꽂혀 융해 지대로 빠집니다).",
+				Loc.t("%s(으)로 모았다 떼면 차지 강습 — 일반 돌진보다 훨씬 강합니다. 쓰면 잠시 다시 모을 수 없습니다 (주황 링).") % hold,
+				Loc.t("적의 근접공격이 위치를 잡고 붉게 점멸하며 멈춰 있을 때 차지 강습으로 부딪히면 요격! 공격을 끊고 그 부위에 큰 피해를 줍니다. 요격에 성공하면 차지 쿨다운이 바로 돌아옵니다."),
+				Loc.t("들어 올리는 중에는 요격할 수 없습니다. 근접공격은 돌진으로 통과할 수 없으니 요격하거나 범위 밖으로 피하세요."),
+				Loc.t("근접공격은 모두 붉은 빗금 + ⚠ 표지로 예고됩니다. 천장이 내려오는 프레스는 정지선 아래로 피하거나 요격하세요."),
 			],
 		},
 		"barrage": {
-			"title": "탄막 — 주탄과 잔탄",
+			"title": Loc.t("탄막 — 주탄과 잔탄"),
 			"lines": [
-				"작은 주황 별(잔탄)에 맞아도 실드 셀이 바로 깨지지 않고, 기체가 주황빛으로 달아오르며 가장 오른쪽 실드 셀에 금이 갑니다(제어 불능 없음). 세 번째에 그 셀이 깨지고, 5초 동안 안 맞으면 한 단계씩 식습니다.",
-				"잔탄은 패리해도 흡수될 뿐 리버스 드라이브는 열리지 않습니다. 흡수해도 패리 쿨다운이 없어 겹쳐 오는 잔탄을 연달아 막을 수 있습니다. 일반 돌진이 끝난 직후 0.25초는 잔탄을 맞지 않습니다(옅은 실드).",
-				"크고 둥근 금색 탄(주탄)과 붉은 불길을 두른 유도탄을 패리해야 리버스 드라이브가 열립니다. 유도탄은 쫓아오지만 크고 느려서 패리하기 좋습니다.",
-				"바닥 가까이 머물면 융해 지대에 기뢰가 내려앉아 위로 터집니다.",
+				Loc.t("작은 주황 별(잔탄)에 맞으면 실드 셀이 바로 깨지지 않고 기체가 달아오릅니다. 세 번 맞으면 셀이 깨지고, 한동안 안 맞으면 식습니다."),
+				Loc.t("잔탄은 패리하면 흡수만 됩니다. 연달아 막을 수 있습니다."),
+				Loc.t("크고 둥근 금색 탄(주탄)과 붉은 불길의 유도탄은 패리하면 리버스 드라이브가 열립니다. 바닥 가까이에는 기뢰가 내려앉습니다."),
 			],
 		},
 		"tentacle": {
-			"title": "크라켄 — 촉수를 요격해 끊기",
+			"title": Loc.t("크라켄 — 촉수를 요격해 끊기"),
 			"lines": [
-				"촉수 공격(몸통 내려치기·압착·추적 감아치기·휩쓸기·조이기)은 모두 근접공격입니다. 촉수가 위치를 잡고 멈춰 붉게 점멸할 때 차지 강습으로 부딪히면 요격! 촉수가 크게 튕겨 나가고 그 촉수의 구동부(촉수 위쪽의 빛나는 점)에 바로 피해 8이 들어갑니다. 차지 중엔 요격할 수 있는 촉수가 밝게 빛나고 조준 보조도 그쪽을 먼저 잡습니다.",
-				"요격에 성공하면 차지 쿨다운(기체 아래 주황 막대)이 바로 초기화됩니다 — 튕겨 오르는 사이에 다음 차지를 모아 연속으로 요격하세요. 쿨다운이 없는 만큼 다음 촉수를 놓치지 않는 것이 중요합니다.",
-				"구동부를 부수면 그 촉수는 뿌리째 떨어져 나갑니다. 대신 남은 촉수는 점점 빨라지고, 둘 이상 잃으면 플레이어를 둘러싸 조여 드는 고리(조이기)가 나옵니다 — 위아래 틈으로 빠져나가거나 한쪽 촉수를 요격하면 풀립니다. 코어가 드러나면 촉수 둘이 다시 자라납니다.",
-				"바깥의 큰 다리 둘이 위아래에 닿으면 방전 그물(보라, 패리 불가)이 경기장을 왼쪽→오른쪽(또는 반대)으로 훑습니다. 그려진 보라 띠가 곧 맞는 범위입니다. 돌진으로 통과하세요. 화면 밖에서 다가오면 화면 가장자리에 보라 ⚠와 화살표가 뜹니다.",
+				Loc.t("촉수 공격은 모두 근접공격입니다. 촉수가 멈춰 붉게 점멸할 때 차지 강습으로 요격하면 촉수가 튕겨 나가고 구동부(촉수의 빛나는 점)에 큰 피해가 들어갑니다. 차지 중에는 요격할 수 있는 촉수가 밝게 빛납니다."),
+				Loc.t("요격하면 차지 쿨다운이 바로 돌아오니 연속으로 요격하세요."),
+				Loc.t("구동부가 부서지면 촉수가 떨어져 나갑니다. 촉수를 잃을수록 남은 촉수는 빨라지고, 코어가 드러나면 일부가 다시 자랍니다."),
+				Loc.t("보라색 방전 그물은 패리할 수 없습니다. 보라 띠가 곧 맞는 범위이니 돌진으로 통과하세요. 화면 밖에서 다가오면 가장자리에 경고가 뜹니다."),
 			],
 		},
 		"unparry": {
-			"title": "패리 불가 — 보라색 공격",
+			"title": Loc.t("패리 불가 — 보라색 공격"),
 			"lines": [
-				"검붉은 보라색 공격(눈 레이저·심장부에서 퍼지는 동심원 파동)은 패리할 수 없습니다. 돌진의 무적으로 통과하세요. 지나갈 부채꼴과 경로가 미리 표시됩니다.",
-				"돌진을 시작한 직후(0.12초 안)에 스치게 피하면 '강한 퍼펙트 회피'! 다음 차지 강습의 피해가 4배(완전 동조), 무적 1.2초, 기체 뒤로 금빛 꼬리가 길게 늘어집니다(리버스 드라이브 중에도 나옵니다).",
-				"그 일격은 퍼펙트 패리에 준하는 큰 임팩트로 들어갑니다.",
+				Loc.t("검붉은 보라색 공격(레이저·동심원 파동·방전 그물)은 패리할 수 없습니다. 돌진의 무적으로 통과하세요. 지나갈 범위가 미리 표시됩니다."),
+				Loc.t("돌진을 시작한 직후 스치게 피하면 '강한 퍼펙트 회피'! 다음 차지 강습이 매우 강해지고 금빛 꼬리가 길게 늘어집니다."),
 			],
 		},
 	}
+
+
+## 장 제목 (ESC 메뉴·타이틀의 조작법 목록용)
+func page_title(id: String) -> String:
+	return String(_pages()[id]["title"])
 
 
 # ── 저장 ───────────────────────────────────────────────
@@ -167,13 +170,31 @@ func _open_next(first: bool) -> void:
 	for l in pg["lines"]:
 		lines.append("• " + String(l))
 	desc_l.text = "\n".join(lines)
-	page_l.text = "" if queue.is_empty() else "다음 장 %d개 남음" % queue.size()
-	btn.text = "다음 (Enter)" if not queue.is_empty() else "계속하기 (Enter)"
+	_fit_desc()
+	page_l.text = "" if queue.is_empty() else Loc.t("다음 장 %d개 남음") % queue.size()
+	btn.text = Loc.t("다음 (Enter)") if not queue.is_empty() else Loc.t("계속하기 (Enter)")
 	stage.set("kind", current)
 	stage.set("t", 0.0)
 	stage.set_process(true)
 	visible = true
 	btn.grab_focus()
+
+
+## 글이 길면(영어) 글자 크기와 그림 높이를 줄여 대화창이 화면 안에 들어오게 한다
+func _fit_desc() -> void:
+	var vp := get_viewport().get_visible_rect().size
+	var w := minf(860.0, vp.x - 120.0)
+	var text := desc_l.text
+	var chosen := [160.0, 13]
+	for opt in [[260.0, 17], [260.0, 16], [240.0, 15], [220.0, 15], [200.0, 14], [180.0, 14], [160.0, 13]]:
+		var avail: float = vp.y - 36.0 - float(opt[0]) - 54.0 - 36.0 - 40.0
+		var h := font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, w, int(opt[1])).y
+		if h <= avail:
+			chosen = opt
+			break
+	stage.custom_minimum_size = Vector2(w, chosen[0])
+	desc_l.add_theme_font_size_override("font_size", int(chosen[1]))
+	desc_l.custom_minimum_size = Vector2(w, 0)
 
 
 func _close() -> void:
@@ -262,6 +283,7 @@ func _build_ui() -> void:
 # ═══ 애니메이션 무대 ═══════════════════════════════════
 class Stage extends Control:
 	const Sprites := preload("res://scripts/sprites.gd")
+	const Loc := preload("res://scripts/loc.gd")
 	const GOLD := Color(1.0, 0.86, 0.3)
 	const MINT := Color(0.45, 1.0, 0.85)
 	const UNP := Color(0.6, 0.08, 0.36)
@@ -362,7 +384,7 @@ class Stage extends Control:
 		var T := 6.0
 		var tt := fmod(t, T)
 		if tt < 3.0:
-			_caption("① 돌진으로 통과 — 돌진 중엔 무적")
+			_caption(Loc.t("① 돌진으로 통과 — 돌진 중엔 무적"))
 			var y := 150.0
 			var bx := lerpf(680.0, 20.0, _smooth(0.2, 2.6, tt))
 			var d0 := 1.0
@@ -380,10 +402,10 @@ class Stage extends Control:
 				_flame(Vector2(sx, y), 0.0)
 			_bolt(Vector2(bx, y), Vector2.LEFT)
 			if tt < d0 + 0.05 and tt > d0 - 0.4:
-				_txt("좌클릭!", Vector2(sx - 30.0, y + 52.0), 16, GOLD)
+				_txt(Loc.t("좌클릭!"), Vector2(sx - 30.0, y + 52.0), 16, GOLD)
 				_mouse(Vector2(sx + 40.0, y + 60.0), tt >= d0, false)
 		else:
-			_caption("② 돌진 직후 0.12초 안에 스치면 PERFECT", MINT)
+			_caption(Loc.t("② 돌진 직후에 스치면 PERFECT"), MINT)
 			var u := tt - 3.0
 			var y := 150.0
 			var bx := lerpf(680.0, 20.0, _smooth(0.0, 2.4, u))
@@ -403,7 +425,7 @@ class Stage extends Control:
 				_flame(Vector2(sx, y), 0.0)
 			_bolt(Vector2(bx, y), Vector2.LEFT)
 			if u >= d0 - 0.4 and u < d0 + 0.05:
-				_txt("좌클릭!", Vector2(x0 - 30.0, y + 52.0), 16, GOLD)
+				_txt(Loc.t("좌클릭!"), Vector2(x0 - 30.0, y + 52.0), 16, GOLD)
 				_mouse(Vector2(x0 + 40.0, y + 60.0), u >= d0, false)
 			if u >= d0 + 0.05:
 				var k := _smooth(d0 + 0.05, d0 + 0.55, u)
@@ -411,12 +433,12 @@ class Stage extends Control:
 				_txt("PERFECT", Vector2(sx - 40.0, y - 50.0 - 8.0 * k), 20, MINT)
 			if u >= d0 + 0.5:
 				_ring(Vector2(sx, y), 34.0, Color(0.8, 0.97, 1.0, 0.8), 2.5)
-				_txt("다음 차지 ×2", Vector2(sx - 52.0, y + 56.0), 16, Color(0.85, 1.0, 1.0))
+				_txt(Loc.t("다음 차지 강화"), Vector2(sx - 52.0, y + 56.0), 16, Color(0.85, 1.0, 1.0))
 
 	func _parry() -> void:
 		var T := 6.4
 		var tt := fmod(t, T)
-		_caption("우클릭 꾹 → 막으면 슬로우 → 방향 정하고 떼면 리버스 드라이브", GOLD)
+		_caption(Loc.t("우클릭 꾹 → 막으면 슬로우 → 방향 정하고 떼면 리버스 드라이브"), GOLD)
 		var sp := Vector2(150, 175)
 		var tgt := Vector2(540, 90)
 		var shift := _smooth(0.0, 1.0, tt)
@@ -451,20 +473,20 @@ class Stage extends Control:
 		if parried and tt < 2.3:
 			var k := (tt - 1.9) / 0.4
 			_spark(sp + Vector2(20, -4), k, Color(1, 1, 1), 12, 56.0)
-			_txt("막았다!", Vector2(sp.x - 24.0, sp.y - 62.0), 18, GOLD)
+			_txt(Loc.t("막았다!"), Vector2(sp.x - 24.0, sp.y - 62.0), 18, GOLD)
 		if parried and tt >= 2.3 and tt < 4.0:
 			var ta := (tgt - sp).normalized()
 			var aim := Vector2.from_angle(heading)
 			draw_line(ship_pos + aim * 30.0, ship_pos + aim * 360.0, Color(0.75, 0.92, 1.0, 0.8), 2.0)
-			_txt("방향 지정 (슬로우)", Vector2(sp.x + 40.0, sp.y + 54.0), 16, Color(0.8, 0.92, 1.0))
+			_txt(Loc.t("방향 지정 (슬로우)"), Vector2(sp.x + 40.0, sp.y + 54.0), 16, Color(0.8, 0.92, 1.0))
 		if tt >= 4.2 and tt < 5.8:
-			_txt("피해 12", Vector2(tgt.x - 30.0, tgt.y - 50.0), 20, GOLD)
+			_txt(Loc.t("적중!"), Vector2(tgt.x - 30.0, tgt.y - 50.0), 20, GOLD)
 			_spark(tgt, _smooth(4.25, 4.8, tt), Color(1.0, 0.85, 0.5), 12, 60.0)
 		_mouse(Vector2(size.x - 40.0, 60.0), false, holding)
 		if holding:
-			_txt("꾹", Vector2(size.x - 52.0, 100.0), 15, GOLD)
+			_txt(Loc.t("꾹"), Vector2(size.x - 52.0, 100.0), 15, GOLD)
 		if tt >= 4.0 and tt < 4.3:
-			_txt("뗀다", Vector2(size.x - 60.0, 100.0), 15, Color(0.8, 0.9, 1.0))
+			_txt(Loc.t("뗀다"), Vector2(size.x - 60.0, 100.0), 15, Color(0.8, 0.9, 1.0))
 
 	## 돌진패리: 탄막을 향해 돌진하며 패리하면 타이밍과 상관없이 PERFECT
 	func _dashparry() -> void:
@@ -479,9 +501,9 @@ class Stage extends Control:
 		var dashing := tt >= d0 and tt < tm
 		var parried := tt >= tm
 		if tt < d0:
-			_caption("① 다가오는 탄막을 보고 스스로 돌진하며 패리를 누른다", MINT)
+			_caption(Loc.t("① 다가오는 탄막을 보고 스스로 돌진하며 패리를 누른다"), MINT)
 		else:
-			_caption("② 돌진하는 동안의 패리 = 타이밍과 상관없이 PERFECT", GOLD)
+			_caption(Loc.t("② 돌진하는 동안의 패리 = 타이밍과 상관없이 PERFECT"), GOLD)
 		if not parried:
 			_bolt(Vector2(394.0 + 180.0 * (tm - tt), y), Vector2.LEFT)
 		if dashing:
@@ -494,20 +516,20 @@ class Stage extends Control:
 		if tt >= d0 - 0.5 and tt < tm + 0.3:
 			_mouse(Vector2(size.x - 40.0, 60.0), tt >= d0 and tt < d0 + 0.15, tt >= d0 + 0.02)
 		if tt >= d0 - 0.5 and tt < d0:
-			_txt("돌진 + 패리!", Vector2(x0 - 40.0, y + 52.0), 16, GOLD)
+			_txt(Loc.t("돌진 + 패리!"), Vector2(x0 - 40.0, y + 52.0), 16, GOLD)
 		if dashing:
 			_ring(Vector2(sx, y), 46.0, Color(0.5, 1.0, 0.88, 0.9), 3.0)
 		if parried and tt < 4.6:
 			_spark(Vector2(sx + 30.0, y), _smooth(tm, tm + 0.5, tt), Color(1, 1, 1), 12, 56.0)
-			_txt("돌진패리! PERFECT", Vector2(sx - 70.0, y - 62.0), 20, GOLD)
+			_txt(Loc.t("돌진패리! PERFECT"), Vector2(sx - 70.0, y - 62.0), 20, GOLD)
 			if tt >= tm + 0.5:
-				_txt("피해 16 · 조준 1.9초 · 사거리 +35%", Vector2(sx - 100.0, y + 64.0), 16, MINT)
+				_txt(Loc.t("더 강하게 · 더 멀리"), Vector2(sx - 100.0, y + 64.0), 16, MINT)
 
 	func _charge() -> void:
 		var T := 8.0
 		var tt := fmod(t, T)
 		if tt < 3.6:
-			_caption("모으면 피해 3 — 일반 돌진은 1")
+			_caption(Loc.t("모으면 더 강하다 — 일반 돌진보다"))
 			var sp := Vector2(120, 170)
 			var tgt := Vector2(560, 170)
 			var pos := sp
@@ -523,7 +545,7 @@ class Stage extends Control:
 				_target(tgt, _smooth(0.65, 0.8, tt) * (1.0 - _smooth(0.8, 1.2, tt)), 0)
 				if tt >= 0.65 and tt < 1.3:
 					_spark(tgt - Vector2(34, 0), _smooth(0.65, 1.0, tt), Color(0.85, 0.93, 1.0), 6, 28.0)
-					_txt("피해 1", Vector2(tgt.x - 30.0, tgt.y - 50.0), 17, Color(0.85, 0.93, 1.0))
+					_txt(Loc.t("약한 일격"), Vector2(tgt.x - 30.0, tgt.y - 50.0), 17, Color(0.85, 0.93, 1.0))
 				_mouse(Vector2(size.x - 40.0, 60.0), tt >= 0.4 and tt < 0.65, false)
 			else:
 				# 차지
@@ -548,13 +570,13 @@ class Stage extends Control:
 				_target(tgt, _smooth(1.4, 1.55, u) * (1.0 - _smooth(1.55, 1.9, u)), 3 if u >= 1.4 else 0)
 				if u >= 1.4 and u < 2.2:
 					_spark(tgt - Vector2(34, 0), _smooth(1.4, 1.9, u), Color(1.0, 0.7, 0.3), 14, 56.0)
-					_txt("피해 3", Vector2(tgt.x - 30.0, tgt.y - 54.0), 22, Color(1.0, 0.75, 0.35))
+					_txt(Loc.t("강한 일격"), Vector2(tgt.x - 30.0, tgt.y - 54.0), 22, Color(1.0, 0.75, 0.35))
 				_mouse(Vector2(size.x - 40.0, 60.0), held, false)
 				if held:
-					_txt("꾹", Vector2(size.x - 52.0, 100.0), 15, GOLD)
+					_txt(Loc.t("꾹"), Vector2(size.x - 52.0, 100.0), 15, GOLD)
 			_ship(pos, 0.0, 1.0, col)
 		else:
-			_caption("팔이 멈춰 있을 때 차지 강습으로 부딪히면 요격!", Color(1.0, 0.8, 0.6))
+			_caption(Loc.t("팔이 멈춰 있을 때 차지 강습으로 부딪히면 요격!"), Color(1.0, 0.8, 0.6))
 			var u := tt - 3.6
 			var sh := Vector2(110, 60)
 			var arm_len := 380.0
@@ -580,9 +602,9 @@ class Stage extends Control:
 			var el := sh.lerp(fist, 0.55)
 			draw_circle(el, 13.0, Color(1.0, 0.42, 0.22).lerp(Color.WHITE, _smooth(2.35, 2.5, u) * (1.0 - _smooth(2.5, 2.9, u))))
 			if phase == "prep":
-				_txt("들어 올리는 중 — 아직 요격 불가", Vector2(240, 230), 16, Color(0.75, 0.78, 0.85))
+				_txt(Loc.t("들어 올리는 중 — 아직 요격 불가"), Vector2(240, 230), 16, Color(0.75, 0.78, 0.85))
 			elif phase == "set":
-				_txt("위치 고정 · 붉게 점멸 = 지금!", Vector2(240, 230), 16, Color(1.0, 0.6, 0.5))
+				_txt(Loc.t("위치 고정 · 붉게 점멸 = 지금!"), Vector2(240, 230), 16, Color(1.0, 0.6, 0.5))
 			var spx := Vector2(520, 205)
 			var pos := spx
 			var dashing := false
@@ -599,7 +621,7 @@ class Stage extends Control:
 				_ring(pos, 40.0, Color(1.0, 0.6, 0.2, 0.6), 2.0)
 			if u >= 2.4 and u < 3.6:
 				_spark(el, _smooth(2.4, 3.0, u), Color(1.0, 0.85, 0.5), 14, 60.0)
-				_txt("요격! 구동부 피해 8", Vector2(el.x + 10.0, el.y - 36.0), 20, GOLD)
+				_txt(Loc.t("요격! 구동부에 큰 피해"), Vector2(el.x + 10.0, el.y - 36.0), 20, GOLD)
 			if u >= 1.5 and u < 2.4:
 				_mouse(Vector2(size.x - 40.0, 60.0), true, false)
 
@@ -649,22 +671,22 @@ class Stage extends Control:
 			pos = sp
 		_ship(pos, (tip - sp).angle() if tt < 3.0 else -PI * 0.5, 1.0, "r" if tt >= 1.4 and tt < 3.4 else "b")
 		if tt < 1.0:
-			_caption("촉수가 들려 올라간다 — 아직 요격 불가", Color(0.75, 0.78, 0.85))
+			_caption(Loc.t("촉수가 들려 올라간다 — 아직 요격 불가"), Color(0.75, 0.78, 0.85))
 		elif tt < 3.0:
-			_caption("멈춰 붉게 점멸 = 차지 강습으로 요격!", Color(1.0, 0.8, 0.6))
+			_caption(Loc.t("멈춰 붉게 점멸 = 차지 강습으로 요격!"), Color(1.0, 0.8, 0.6))
 		elif tt < 5.0:
-			_caption("요격! 구동부 피해 8 + 차지 쿨다운 초기화 → 바로 다음 요격", GOLD)
+			_caption(Loc.t("요격! 차지 쿨다운 초기화 → 바로 다음 요격"), GOLD)
 			_spark(tip, _smooth(3.0, 3.6, tt), Color(1.0, 0.85, 0.5), 14, 50.0)
 			_spark(drv, _smooth(3.0, 3.6, tt), Color(1.0, 0.6, 0.3), 8, 34.0)
 		else:
-			_caption("구동부가 부서진 촉수는 뿌리째 떨어져 나간다", Color(0.85, 0.9, 1.0))
+			_caption(Loc.t("구동부가 부서진 촉수는 뿌리째 떨어져 나간다"), Color(0.85, 0.9, 1.0))
 		if tt >= 1.4 and tt < 2.6:
 			_mouse(Vector2(size.x - 40.0, 60.0), true, false)
 
 	func _unparry() -> void:
 		var T := 7.0
 		var tt := fmod(t, T)
-		_caption("보라색 = 패리 불가 → 돌진으로 통과", UNP_C)
+		_caption(Loc.t("보라색 = 패리 불가 → 돌진으로 통과"), UNP_C)
 		var eye := Vector2(330, 34)
 		draw_circle(eye, 24.0, Color(0.1, 0.1, 0.14))
 		draw_circle(eye, 8.0 + 4.0 * _smooth(0.0, 1.4, tt), UNP_C)
@@ -710,7 +732,7 @@ class Stage extends Control:
 		if dashing:
 			HexShield.draw(self, pos, 34.0, 1.0, t)
 		if tt >= dash_t0 - 0.5 and tt < dash_t0:
-			_txt("돌진!", Vector2(pos.x - 20.0, pos.y + 54.0), 17, GOLD)
+			_txt(Loc.t("돌진!"), Vector2(pos.x - 20.0, pos.y + 54.0), 17, GOLD)
 			_mouse(Vector2(size.x - 40.0, 70.0), tt >= dash_t0 - 0.1, false)
 		if strong and tt < 6.6:
 			var f := _smooth(dash_t0 + 0.15, dash_t0 + 0.6, tt)
@@ -721,8 +743,8 @@ class Stage extends Control:
 				var c0: Color = L[2]
 				draw_polygon(PackedVector2Array([b0 + Vector2(0, w), b0 + Vector2(0, -w), b0 + Vector2(-tl * float(L[1]), 0)]),
 					PackedColorArray([Color(c0, 0.85), Color(c0, 0.85), Color(c0, 0.0)]))
-			_txt("완전 동조!", Vector2(pos.x - 70.0, pos.y - 70.0 - 6.0 * f), 20, GOLD)
-			_txt("다음 차지 ×4 · 무적 1.2초", Vector2(pos.x - 100.0, pos.y + 78.0), 16, Color(1.0, 0.95, 0.75))
+			_txt(Loc.t("완전 동조!"), Vector2(pos.x - 70.0, pos.y - 70.0 - 6.0 * f), 20, GOLD)
+			_txt(Loc.t("다음 차지 크게 강화 · 무적"), Vector2(pos.x - 100.0, pos.y + 78.0), 16, Color(1.0, 0.95, 0.75))
 
 	## 잔탄: 작고 뾰족한 주황 별 (게임과 같은 모양)
 	func _small(p: Vector2, v := Vector2.LEFT) -> void:
@@ -739,7 +761,7 @@ class Stage extends Control:
 		var tt := fmod(t, T)
 		var sp := Vector2(170, 165)
 		if tt < 3.4:
-			_caption("① 작은 주황 별(잔탄): 패리하면 흡수만 된다", Color(1.0, 0.75, 0.45))
+			_caption(Loc.t("① 작은 주황 별(잔탄): 패리하면 흡수만 된다"), Color(1.0, 0.75, 0.45))
 			var holding := tt >= 0.6 and tt < 3.0
 			_ship(sp, 0.0)
 			_flame(sp, 0.0, 14.0)
@@ -749,13 +771,13 @@ class Stage extends Control:
 					_small(Vector2(bx, sp.y + sin(k * 1.7) * 14.0))
 				elif bx <= sp.x + 42.0 and bx > sp.x - 10.0:
 					_spark(sp + Vector2(40, 0), (sp.x + 42.0 - bx) / 52.0, SMALL_C, 6, 22.0)
-					_txt("흡수 (쿨다운 없음)", Vector2(sp.x - 10.0, sp.y - 46.0), 16, Color(1.0, 0.75, 0.45))
+					_txt(Loc.t("흡수 (쿨다운 없음)"), Vector2(sp.x - 10.0, sp.y - 46.0), 16, Color(1.0, 0.75, 0.45))
 			if holding:
 				_ring(sp, 40.0 + (4.0 if int(t * 10.0) % 2 == 0 else 0.0), Color(1.0, 0.95, 0.75, 0.9), 2.5)
 			_mouse(Vector2(size.x - 40.0, 60.0), false, holding)
 		else:
 			var u := tt - 3.4
-			_caption("② 큰 탄·유도탄(주탄): 패리하면 리버스 드라이브", GOLD)
+			_caption(Loc.t("② 큰 탄·유도탄(주탄): 패리하면 리버스 드라이브"), GOLD)
 			var tgt := Vector2(560, 80)
 			var parried := u >= 1.6
 			var holding := u >= 1.2 and u < 2.8
@@ -788,9 +810,9 @@ class Stage extends Control:
 				_ring(sp, 40.0, Color(1.0, 0.95, 0.75, 0.9), 2.5)
 			if parried and u < 2.0:
 				_spark(sp + Vector2(20, 0), (u - 1.6) / 0.4, Color(1, 1, 1), 12, 56.0)
-				_txt("막았다!", Vector2(sp.x - 24.0, sp.y - 62.0), 18, GOLD)
+				_txt(Loc.t("막았다!"), Vector2(sp.x - 24.0, sp.y - 62.0), 18, GOLD)
 			if u >= 3.05 and u < 4.0:
-				_txt("피해 12", Vector2(tgt.x - 30.0, tgt.y - 50.0), 20, GOLD)
+				_txt(Loc.t("적중!"), Vector2(tgt.x - 30.0, tgt.y - 50.0), 20, GOLD)
 			_mouse(Vector2(size.x - 40.0, 60.0), false, holding)
 
 	## 레이저 진행도 k(0~1)가 되는 시각 (sweep 가속 곡선을 이분법으로 역산)

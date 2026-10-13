@@ -3,10 +3,11 @@
 배경에 선 거대한 적의 공격을 **패리**해 날아오르고, 외부 시스템을 부수고, 마지막에 열린 가슴의 **동력 코어**에서 에너지를 확보하는 2D 액션 프로토타입.
 아이디어와 변경 기록은 [docs/DESIGN.md](docs/DESIGN.md). 재검토·개발 방향은 [docs/REVIEW_roadmap.md](docs/REVIEW_roadmap.md), 보스 기획은 [docs/PLAN_colossi.md](docs/PLAN_colossi.md). 배경 스토리·세계관은 [docs/STORY.md](docs/STORY.md).
 
-> 최신 빌드: [Releases](https://github.com/NeverB0re/parry-pierce/releases) (v0.48). 무제한 돌진·코어 체력제 기획: [docs/PLAN_dash_rework.md](docs/PLAN_dash_rework.md).
+> 최신 빌드: [Releases](https://github.com/NeverB0re/parry-pierce/releases) (v0.49). 무제한 돌진·코어 체력제 기획: [docs/PLAN_dash_rework.md](docs/PLAN_dash_rework.md).
 
 ## 실행
-- 바로 플레이: [Releases](../../releases)에서 `ParryPierce.exe` 다운로드 (Windows)
+- 바로 플레이: [Releases](../../releases)에서 `ParryPierce<버전>.exe` 다운로드 (Windows). itch.io 배포용 폴더·업로드 방법은 [itch/UPLOAD.md](itch/UPLOAD.md)
+- **메인 화면**: 시작 / 이어하기(스테이지 선택) / 조작법 / 종료. **우하단의 미국·한국 국기 버튼으로 영어·한국어를 고른다** (처음엔 OS 언어를 따르고, 고른 언어는 `user://settings.cfg` 에 저장된다). F11 = 전체 화면. ESC 메뉴에서 "타이틀 화면"으로 돌아올 수 있다.
 - 안드로이드: 릴리즈의 `ParryPierce-android.apk`를 폰에 내려받아 설치 ("출처를 알 수 없는 앱 설치" 허용 필요, 디버그 서명, arm64, 가로 화면)
 - 소스: Godot **4.7** 에서 이 폴더(`project.godot`)를 열고 F5
 
@@ -106,8 +107,9 @@
 ## 개발용
 - **테스트**: `GODOT=<Godot 콘솔 실행 파일> tests/run.sh` — 규칙 테스트 + 그리기 스모크를 헤드리스로 전부 실행 (창이 뜨지 않음). 화면 캡처 스크립트는 `tests/capture/`.
 - **동작 궤적**: `run.sh` 마지막에 시드·입력을 고정한 4200 프레임 궤적을 `tests/golden/trace.txt` 와 비교한다. 리팩터는 "같음"이어야 하고, 수치·규칙을 일부러 바꿨다면 `tests/run.sh --update-trace` 로 기준을 갱신한다.
+- **개발용 옵션**: 배포 빌드에서는 디버그 키(F1~F8)가 꺼져 있고 플레이 기록도 남기지 않는다. 켜려면 `-- --debug` / `-- --telemetry` 를 준다 (Godot 에디터·디버그 빌드는 디버그 키가 항상 켜짐).
 - **디버그 키**: F1 오버레이(상태·수치·프레임) · F2 무적 · F3 적 공격 정지 · F4 코어 페이즈로 건너뛰기 · F5 게임 속도 0.5배 · F6 튜토리얼 기록 초기화 · F7 코어 모두 얻기 · F8 진행 초기화(저장 삭제)
-- **플레이 기록**: 한 판마다 `user://telemetry/run_*.json` (Windows: `%APPDATA%/Godot/app_userdata/Parry Pierce (prototype)/telemetry`). ESC 메뉴 → "플레이 기록 폴더 열기". 패리·퍼펙트 회피 횟수, 공격별 피해, 피격 원인, 페이즈 시각이 남는다. 이 파일을 보내 주면 수치 조정에 쓴다.
+- **플레이 기록** (`--telemetry` 로만): 한 판마다 `user://telemetry/run_*.json` (Windows: `%APPDATA%/Godot/app_userdata/Parry Pierce (prototype)/telemetry`). ESC 메뉴 → "플레이 기록 폴더 열기". 패리·퍼펙트 회피 횟수, 공격별 피해, 피격 원인, 페이즈 시각이 남는다. 이 파일을 보내 주면 수치 조정에 쓴다.
 
 ## 파일
 | 파일 | 내용 |
@@ -127,7 +129,7 @@
 | `scripts/upgrades.gd` | 동력 코어 정의와 수치 적용 (얻은 코어 모두) |
 | `scripts/world_map.gd`, `ftl.gd` | 월드 맵(항로도: 스테이지 선택·코어) / FTL 도약 연출 |
 | `scripts/hex_shield.gd` | 무적 실드 (푸른 벌집) 그리기 |
-| `scripts/hud.gd`, `pause_menu.gd` | 실드 셀(기체 아이콘), 표적 방향 화살표 / ESC 메뉴 |
+| `scripts/hud.gd`, `pause_menu.gd`, `title_menu.gd`, `loc.gd` | 실드 셀·패리 불가 경고 / ESC 메뉴 / 메인 화면(국기 버튼) / 번역(한↔영) |
 | `scripts/background.gd`, `ground.gd` | 실크송풍 패럴랙스 배경, 바닥/벽/풀 |
 | `scripts/fx.gd`, `sfx.gd` | 파티클, 합성 효과음 |
 

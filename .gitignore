@@ -5,3 +5,7 @@
 *.apk
 *.idsig
 *.psd
+
+# itch.io 업로드용 산출물 (용량이 커서 올리지 않는다)
+itch/build/
+itch/*.zip

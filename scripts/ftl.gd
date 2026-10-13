@@ -2,6 +2,7 @@ extends CanvasLayer
 ## FTL 도약 연출 = 스테이지 전환. 별빛이 중앙에서 뻗어 나가며 빨라지고 → 흰 섬광(이 순간 다음 스테이지를 준비) → 섬광이 걷히며 도착.
 ## 연출 동안 게임은 멈춰 있다.
 
+const Loc := preload("res://scripts/loc.gd")
 signal arrived                       # 섬광이 다 걷혀 조작을 돌려줄 때
 
 const T_ACCEL := 1.1                 # 별빛 가속
@@ -101,7 +102,7 @@ func _paint() -> void:
 			var a := clampf(r0 * 2.0, 0.0, 1.0)
 			canvas.draw_line(p0, p1, Color(0.75 + 0.25 * speed, 0.9, 1.0, a), 1.0 + 2.0 * speed * r0)
 		canvas.draw_circle(c, 6.0 + 60.0 * speed, Color(0.8, 0.95, 1.0, 0.25 + 0.5 * speed))
-		canvas.draw_string(font, Vector2(0, s.y * 0.78), "FTL 도약", HORIZONTAL_ALIGNMENT_CENTER, s.x, 30, Color(0.85, 0.95, 1.0, 0.9))
+		canvas.draw_string(font, Vector2(0, s.y * 0.78), Loc.t("FTL 도약"), HORIZONTAL_ALIGNMENT_CENTER, s.x, 30, Color(0.85, 0.95, 1.0, 0.9))
 		canvas.draw_string(font, Vector2(0, s.y * 0.78 + 34), title, HORIZONTAL_ALIGNMENT_CENTER, s.x, 18, Color(0.7, 0.8, 0.9, 0.8))
 	var flash := 0.0
 	if t >= T_ACCEL and after < 0.0:

@@ -2,6 +2,7 @@ extends Node2D
 ## 프로토타입 메인: 루프, 입력, 패리/피격 판정, 카메라, 피드백(히트스톱/흔들림/플래시/사운드).
 ## 메타 구조: 스테이지(콜로서스 하나) 클리어 → 그 동력 코어 획득(영구 강화) → 월드 맵(스테이지 선택) → FTL 도약. 진행은 profile 에 저장된다.
 
+const Loc := preload("res://scripts/loc.gd")
 const Player := preload("res://scripts/player.gd")
 const Ev := preload("res://scripts/ev.gd")
 const Projectiles := preload("res://scripts/projectiles.gd")
@@ -11,6 +12,7 @@ const Background := preload("res://scripts/background.gd")
 const Hud := preload("res://scripts/hud.gd")
 const Sfx := preload("res://scripts/sfx.gd")
 const PauseMenu := preload("res://scripts/pause_menu.gd")
+const TitleMenu := preload("res://scripts/title_menu.gd")
 const Tutorial := preload("res://scripts/tutorial.gd")
 const Telemetry := preload("res://scripts/telemetry.gd")
 const Debug := preload("res://scripts/debug.gd")
@@ -49,6 +51,7 @@ var bg
 var cam: Camera2D
 var touch_ui                          # 모바일 터치 조작 (없으면 마우스·키보드)
 var menu
+var title                             # 메인 화면 (시작 / 이어하기 / 조작법 / 언어)
 var tutorial                          # 튜토리얼 팝업
 var tele                              # 플레이 기록 (user://telemetry)
 var debug                             # 개발용 디버그 (F1~F8)
@@ -78,6 +81,8 @@ var heat_t := 0.0                  # 다음에 한 칸 식을 때까지
 
 func _ready() -> void:
 	randomize()
+	Loc.init()                                    # 저장된 언어 (없으면 OS 언어)
+	get_window().title = "Parry Pierce"           # 프로젝트 이름은 그대로 둔다 (저장 폴더 이름이 이 이름을 따르므로 바꾸면 기존 진행이 사라진다)
 	var touch_mode := OS.has_feature("mobile")
 	Quality.low = touch_mode                      # 모바일: 연출 일부를 줄여 프레임을 지킨다
 	if touch_mode:
@@ -158,8 +163,20 @@ func _ready() -> void:
 	tutorial.enabled = DisplayServer.get_name() != "headless" and not OS.get_cmdline_user_args().has("--notutorial")
 	add_child(tutorial)
 	menu.tutorial = tutorial
+	title = TitleMenu.new()
+	title.profile = profile
+	title.tutorial = tutorial
+	title.ui_scale = menu.ui_scale
+	add_child(title)
+	menu.title = title
+	menu.title_requested.connect(_open_title)
+	title.start_requested.connect(_on_title_start)
+	title.continue_requested.connect(_on_title_continue)
+	title.quit_requested.connect(func() -> void: get_tree().quit())
+	title.visibility_changed.connect(func() -> void: hud.visible = not title.visible)
+	world.back_requested.connect(_open_title)
 	tele = Telemetry.new()
-	tele.enabled = DisplayServer.get_name() != "headless"
+	tele.enabled = DisplayServer.get_name() != "headless" and OS.get_cmdline_user_args().has("--telemetry")   # 플레이어에게는 기록을 남기지 않는다 (개발용 옵션)
 	debug = Debug.new()
 	debug.main = self
 	add_child(debug)
@@ -172,7 +189,11 @@ func _ready() -> void:
 		touch_layer.add_child(touch_ui)
 	_apply_loadout()
 	reset_run()
-	tutorial.request(["dodge", "parry", "dashparry"])        # 처음 실행: 회피 → 패리 → 돌진패리 순서로 한 장씩
+	var args := OS.get_cmdline_user_args()
+	if DisplayServer.get_name() != "headless" and not args.has("--notitle") and not args.has("--notutorial"):
+		_open_title()
+	else:
+		tutorial.request(["dodge", "parry", "dashparry"])        # 처음 실행: 회피 → 패리 → 돌진패리 순서로 한 장씩
 
 
 func reset_run() -> void:
@@ -218,25 +239,48 @@ func start_stage(i: int) -> void:
 	hud.queue_redraw()                       # FTL 섬광 중(일시정지)에도 배너·실드 셀 표시를 새로
 
 
-## 월드 맵 (승리 후, 또는 ESC 메뉴에서): 스테이지를 골라 도약한다. 깬 스테이지는 다시 싸울 수 있다
-func open_world() -> void:
+## 월드 맵 (승리 후, ESC 메뉴, 타이틀의 이어하기에서): 스테이지를 골라 도약한다. 깬 스테이지는 다시 싸울 수 있다
+func open_world(from_title := false) -> void:
 	if ftl.is_playing():
 		return
 	hud.clear_banner()
 	hud.queue_redraw()
+	world.allow_back = from_title                # 타이틀에서 왔을 때만 "뒤로"로 돌아간다
 	world.open()
 
 
+## 메인 화면. 진행 중이던 판은 처음 상태(발판 위, 보스 대기)로 돌려 두고 뒤에서 흔들리게 둔다
+func _open_title() -> void:
+	if ftl.is_playing():
+		return
+	world.close()
+	get_tree().paused = false
+	reset_run()
+	title.open()
+
+
+func _on_title_start() -> void:
+	profile.reset()
+	profile.save()
+	_on_jump()
+
+
+func _on_title_continue() -> void:
+	open_world(true)
+
+
 func _on_jump() -> void:
+	title.close()
 	var st: Dictionary = Stages.LIST[profile.stage]
 	sfx.play("dash", 6.0, 0.0)
 	sfx.play("perfect", 0.0, 0.0)
-	ftl.play("%s — 콜로서스 「%s」" % [st["coord"], st["name"]], func() -> void: start_stage(profile.stage))
+	ftl.play(Loc.t("%s — 콜로서스 「%s」") % [Loc.t(st["coord"]), Loc.t(st["name"])], func() -> void: start_stage(profile.stage))
 
 
 func _on_arrived() -> void:
 	if touch_ui == null:
 		Input.mouse_mode = Input.MOUSE_MODE_CONFINED
+	tutorial.request(["dodge", "parry", "dashparry"])      # 처음 도착: 회피 → 패리 → 돌진패리 순서로 한 장씩 (본 장은 다시 안 뜬다)
 
 
 ## 발판을 띄운다 (instant: 바로 / 아니면 용암에서 솟아오르는 연출)
@@ -274,6 +318,12 @@ func _buzz(ms: int) -> void:
 
 
 func _unhandled_input(e: InputEvent) -> void:
+	if e is InputEventKey and e.pressed and not e.echo and (e.keycode == KEY_F11 or (e.keycode == KEY_ENTER and e.alt_pressed)):
+		var fs := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if fs else DisplayServer.WINDOW_MODE_FULLSCREEN)
+		return
+	if title != null and title.visible:
+		return                                    # 메인 화면이 열려 있는 동안은 게임 입력을 받지 않는다
 	if e is InputEventMouseButton:
 		if touch_ui != null and e.device == InputEvent.DEVICE_ID_EMULATION:
 			return                            # 터치가 만든 가짜 마우스 클릭은 무시 (터치 UI가 따로 처리)
@@ -1075,12 +1125,12 @@ func _core_destroyed(pos: Vector2) -> void:
 	var got: Dictionary = profile.record_clear(stage_idx)
 	var reward := ""
 	if got["core"] != "":
-		reward = " · 획득: %s (영구 강화)" % Upgrades.CORES[got["core"]]["name"]
-	hud.banner("코어 에너지 확보", "%.1f초 · 남은 실드 셀 %d%s · 클릭: 월드 맵 → FTL 도약 · R: 다시" % [run_time, lives, reward])
+		reward = Loc.t(" · 획득: %s (영구 강화)") % Loc.t(Upgrades.CORES[got["core"]]["name"])
+	hud.banner(Loc.t("코어 에너지 확보"), Loc.t("%.1f초 · 남은 실드 셀 %d%s · 클릭: 월드 맵 → FTL 도약 · R: 다시") % [run_time, lives, reward])
 
 
 func _die() -> void:
 	tele.finish("dead", run_time, lives, _tele_extra())
 	state = State.DEAD
 	dead_t = 2.5
-	hud.banner("기체 손실", "잠시 후 재시작 (R: 즉시)")
+	hud.banner(Loc.t("기체 손실"), Loc.t("잠시 후 재시작 (R: 즉시)"))

@@ -33,8 +33,13 @@ func record_physics(us: int) -> void:
 	_phys_us = lerpf(_phys_us, float(us), 0.1)
 
 
+## 개발용 키(F1~F8: 무적·코어 전부 얻기·진행 삭제 등)는 배포 빌드에서는 꺼 둔다 (--debug 로만 켠다)
+static func keys_enabled() -> bool:
+	return OS.is_debug_build() or OS.get_cmdline_user_args().has("--debug")
+
+
 func _unhandled_input(e: InputEvent) -> void:
-	if not (e is InputEventKey) or not e.pressed or e.echo:
+	if not keys_enabled() or not (e is InputEventKey) or not e.pressed or e.echo:
 		return
 	match e.keycode:
 		KEY_F1:

@@ -3,7 +3,9 @@ extends CanvasLayer
 ## 깬 은하는 다시 골라 재전투할 수 있다. 안 깬 곳(다음 하나만 고를 수 있음)·아직 만들지 않은 곳은 회색.
 ## 아래에는 얻은 동력 코어(모두 영구히 작동)를 보여 준다. FTL 도약 → 고른 스테이지.
 
+const Loc := preload("res://scripts/loc.gd")
 signal jump_requested
+signal back_requested               # 타이틀에서 열었을 때만 (allow_back)
 
 const Upgrades := preload("res://scripts/upgrades.gd")
 const Stages := preload("res://scripts/stages.gd")
@@ -18,6 +20,10 @@ var sub: Label
 var map: MapView
 var core_labels := {}                # 코어 id → Label
 var jump_button: Button
+var back_button: Button
+var title_l: Label
+var core_head: Label
+var allow_back := false
 
 
 func _ready() -> void:
@@ -40,7 +46,8 @@ func _ready() -> void:
 	root.add_theme_constant_override("separation", int(10 * ui_scale))
 	margin.add_child(root)
 
-	root.add_child(_label("항로도 — 퇴각 항로", 32, Color(1.0, 0.95, 0.88)))
+	title_l = _label(Loc.t("항로도 — 퇴각 항로"), 32, Color(1.0, 0.95, 0.88))
+	root.add_child(title_l)
 	sub = _label("", 18, Color(0.75, 0.8, 0.88))
 	root.add_child(sub)
 
@@ -50,7 +57,8 @@ func _ready() -> void:
 	map.custom_minimum_size = Vector2(0, 280) * ui_scale
 	root.add_child(map)
 
-	root.add_child(_label("동력 코어 — 콜로서스를 처음 처리할 때마다 얻고, 얻은 코어는 모두 영구히 작동합니다.", 17, Color(1.0, 0.8, 0.55)))
+	core_head = _label(Loc.t("동력 코어 — 콜로서스를 처음 처리할 때마다 얻고, 얻은 코어는 모두 영구히 작동합니다."), 17, Color(1.0, 0.8, 0.55))
+	root.add_child(core_head)
 	for id in Upgrades.CORES:
 		var l := _label("", 16, C_TAKEN)
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -60,8 +68,15 @@ func _ready() -> void:
 	var bottom := HBoxContainer.new()
 	bottom.alignment = BoxContainer.ALIGNMENT_END
 	root.add_child(bottom)
+	back_button = Button.new()
+	back_button.text = Loc.t("뒤로")
+	back_button.custom_minimum_size = Vector2(160, 60) * ui_scale
+	back_button.add_theme_font_override("font", font)
+	back_button.add_theme_font_size_override("font_size", int(18 * ui_scale))
+	back_button.pressed.connect(back)
+	bottom.add_child(back_button)
 	jump_button = Button.new()
-	jump_button.text = "FTL 도약 ▶"
+	jump_button.text = Loc.t("FTL 도약 ▶")
 	jump_button.custom_minimum_size = Vector2(300, 60) * ui_scale
 	jump_button.add_theme_font_override("font", font)
 	jump_button.add_theme_font_size_override("font_size", int(18 * ui_scale))
@@ -90,6 +105,14 @@ func close() -> void:
 	visible = false
 
 
+## 타이틀로 돌아간다 (타이틀에서 연 경우만)
+func back() -> void:
+	if not visible or not allow_back:
+		return
+	close()
+	back_requested.emit()
+
+
 func jump() -> void:
 	if not visible:
 		return
@@ -111,6 +134,8 @@ func _unhandled_input(e: InputEvent) -> void:
 	match e.keycode:
 		KEY_ENTER, KEY_KP_ENTER:
 			jump()
+		KEY_ESCAPE, KEY_BACKSPACE:
+			back()
 		KEY_LEFT:
 			select(profile.stage - 1)
 		KEY_RIGHT:
@@ -119,17 +144,22 @@ func _unhandled_input(e: InputEvent) -> void:
 
 
 func refresh() -> void:
+	title_l.text = Loc.t("항로도 — 퇴각 항로")                 # 언어가 바뀌었을 수 있으니 열 때마다 다시
+	core_head.text = Loc.t("동력 코어 — 콜로서스를 처음 처리할 때마다 얻고, 얻은 코어는 모두 영구히 작동합니다.")
+	jump_button.text = Loc.t("FTL 도약 ▶")
+	back_button.text = Loc.t("뒤로")
+	back_button.visible = allow_back
 	var st: Dictionary = Stages.LIST[profile.stage]
-	sub.text = "도약지: %d. %s — 콜로서스 「%s」%s   ·   은하를 눌러 고르기 (깬 곳은 다시 싸울 수 있음)" % [
-		profile.stage + 1, st["coord"], st["name"], " (재전투)" if profile.is_cleared(profile.stage) else ""]
+	sub.text = Loc.t("도약지: %d. %s — 콜로서스 「%s」%s   ·   은하를 눌러 고르기 (깬 곳은 다시 싸울 수 있음)") % [
+		profile.stage + 1, Loc.t(st["coord"]), Loc.t(st["name"]), Loc.t(" (재전투)") if profile.is_cleared(profile.stage) else ""]
 	for id in core_labels:
 		var l: Label = core_labels[id]
 		var c: Dictionary = Upgrades.CORES[id]
 		if profile.cores.has(id):
-			l.text = "✓ %s — %s" % [c["name"], c["desc"]]
+			l.text = "✓ %s — %s" % [Loc.t(c["name"]), Loc.t(c["desc"])]
 			l.add_theme_color_override("font_color", C_TAKEN)
 		else:
-			l.text = "??? — 콜로서스 「%s」를 처리하면 얻습니다" % _stage_name(c["from"])
+			l.text = Loc.t("??? — 콜로서스 「%s」를 처리하면 얻습니다") % _stage_name(c["from"])
 			l.add_theme_color_override("font_color", C_LOCKED)
 	map.queue_redraw()
 
@@ -137,7 +167,7 @@ func refresh() -> void:
 static func _stage_name(id: String) -> String:
 	for st in Stages.LIST:
 		if st["id"] == id:
-			return st["name"]
+			return Loc.t(st["name"])
 	return id
 
 
@@ -218,7 +248,7 @@ class MapView extends Control:
 		for k in 4:
 			var ra := k * PI * 0.5 + PI * 0.25
 			draw_line(dp + Vector2.from_angle(ra) * 34.0, dp + Vector2.from_angle(ra) * 46.0, Color(0.6, 0.62, 0.68, 0.7), 2.0)
-		_text(font, "%d. %s" % [n + 1, Stages.DESTINATION], dp + Vector2(0, 62), Color(0.62, 0.64, 0.7))
+		_text(font, "%d. %s" % [n + 1, Loc.t(Stages.DESTINATION)], dp + Vector2(0, 62), Color(0.62, 0.64, 0.7))
 		# 기체: 고른 은하 위에 떠 있다
 		var i0 := clampi(int(floor(ship_at)), 0, n - 1)
 		var i1 := clampi(i0 + 1, 0, n - 1)
@@ -252,7 +282,7 @@ class MapView extends Control:
 			draw_arc(p, 46.0, 0.0, TAU, 40, Color(1, 1, 1, 0.5), 2.0)
 		var name := "???"
 		if i < Stages.LIST.size() and (open or cleared):
-			name = Stages.LIST[i]["name"]
+			name = Loc.t(Stages.LIST[i]["name"])
 		var tag := " ✓" if cleared else ""
 		_text(world.font, "%d. %s%s" % [i + 1, name, tag], p + label_off(i), core if cleared or open else Color(0.5, 0.52, 0.58))
 

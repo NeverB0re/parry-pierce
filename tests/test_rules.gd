@@ -34,6 +34,8 @@ func _process(_d: float) -> bool:
 	_v042_test()
 	_v044_test()
 	_v047_test()
+	_i18n_test()
+	_title_test()
 	_telemetry_test()
 	print("FAILS ", fails)
 	quit(fails)
@@ -1852,4 +1854,96 @@ func _v047_test() -> void:
 		main.hitstop = 0
 		main._physics_process(DT)
 	_check("then the ring disappears", p.heat_vis <= 0.0)
+	main.start_stage(0)
+
+
+## 번역: 소스에서 Loc.t("...") 로 감싼 한글 문자열은 모두 영어 표에 있어야 한다 (누락이 영어 화면에 한글로 남지 않게)
+func _i18n_test() -> void:
+	var Loc = load("res://scripts/loc.gd")
+	var rx := RegEx.new()
+	rx.compile("Loc\\.t\\(\"((?:[^\"\\\\]|\\\\.)*)\"\\)")
+	var han := RegEx.new()
+	han.compile("[\uac00-\ud7a3]")
+	var missing := []
+	var total := 0
+	var dir := DirAccess.open("res://scripts")
+	for f in dir.get_files():
+		if not f.ends_with(".gd") or f == "loc.gd":                      # loc.gd 의 머리 주석에 사용 예가 있다
+			continue
+		var text := FileAccess.get_file_as_string("res://scripts/" + f)
+		for m in rx.search_all(text):
+			var key: String = m.get_string(1).c_unescape()
+			if han.search(key) == null:
+				continue
+			total += 1
+			if not Loc.EN.has(key):
+				missing.append(f + ": " + key.substr(0, 30))
+	_check("every translated Korean string has an English entry (%d checked, missing %s)" % [total, str(missing)], missing.is_empty() and total > 100)
+	Loc.lang = "en"
+	_check("English lookup works and falls back to the source text", Loc.t("종료") == "Quit" and Loc.t("표에 없는 문장") == "표에 없는 문장")
+	var bad := []
+	for k in Loc.EN:
+		var kp: int = k.count("%s") + k.count("%d") + k.count("%.1f")
+		var ep: int = String(Loc.EN[k]).count("%s") + String(Loc.EN[k]).count("%d") + String(Loc.EN[k]).count("%.1f")
+		if kp != ep:
+			bad.append(k.substr(0, 20))
+	_check("translations keep the same number of format placeholders (%s)" % str(bad), bad.is_empty())
+	Loc.lang = "ko"
+
+
+## 메인 화면: 열기·언어 전환·새 게임 확인·이어하기 비활성·항로도 뒤로가기
+func _title_test() -> void:
+	var Loc = load("res://scripts/loc.gd")
+	var TitleMenu = load("res://scripts/title_menu.gd")
+	main.start_stage(0)
+	var t = TitleMenu.new()
+	main.add_child(t)
+	var pr = main.Profile.new()
+	pr.persist = false
+	t.profile = pr
+	t.open()
+	_check("title opens", t.visible)
+	var started := [0]
+	var cont := [0]
+	t.start_requested.connect(func() -> void: started[0] += 1)
+	t.continue_requested.connect(func() -> void: cont[0] += 1)
+	var texts := []
+	for b in t.root.find_children("*", "Button", true, false):
+		texts.append(b.text)
+	_check("fresh title: Start / Continue / How to Play / Quit (%s)" % str(texts), texts.size() == 4 and texts[0] == "시작")
+	var cb: Button = t.root.find_children("*", "Button", true, false)[1]
+	_check("Continue is disabled without progress", cb.disabled)
+	t._on_flag("en")
+	var en_texts := []
+	for b in t.root.find_children("*", "Button", true, false):
+		en_texts.append(b.text)
+	_check("flag switches the language and rebuilds (%s)" % str(en_texts), Loc.lang == "en" and en_texts[0] == "Start" and en_texts[3] == "Quit")
+	var flags: Array = t.root.find_children("*", "Control", true, false).filter(func(c): return c.get_script() != null and c.get("lang") != null)
+	_check("two flag buttons, English one selected", flags.size() == 2 and flags[0].lang == "en" and flags[0].selected and not flags[1].selected)
+	t._on_new()
+	_check("Start begins a new game at once when there is no progress", started[0] == 1)
+	pr.cleared.append("observer")
+	t.open()
+	var cb2: Button = t.root.find_children("*", "Button", true, false)[1]
+	_check("Continue is enabled with progress", not cb2.disabled)
+	t._on_new()
+	_check("with progress New Game asks to confirm first (started %d, confirm %s)" % [started[0], t._confirm_new], started[0] == 1 and t._confirm_new)
+	t._on_new()
+	_check("second press starts the new game", started[0] == 2)
+	t.open()
+	t._on_flag("ko")
+	_check("flag back to Korean", Loc.lang == "ko")
+	t.free()
+
+	# 항로도의 "뒤로": 타이틀에서 연 경우에만 보이고, 누르면 타이틀이 열린다
+	main.world.profile = main.profile
+	main.open_world(true)
+	_check("route map opened from the title shows Back", main.world.visible and main.world.back_button.visible)
+	main.world.back()
+	_check("Back closes the map and reopens the title, unpaused", not main.world.visible and main.title.visible and not main.get_tree().paused)
+	main.title.close()
+	main.open_world(false)
+	_check("route map opened otherwise has no Back", main.world.visible and not main.world.back_button.visible)
+	main.world.close()
+	main.get_tree().paused = false
 	main.start_stage(0)
