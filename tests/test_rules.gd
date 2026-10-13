@@ -1366,7 +1366,7 @@ func _v044_test() -> void:
 	main.start_stage(0)
 	var b = main.boss
 	var p = main.player
-	_check("charge auto-fire 0.9s, charge cooldown 1.7s", p.CHARGE_AUTO == 0.9 and absf(p.stats.charge_cooldown - 1.7) < 0.001)
+	_check("charge auto-fire 0.9s, charge cooldown back to 1.5s", p.CHARGE_AUTO == 0.9 and absf(p.stats.charge_cooldown - 1.5) < 0.001)
 	var pp: Vector2 = b.part_pos(0)
 	_air(pp + Vector2(-160, 0))
 	_dash_dir("charge", Vector2.RIGHT)
@@ -1378,7 +1378,7 @@ func _v044_test() -> void:
 	p.vel = Vector2.ZERO
 	_dash_dir("dash", Vector2.RIGHT)
 	_step(6)
-	_check("dash right after the hit passes through the target (hp %d, pass %s, still dashing %s)" % [b.part_hp[0], p.dash_pass, p.dash_t > 0.0], b.part_hp[0] == hp1 and p.dash_pass and p.dash_kind == "dash" and p.dash_t > 0.0)
+	_check("dash right after the hit slips out of the target circle (hp %d, pass %s, still dashing %s)" % [b.part_hp[0], p.dash_pass, p.dash_t > 0.0], b.part_hp[0] == hp1 and p.dash_kind == "dash" and p.dash_t > 0.0)
 	_step(int(0.6 / DT))
 	_check("window closes (%.2f)" % p.strike_pass_t, p.strike_pass_t <= 0.0)
 	p.position = pp + Vector2(-90, 0)
@@ -1387,4 +1387,46 @@ func _v044_test() -> void:
 	_dash_dir("dash", Vector2.RIGHT)
 	_step(6)
 	_check("later dashes hit as usual (hp %d)" % b.part_hp[0], b.part_hp[0] == hp1 - 1)
+	# 원 안쪽에서만 통과: 맞힌 직후라도 원 밖에서 뒤돌아 돌진하면 다시 맞는다
+	_air(pp + Vector2(-160, 0))
+	_dash_dir("charge", Vector2.RIGHT)
+	_step(6)
+	hp1 = b.part_hp[0]
+	main.hitstop = 0.0
+	p.position = pp + Vector2(150, 0)                   # 원(부위 반지름 + 기체) 바깥
+	p.vel = Vector2.ZERO
+	_dash_dir("dash", Vector2.LEFT)
+	_check("pass window is open but only inside the circle (pass %s)" % p.dash_pass, p.dash_pass and p.strike_pass_t > 0.0)
+	_step(6)
+	_check("turning around right after a hit: the dash hits again (hp %d -> %d)" % [hp1, b.part_hp[0]], b.part_hp[0] == hp1 - 1 and not p.dash_pass)
+	# 패리는 차지를 멈추지 않는다
+	main.start_stage(1)
+	b = main.boss
+	b.next_t = 99.0
+	p.reset(Vector2(-700, -1500), false)
+	main.hitstop = 0.0
+	p.stats.counter = false
+	main._dash_input(true)
+	_step(int(0.3 / DT))
+	main._parry_input(true)
+	_check("pressing parry does not cancel the charge (charging %s, t %.2f)" % [p.charging, p.charge_t], p.charging and p.charge_t > 0.1)
+	main._parry_input(false)
+	_step(int(0.5 / DT))
+	_check("charge completes after the parry (charged %s)" % p.is_charged(), p.is_charged())
+	# 패리 성공(리버스 드라이브)으로도 멈추지 않는다: 이어서 떼면 차지 강습이 나간다
+	main.hitstop = 0.0
+	main._parry_input(true)
+	b.shots.spawn(p.position + Vector2(25, 0), Vector2.ZERO, 5.0)
+	_step(1)
+	_check("parry success keeps the charge (aim %s, charging %s)" % [p.aim_phase, p.charging], p.aim_phase and p.charging)
+	main._parry_input(false)                            # 떼면 패리 돌진 발사
+	_step(int(0.5 / DT))
+	main._dash_input(false)
+	var fired := false
+	for k in int(2.5 / DT):
+		_step(1)
+		if p.dash_kind == "charge":
+			fired = true
+			break
+	_check("the charge is still fired after the reverse drive (fired %s)" % fired, fired)
 	main.start_stage(0)

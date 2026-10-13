@@ -48,7 +48,7 @@ const PRESS_PIN_SPEED := 2300.0  # 프레스(천장 근접공격)를 패리하�
 const PRESS_PIN_TIME := 1.0
 const STUN_INVULN := 0.4         # 스턴이 끝난 뒤 추가 무적
 const DASH_PARRY_GRACE := 0.12   # 돌진패리: 일반 돌진이 끝난 직후에도 이만큼은 돌진 중으로 친다
-const STRIKE_PASS := 0.4          # 적중 직후 이 시간 안에 시작한 일반 돌진은 표적과 충돌하지 않는다 (적 안에서 빠져나오는 돌진이 멈추지 않게)
+const STRIKE_PASS := 0.25         # 적중 직후 이 시간 안에 시작한 일반 돌진은, 방금 맞힌 표적의 원 안쪽에서만 충돌하지 않는다 (적 안에서 빠져나오는 돌진이 멈추지 않게)
 const SMALL_GUARD := 0.25        # 일반 돌진이 끝난 직후 이 시간 동안 잔탄에 맞지 않는다 (옅은 실드)
 const HURT_PUSH := 500.0
 const HURT_POP := 380.0          # 맞으면 살짝 솟구친다
@@ -112,8 +112,9 @@ var bounce_rise := 0.0           # 직격 튕김의 처음 솟구치는 속도 (
 var parry_hit := false           # 이번 패리 판정에서 무언가를 막았다 → 판정이 끝나도 패리 쿨다운 없음
 var shield_t := 0.0              # 돌진/직격 후 무적
 var small_guard := 0.0           # 일반 돌진이 끝난 직후: 잔탄만 맞지 않는 시간
-var strike_pass_t := 0.0         # 적중 직후 남은 시간: 이때 시작한 일반 돌진은 표적을 통과한다
-var dash_pass := false           # 지금 돌진이 표적을 통과하는 중
+var strike_pass_t := 0.0         # 적중 직후 남은 시간: 이때 시작한 일반 돌진은 맞힌 표적의 원 안쪽을 통과한다
+var pass_target := {}            # 방금 맞힌 표적 {kind, idx}
+var dash_pass := false           # 지금 돌진이 그 표적의 원 안쪽을 빠져나오는 중 (원을 벗어나면 꺼진다)
 var dash_parry_t := 0.0          # 일반 돌진이 끝난 뒤 돌진패리가 아직 인정되는 시간
 var shield_max := 1.0
 var stun := 0.0
@@ -147,6 +148,7 @@ func reset(pos: Vector2, platform := false) -> void:
 	charge_cd = 0.0
 	small_guard = 0.0
 	strike_pass_t = 0.0
+	pass_target = {}
 	dash_pass = false
 	dash_parry_t = 0.0
 	evade_window = 0.0
@@ -266,7 +268,7 @@ func cancel_charge() -> void:
 func _dash(kind: String) -> void:
 	dash_kind = kind
 	pending_kind = ""
-	dash_pass = kind == "dash" and strike_pass_t > 0.0
+	dash_pass = kind == "dash" and strike_pass_t > 0.0 and not pass_target.is_empty()
 	var spd := DASH_SPEED
 	dash_total = stats.dash_time
 	if kind == "charge":
@@ -296,7 +298,6 @@ func _launch() -> void:
 ## 우클릭/Space 누름: 패리 판정 (모으던 차지는 취소)
 func parry_press() -> void:
 	parry_held = true
-	cancel_charge()
 	queued_press = false
 	if frozen or aim_phase or parry_active or stun > 0.0:
 		return
@@ -327,7 +328,8 @@ func on_parry_success(perfect: bool, boosted := false) -> void:
 	dash_parry_t = 0.0
 	parry_active = false
 	parry_cd = 0.0
-	cancel_charge()
+	if pending_kind != "charge":                 # 차지는 패리 성공으로도 멈추지 않는다 (리버스 드라이브 뒤 이어서 발사)
+		pending_kind = ""
 	queued_press = false
 	dash_t = 0.0
 	_end_dash()
@@ -604,9 +606,11 @@ func _move(dt: float) -> void:
 		if (dash_kind == "charge" or dash_kind == "power") and dash_t > 0.0 and main.try_clash(position):
 			return
 		# 표적(부위·코어)은 돌진 중에만 충돌한다. 그 밖에는 통과하며 접촉 피해도 없다 (피해는 적의 공격으로만)
-		if is_attacking() and not dash_pass:
+		if is_attacking():
 			var hit: Dictionary = boss.strike_hit(position, RADIUS + (POWER_RADIUS if dash_kind == "power" else 0.0))
-			if not hit.is_empty():
+			if dash_pass and (hit.is_empty() or str(hit.get("kind", "")) != str(pass_target.get("kind", "")) or int(hit.get("idx", -1)) != int(pass_target.get("idx", -1))):
+				dash_pass = false                  # 방금 맞힌 표적의 원을 벗어났다 (또는 다른 표적): 이제부터 정상 충돌 (뒤돌아 다시 때릴 수 있다)
+			if not hit.is_empty() and not dash_pass:
 				_on_strike(hit)
 				if frozen:
 					return
@@ -664,6 +668,7 @@ func _buff_mult() -> int:
 
 
 func _on_strike(hit: Dictionary) -> void:
+	pass_target = {"kind": hit.get("kind", ""), "idx": hit.get("idx", -1)}
 	var dir := vel.normalized()
 	var kind := dash_kind
 	var dmg := _strike_damage()
