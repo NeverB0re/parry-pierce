@@ -16,4 +16,7 @@ enum {
 	DEBRIS_LAND,    # 부서진 부위가 바닥에 떨어짐
 	CORE_OPEN,      # 외부 시스템을 다 부숴 가슴이 열리기 시작
 	CORE_READY,     # 가슴이 다 열림 (코어 페이즈 시작)
+	REFLECT_HIT,    # 반사된 탄이 표적에 닿음 ("hit", "dmg") → main 이 피해를 준다
+	ABSORB,         # 잔탄을 패리로 흡수 (연출만)
+	MINE,           # 기뢰가 터진다
 }

@@ -2,20 +2,34 @@ extends Node2D
 ## 모든 콜로서스의 공통 틀. 몸은 배경이라 판정이 없고, 판정은 두 종류뿐이다:
 ##  1) 공격 판정 — 지금 진행 중인 공격 모듈(atk)과 탄(shots)이 만든다
 ##  2) 표적 — 외부 시스템(부위)과 장갑+동력 코어(core). 돌진 중에만 충돌한다
-## 공통으로 맡는 것: 공격 일정(쉬는 시간 → 고르기 → 모듈 진행 → 끝), 탄, 장갑 파편, 이벤트, 죽음.
-## 콜로서스마다 다른 것(모양·표적·공격 고르기·그림)은 아래 "콜로서스마다 채울 것"을 덮어쓴다.
+## 공통 진행: 페이즈 1 외부 시스템 파괴 → 페이즈 2 개방 연출 → 페이즈 3 동력 코어.
+## 공통으로 맡는 것: 공격 일정(쉬는 시간 → 고르기 → 모듈 진행 → 끝), 외부 시스템 체력·손상 단계·약점 표시,
+## 탄, 장갑 파편, 이벤트, 죽음. 콜로서스마다 다른 것(모양·표적 위치·공격 고르기·그림)은 아래 "콜로서스마다 채울 것"을 덮어쓴다.
+## 외부 시스템 번호는 짝수 = 왼쪽, 홀수 = 오른쪽 (파편이 튀는 방향).
 
 const Ev := preload("res://scripts/ev.gd")
 const Projectiles := preload("res://scripts/projectiles.gd")
+
+const C_HEART := Color(1.0, 0.42, 0.22)          # 약점(외부 시스템·코어)의 빛
+const C_PLATE_EDGE := Color(0.62, 0.3, 0.14)     # 상시 표적 → 달궈진 가장자리
+const C_CAVITY := Color(0.10, 0.03, 0.04)
 
 var phase := 1
 var t := 0.0
 var dead := false
 var death_t := 0.0
+var open_t := 0.0
+var open_time := 1.6                 # 가슴(코어)이 열리는 연출 시간
 var atk = null                       # 진행 중인 공격 모듈 (attacks/attack.gd) 또는 null
 var next_t := 2.5                    # 다음 공격까지 남은 시간
 var attack_gap := Vector2(1.0, 1.8)  # 공격 사이 쉬는 시간 (범위)
 var hold_attacks := false            # true 인 동안(플레이어가 발판 위) 새 공격을 시작하지 않는다
+var bolt_speedup := 0.1              # 외부 시스템 하나 부술 때마다 탄 속도 +10%
+var bolt_speedup_core := 0.15        # 최종 페이즈 추가 가속
+var core_assist_r := 200.0           # 에임 어시스트가 보는 코어 반지름
+var part_hp: Array[int] = []
+var part_flash: Array[float] = []
+var part_stage: Array[int] = []      # 외부 시스템 손상 단계 0~3 (남은 체력 75/50/25%)
 var shots := Projectiles.new()       # 탄
 var core = null                      # 장갑 + 동력 코어 (armored_core.gd)
 var shards: Array[Dictionary] = []   # 떨어져 나가는 장갑 조각
@@ -28,10 +42,18 @@ var focus_reach := 0.0               # 이 거리 안의 표적은 더 밝게
 
 func reset() -> void:
 	phase = 1
+	open_t = 0.0
 	dead = false
 	death_t = 0.0
 	atk = null
 	next_t = 2.5
+	part_hp.clear()
+	part_flash.clear()
+	part_stage.clear()
+	for i in part_count():
+		part_hp.append(part_max_hp(i))
+		part_flash.append(0.0)
+		part_stage.append(0)
 	shots.clear()
 	shards.clear()
 	events.clear()
@@ -69,14 +91,23 @@ func step(dt: float, ppos: Vector2) -> void:
 	if core != null:
 		core.step(dt)
 	_step_shards(dt)
+	for i in part_flash.size():
+		part_flash[i] = maxf(0.0, part_flash[i] - dt * 4.0)
 	_step_effects(dt)
 	if dead:
 		death_t += dt
 		queue_redraw()
 		return
+	if phase == 2:
+		open_t += dt
+		if open_t >= open_time:
+			phase = 3
+			emit(Ev.CORE_READY, core.center)
 	_step_phase(dt)
-	for p in shots.step(dt):
+	for p in shots.step(dt, ppos, target_pos(ppos)):
 		emit(Ev.BOLT_POP, p)
+	for h in shots.take_hits(self):              # 반사된 탄이 표적에 닿음 → main 이 피해를 준다
+		emit(Ev.REFLECT_HIT, h["pos"], h)
 	if atk == null:
 		if hold_attacks:
 			next_t = maxf(next_t, 1.2)         # 날아오른 뒤 잠시 여유를 준다
@@ -106,6 +137,117 @@ func die() -> void:
 	death_t = 0.0
 	atk = null
 	shots.clear()
+
+
+# ── 외부 시스템 ────────────────────────────────────────
+func part_alive(i: int) -> bool:
+	return part_hp[i] > 0
+
+
+func parts_left() -> int:
+	var n := 0
+	for hp in part_hp:
+		if hp > 0:
+			n += 1
+	return n
+
+
+## 외부 시스템 피해. 손상 단계가 오르면 조각이 튀고, 부서지면 떨어져 나가며(그 부위를 쓰던 공격은 끊김),
+## 다 부서지면 가슴(코어)이 열린다. 부서지면 true
+func damage_part(i: int, dmg: int) -> bool:
+	if not part_alive(i):
+		return false
+	part_flash[i] = 1.0
+	if part_hp[i] - dmg > 0:
+		part_hp[i] -= dmg
+		var st := _part_stage_of(i)
+		if st > part_stage[i]:
+			part_stage[i] = st
+			emit(Ev.PART_STAGE, part_pos(i), {"stage": st})
+			if st == 3:
+				_spawn_shard(part_pos(i), 26.0, Vector2((1.0 if i % 2 == 1 else -1.0) * 240.0, -320.0))
+		return false
+	var pos := part_pos(i)
+	_on_part_broken(i)
+	if atk != null and atk.part == i:          # 이 부위를 쓰던 공격은 끊긴다
+		finish_attack()
+	part_hp[i] = 0
+	emit(Ev.PART_BREAK, pos)
+	if parts_left() == 0:
+		phase = 2
+		open_t = 0.0
+		atk = null
+		next_t = open_time + 1.0
+		emit(Ev.CORE_OPEN, core.center)
+	return true
+
+
+func _part_stage_of(i: int) -> int:
+	var f := float(part_hp[i]) / part_max_hp(i)
+	if f <= 0.25:
+		return 3
+	if f <= 0.5:
+		return 2
+	if f <= 0.75:
+		return 1
+	return 0
+
+
+func _spawn_shard(pos: Vector2, size: float, v: Vector2) -> void:
+	var pts := PackedVector2Array([Vector2(-size, -size * 0.6), Vector2(size * 0.8, -size * 0.8), Vector2(size, size * 0.5), Vector2(-size * 0.5, size)])
+	shards.append({"pos": pos, "vel": v, "rot": 0.0, "rotv": randf_range(-5.0, 5.0), "pts": pts})
+
+
+## 탄 속도 배율: 외부 시스템을 부술수록, 최종 페이즈일수록 빨라진다
+func bolt_mult() -> float:
+	return 1.0 + bolt_speedup * (part_count() - parts_left()) + (bolt_speedup_core if phase == 3 else 0.0)
+
+
+## HUD 화살표가 가리킬 다음 표적 (반사된 탄도 이곳을 향한다)
+func target_pos(from: Vector2) -> Vector2:
+	if phase >= 2:
+		return core.center
+	var best: Vector2 = core.center
+	var best_d := INF
+	for i in part_count():
+		if part_alive(i) and part_pos(i).distance_to(from) < best_d:
+			best_d = part_pos(i).distance_to(from)
+			best = part_pos(i)
+	return best
+
+
+# ── 플레이어 공격 판정 ─────────────────────────────────
+## 원(p, r)이 닿은 표적. 페이즈 1은 외부 시스템, 페이즈 3은 동력 코어(장갑). {kind, idx?, n}
+func strike_hit(p: Vector2, r: float) -> Dictionary:
+	if dead or phase == 2:
+		return {}
+	if phase == 1:
+		var best := {}
+		var best_d := INF
+		for i in part_count():
+			if not part_alive(i):
+				continue
+			var d := p.distance_to(part_pos(i))
+			if d < r + part_radius(i) and d < best_d:
+				best_d = d
+				var n := p - part_pos(i)
+				best = {"kind": "part", "idx": i, "n": n.normalized() if n.length() > 0.1 else Vector2.UP}
+		return best
+	return core.hit(p, r)
+
+
+## 에임 어시스트용 표적 목록 (중심, 반지름)
+func assist_targets() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if dead or phase == 2:
+		return out
+	if phase == 1:
+		for i in part_count():
+			if part_alive(i):
+				out.append({"pos": part_pos(i), "r": part_radius(i)})
+		return out
+	out.append({"pos": core.center, "r": core_assist_r})
+	return out
 
 
 # ── 적 공격 판정 ───────────────────────────────────────
@@ -198,6 +340,12 @@ func damage_core(dmg: int) -> bool:
 
 
 # ── 그리기 (공통 부분) ─────────────────────────────────
+func _cap(a: Vector2, b: Vector2, w: float, c: Color) -> void:
+	draw_line(a, b, c, w)
+	draw_circle(a, w * 0.5, c)
+	draw_circle(b, w * 0.5, c)
+
+
 func _draw_shards() -> void:
 	for sd in shards:
 		var pts: PackedVector2Array = sd["pts"]
@@ -209,25 +357,90 @@ func _draw_shards() -> void:
 	draw_set_transform(Vector2.ZERO, 0.0)
 
 
+## 페이즈 1 표적: 외부 시스템에 맥동하는 약점 표시 + 손상 단계(체력바 대신)
+func _draw_part_marks() -> void:
+	if phase != 1 or dead:
+		return
+	var pulse := 0.5 + 0.5 * sin(t * 5.0)
+	for i in part_count():
+		if not part_alive(i):
+			continue
+		var p := part_pos(i)
+		var r := part_radius(i)
+		if focus_glow > 0.0:                    # 방향 지정·차지 중: 노릴 수 있는 표적 강조 (사거리 안이면 더 밝게)
+			var in_reach := p.distance_to(focus_from) <= focus_reach
+			draw_circle(p, r * 1.7, Color(C_HEART, focus_glow * (0.3 if in_reach else 0.12) * (0.6 + 0.4 * pulse)))
+			if in_reach:
+				draw_arc(p, r * 1.7, 0.0, TAU, 32, Color(1.0, 0.85, 0.55, focus_glow * 0.8), 3.0)
+		if _part_highlight(i):                  # 요격으로 멈춘 팔 등: 크게 빛난다
+			draw_circle(p, r * 1.3 + 8.0 * pulse, Color(1.0, 0.75, 0.4, 0.35))
+		var flick := 1.0
+		if part_stage[i] >= 3:                  # 거의 부서짐: 약점 빛이 깜빡인다
+			flick = 0.4 + 0.6 * float(int(t * 9.0 + i) % 3 != 0)
+		var cc := Color(C_HEART, 0.85 * flick).lerp(Color.WHITE, part_flash[i])
+		draw_circle(p, r * 0.45 + 4.0 * pulse, Color(C_HEART, (0.18 + 0.12 * pulse + (0.15 if strike_glow else 0.0)) * flick))
+		draw_circle(p, r * 0.28, cc)
+		var edge := Color(1.0, 0.85, 0.5, 0.9) if strike_glow else Color(C_PLATE_EDGE, 0.9)
+		draw_arc(p, r + 6.0, 0.0, TAU, 32, edge, 3.0)
+		_draw_part_damage(i, p, r, pulse)
+
+
+## 외부 시스템 손상: 1 긁힘 → 2 빛나는 균열 + 불꽃 → 3 떨어져 나간 자리 + 연기
+func _draw_part_damage(i: int, p: Vector2, r: float, pulse: float) -> void:
+	var st: int = part_stage[i]
+	if st <= 0:
+		return
+	var base := i * 1.7
+	for k in 3:
+		var a := base + k * 2.1
+		var c0 := p + Vector2.from_angle(a) * r * 0.55
+		draw_line(c0, c0 + Vector2.from_angle(a + 1.9) * r * 0.5, Color(0.75, 0.78, 0.84, 0.6), 2.5)
+	if st >= 2:
+		for k in 3:
+			var a := base + 0.6 + k * 2.1
+			var q0 := p + Vector2.from_angle(a) * r * 0.3
+			var q1 := q0 + Vector2.from_angle(a + 0.4) * r * 0.4
+			var q2 := q1 + Vector2.from_angle(a - 0.3) * r * 0.4
+			draw_polyline(PackedVector2Array([q0, q1, q2]), Color(1.0, 0.55, 0.25, 0.6 + 0.35 * pulse), 3.0)
+		if fmod(t * 3.0 + i * 0.37, 1.0) < 0.25:
+			for k in 3:
+				var sa := t * 11.0 + k * 2.0 + i
+				draw_circle(p + Vector2.from_angle(sa) * r * (0.6 + 0.4 * fmod(t * 4.0 + k, 1.0)), 2.5, Color(1.0, 0.85, 0.5))
+	if st >= 3:
+		var nc := p + Vector2.from_angle(base + 2.5) * r * 0.85
+		draw_circle(nc, r * 0.35, C_CAVITY)
+		draw_circle(nc, r * 0.18, Color(C_HEART, 0.35 + 0.3 * pulse))
+		for k in 4:
+			var life := fmod(t * 0.6 + k * 0.25 + i * 0.13, 1.0)
+			var sp := p + Vector2(sin(t + k * 1.7) * 14.0 + (k - 1.5) * 10.0, -r * 0.5 - life * 160.0)
+			draw_circle(sp, 12.0 + life * 26.0, Color(0.32, 0.33, 0.36, 0.45 * (1.0 - life)))
+
+
 # ── 콜로서스마다 채울 것 ───────────────────────────────
-## 외부 시스템(부위) 피해. 부서지면 true
-func damage_part(_i: int, _dmg: int) -> bool:
+func part_count() -> int:
+	return 0
+
+
+func part_max_hp(_i: int) -> int:
+	return 24
+
+
+func part_pos(_i: int) -> Vector2:
+	return Vector2.ZERO
+
+
+func part_radius(_i: int) -> float:
+	return 60.0
+
+
+## 부위가 부서지는 순간 (떨어져 나가는 잔해 등)
+func _on_part_broken(_i: int) -> void:
+	pass
+
+
+## 약점 표시를 크게 빛낼 부위인가 (예: 요격으로 멈춘 팔의 관절)
+func _part_highlight(_i: int) -> bool:
 	return false
-
-
-## 원(p, r)이 닿은 표적 {kind:"part", idx, n} / {kind:"core", n} / {}
-func strike_hit(_p: Vector2, _r: float) -> Dictionary:
-	return {}
-
-
-## 에임 어시스트용 표적 목록 [{pos, r}]
-func assist_targets() -> Array[Dictionary]:
-	return []
-
-
-## HUD 화살표가 가리킬 다음 표적
-func target_pos(_from: Vector2) -> Vector2:
-	return core.center
 
 
 ## 쉬는 시간이 끝나면 다음 공격을 고른다 (start_attack 으로 시작)
@@ -240,11 +453,11 @@ func _on_attack_finished() -> void:
 	pass
 
 
-## 매 프레임 (죽은 뒤에도) 도는 연출 값 감쇠·파편 등
+## 매 프레임 (죽은 뒤에도) 도는 연출 값 감쇠·잔해 등
 func _step_effects(_dt: float) -> void:
 	pass
 
 
-## 살아 있을 때만 도는 페이즈 진행·발광 감쇠 등
+## 살아 있을 때만 도는 발광 감쇠 등 (개방 진행 다음)
 func _step_phase(_dt: float) -> void:
 	pass

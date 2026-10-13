@@ -52,8 +52,6 @@ const OPEN_TIME := 1.6                      # 가슴이 열리는 연출 시간
 
 # ── 공격 고르기 ────────────────────────────────────────
 const LOW_ZONE_Y := -900.0           # 이보다 아래(융해 지대 근처)면 분출 위주
-const BOLT_SPEEDUP := 0.1            # 외부 시스템 하나 부술 때마다 탄 속도 +10%
-const BOLT_SPEEDUP_CORE := 0.15      # 최종 페이즈 추가 가속
 
 # ── 색 ─────────────────────────────────────────────────
 const C_BODY := Color(0.075, 0.08, 0.10)
@@ -61,24 +59,21 @@ const C_BODY_DARK := Color(0.045, 0.05, 0.065)
 const C_RIM := Color(0.48, 0.52, 0.6)
 const C_CLOAK := Color(0.05, 0.045, 0.07)
 const C_BONE := Color(0.78, 0.75, 0.68)
-const C_PLATE_EDGE := Color(0.62, 0.3, 0.14)     # 상시 표적 → 달궈진 가장자리
-const C_CAVITY := Color(0.10, 0.03, 0.04)
-const C_HEART := Color(1.0, 0.42, 0.22)
 const C_EYE := Color(1.0, 0.78, 0.42)
 const C_PARRY := Color(1.0, 0.88, 0.35)          # 패리할 수 있는 것 = 금색 (탄, 휩쓰는 팔)
 const C_UNPARRY := Color(0.6, 0.08, 0.36)       # 패리 불가 = 검붉은 보라 (회피 돌진으로만 피한다)
 const C_UNPARRY_CORE := Color(1.0, 0.62, 0.86)
 
-var open_t := 0.0
-var part_hp: Array[int] = []
-var part_flash: Array[float] = []
-var part_stage: Array[int] = []      # 외부 시스템 손상 단계 0~3 (남은 체력 75/50/25%)
 var feet: Array[Vector2] = []
 var fists: Array[Vector2] = []
 var debris: Array[Dictionary] = []   # 부서져 떨어진 부위
 var eye_glow := 0.0
 var beam_glow := 0.0                 # 레이저 직전·중 눈이 보랏빛으로 달아오름
 var cannon_glow: Array[float] = [0.0, 0.0]   # 발사 전 포구가 달아오르는 정도
+
+
+func _init() -> void:
+	open_time = OPEN_TIME
 
 
 func _ready() -> void:
@@ -88,10 +83,6 @@ func _ready() -> void:
 
 func reset() -> void:
 	super()
-	open_t = 0.0
-	part_hp = [PART_HP, PART_HP, PART_HP, PART_HP]
-	part_flash = [0.0, 0.0, 0.0, 0.0]
-	part_stage = [0, 0, 0, 0]
 	feet.clear()
 	feet.append(FOOT_REST[0])
 	feet.append(FOOT_REST[1])
@@ -105,16 +96,16 @@ func reset() -> void:
 
 
 # ── 외부 시스템 ────────────────────────────────────────
-func part_alive(i: int) -> bool:
-	return part_hp[i] > 0
+func part_count() -> int:
+	return 4
 
 
-func parts_left() -> int:
-	var n := 0
-	for hp in part_hp:
-		if hp > 0:
-			n += 1
-	return n
+func part_max_hp(_i: int) -> int:
+	return PART_HP
+
+
+func part_radius(i: int) -> float:
+	return PART_R[i]
 
 
 func cannon_base(c: int) -> Vector2:
@@ -126,113 +117,6 @@ func part_pos(i: int) -> Vector2:
 	if i < 2:
 		return cannon_base(i).lerp(MUZZLES[i], 0.55)
 	return elbow_of(i - 2)
-
-
-## 외부 시스템 피해. 부서지면 떨어져 나가고, 넷 다 부서지면 가슴이 열린다
-func damage_part(i: int, dmg: int) -> bool:
-	if not part_alive(i):
-		return false
-	part_flash[i] = 1.0
-	if part_hp[i] - dmg > 0:
-		part_hp[i] -= dmg
-		var st := _part_stage_of(i)
-		if st > part_stage[i]:                 # 손상 단계가 올라가면 조각이 튀고 연기가 짙어진다
-			part_stage[i] = st
-			emit(Ev.PART_STAGE, part_pos(i), {"stage": st})
-			if st == 3:
-				_spawn_shard(part_pos(i), 26.0, Vector2((1.0 if i % 2 == 1 else -1.0) * 240.0, -320.0))
-		return false
-	var pos := part_pos(i)
-	var s := 1.0 if i % 2 == 1 else -1.0
-	if i < 2:
-		var base := cannon_base(i)
-		var mz: Vector2 = MUZZLES[i]
-		debris.append({"pos": (base + mz) * 0.5, "half": (mz - base) * 0.5, "w": 54.0, "fist": false,
-			"vel": Vector2(s * 260.0, -380.0), "rot": 0.0, "rotv": s * 3.5, "rest": false})
-	else:
-		var a := i - 2
-		var el := elbow_of(a)
-		debris.append({"pos": (el + fists[a]) * 0.5, "half": (fists[a] - el) * 0.5, "w": 125.0, "fist": true,
-			"vel": Vector2(s * 200.0, -250.0), "rot": 0.0, "rotv": s * 2.2, "rest": false})
-	if atk != null and atk.part == i:          # 이 부위를 쓰던 공격은 끊긴다
-		finish_attack()
-	part_hp[i] = 0
-	emit(Ev.PART_BREAK, pos)
-	if parts_left() == 0:
-		phase = 2
-		open_t = 0.0
-		atk = null
-		next_t = OPEN_TIME + 1.0
-		emit(Ev.CORE_OPEN, HEART_POS)
-	return true
-
-
-func _part_stage_of(i: int) -> int:
-	var f := float(part_hp[i]) / PART_HP
-	if f <= 0.25:
-		return 3
-	if f <= 0.5:
-		return 2
-	if f <= 0.75:
-		return 1
-	return 0
-
-
-func _spawn_shard(pos: Vector2, size: float, v: Vector2) -> void:
-	var pts := PackedVector2Array([Vector2(-size, -size * 0.6), Vector2(size * 0.8, -size * 0.8), Vector2(size, size * 0.5), Vector2(-size * 0.5, size)])
-	shards.append({"pos": pos, "vel": v, "rot": 0.0, "rotv": randf_range(-5.0, 5.0), "pts": pts})
-
-
-## 탄 속도 배율: 외부 시스템을 부술수록, 최종 페이즈일수록 빨라진다
-func bolt_mult() -> float:
-	return 1.0 + BOLT_SPEEDUP * (4 - parts_left()) + (BOLT_SPEEDUP_CORE if phase == 3 else 0.0)
-
-
-## HUD 화살표가 가리킬 다음 표적
-func target_pos(from: Vector2) -> Vector2:
-	if phase >= 2:
-		return HEART_POS
-	var best := HEART_POS
-	var best_d := INF
-	for i in 4:
-		if part_alive(i) and part_pos(i).distance_to(from) < best_d:
-			best_d = part_pos(i).distance_to(from)
-			best = part_pos(i)
-	return best
-
-
-# ── 플레이어 공격 판정 ─────────────────────────────────
-## 원(p, r)이 닿은 표적. 페이즈 1은 외부 시스템, 페이즈 3은 동력 코어(장갑). {kind, idx?, n}
-func strike_hit(p: Vector2, r: float) -> Dictionary:
-	if dead or phase == 2:
-		return {}
-	if phase == 1:
-		var best := {}
-		var best_d := INF
-		for i in 4:
-			if not part_alive(i):
-				continue
-			var d := p.distance_to(part_pos(i))
-			if d < r + float(PART_R[i]) and d < best_d:
-				best_d = d
-				var n := p - part_pos(i)
-				best = {"kind": "part", "idx": i, "n": n.normalized() if n.length() > 0.1 else Vector2.UP}
-		return best
-	return core.hit(p, r)
-
-
-## 에임 어시스트용 표적 목록 (중심, 반지름)
-func assist_targets() -> Array[Dictionary]:
-	var out: Array[Dictionary] = []
-	if dead or phase == 2:
-		return out
-	if phase == 1:
-		for i in 4:
-			if part_alive(i):
-				out.append({"pos": part_pos(i), "r": float(PART_R[i])})
-		return out
-	out.append({"pos": HEART_POS, "r": 200.0})
-	return out
 
 
 # ── 몸 ─────────────────────────────────────────────────
@@ -311,18 +195,30 @@ func arm_box(a: int, ppos: Vector2) -> Dictionary:
 
 
 # ── 진행 ───────────────────────────────────────────────
+## 부서진 부위가 떨어져 나간다 (포대 / 팔꿈치 아래 팔)
+func _on_part_broken(i: int) -> void:
+	var s := 1.0 if i % 2 == 1 else -1.0
+	if i < 2:
+		var base := cannon_base(i)
+		var mz: Vector2 = MUZZLES[i]
+		debris.append({"pos": (base + mz) * 0.5, "half": (mz - base) * 0.5, "w": 54.0, "fist": false,
+			"vel": Vector2(s * 260.0, -380.0), "rot": 0.0, "rotv": s * 3.5, "rest": false})
+	else:
+		var a := i - 2
+		var el := elbow_of(a)
+		debris.append({"pos": (el + fists[a]) * 0.5, "half": (fists[a] - el) * 0.5, "w": 125.0, "fist": true,
+			"vel": Vector2(s * 200.0, -250.0), "rot": 0.0, "rotv": s * 2.2, "rest": false})
+
+
+func _part_highlight(i: int) -> bool:
+	return i >= 2 and is_staggered(i - 2)
+
+
 func _step_effects(dt: float) -> void:
-	for i in 4:
-		part_flash[i] = maxf(0.0, part_flash[i] - dt * 4.0)
 	_step_debris(dt)
 
 
 func _step_phase(dt: float) -> void:
-	if phase == 2:
-		open_t += dt
-		if open_t >= OPEN_TIME:
-			phase = 3
-			emit(Ev.CORE_READY, HEART_POS)
 	eye_glow = move_toward(eye_glow, 0.0, dt * 2.0)
 	beam_glow = move_toward(beam_glow, 0.0, dt * 2.0)
 	for i in 2:
@@ -429,12 +325,6 @@ func _draw() -> void:
 	if atk != null:
 		atk.draw()
 	shots.draw(self)
-
-
-func _cap(a: Vector2, b: Vector2, w: float, c: Color) -> void:
-	draw_line(a, b, c, w)
-	draw_circle(a, w * 0.5, c)
-	draw_circle(b, w * 0.5, c)
 
 
 func _draw_cloak() -> void:
@@ -607,65 +497,6 @@ func _draw_stump(p: Vector2, dir: Vector2, r: float) -> void:
 	var pts := PackedVector2Array([p + o * r, p + dir * r * 0.5 + o * r * 0.5, p + dir * r * 0.2, p + dir * r * 0.7 - o * r * 0.3, p - o * r])
 	draw_colored_polygon(pts, C_BODY_DARK)
 	draw_circle(p + dir * r * 0.2, r * 0.35, Color(C_HEART, 0.25 + 0.15 * sin(t * 4.0)))
-
-
-## 페이즈 1 표적: 포대·팔꿈치에 맥동하는 약점 표시 + 손상 단계(체력바 대신)
-func _draw_part_marks() -> void:
-	if phase != 1 or dead:
-		return
-	var pulse := 0.5 + 0.5 * sin(t * 5.0)
-	for i in 4:
-		if not part_alive(i):
-			continue
-		var p := part_pos(i)
-		var r: float = PART_R[i]
-		if focus_glow > 0.0:                    # 방향 지정·차지 중: 노릴 수 있는 표적 강조 (사거리 안이면 더 밝게)
-			var in_reach := p.distance_to(focus_from) <= focus_reach
-			draw_circle(p, r * 1.7, Color(C_HEART, focus_glow * (0.3 if in_reach else 0.12) * (0.6 + 0.4 * pulse)))
-			if in_reach:
-				draw_arc(p, r * 1.7, 0.0, TAU, 32, Color(1.0, 0.85, 0.55, focus_glow * 0.8), 3.0)
-		if i >= 2 and is_staggered(i - 2):      # 요격으로 멈춘 팔: 관절이 크게 빛난다
-			draw_circle(p, r * 1.3 + 8.0 * pulse, Color(1.0, 0.75, 0.4, 0.35))
-		var flick := 1.0
-		if part_stage[i] >= 3:                  # 거의 부서짐: 약점 빛이 깜빡인다
-			flick = 0.4 + 0.6 * float(int(t * 9.0 + i) % 3 != 0)
-		var cc := Color(C_HEART, 0.85 * flick).lerp(Color.WHITE, part_flash[i])
-		draw_circle(p, r * 0.45 + 4.0 * pulse, Color(C_HEART, (0.18 + 0.12 * pulse + (0.15 if strike_glow else 0.0)) * flick))
-		draw_circle(p, r * 0.28, cc)
-		var edge := Color(1.0, 0.85, 0.5, 0.9) if strike_glow else Color(C_PLATE_EDGE, 0.9)
-		draw_arc(p, r + 6.0, 0.0, TAU, 32, edge, 3.0)
-		_draw_part_damage(i, p, r, pulse)
-
-
-## 외부 시스템 손상: 1 긁힘 → 2 빛나는 균열 + 불꽃 → 3 떨어져 나간 자리 + 연기
-func _draw_part_damage(i: int, p: Vector2, r: float, pulse: float) -> void:
-	var st: int = part_stage[i]
-	if st <= 0:
-		return
-	var base := i * 1.7
-	for k in 3:
-		var a := base + k * 2.1
-		var c0 := p + Vector2.from_angle(a) * r * 0.55
-		draw_line(c0, c0 + Vector2.from_angle(a + 1.9) * r * 0.5, Color(0.75, 0.78, 0.84, 0.6), 2.5)
-	if st >= 2:
-		for k in 3:
-			var a := base + 0.6 + k * 2.1
-			var q0 := p + Vector2.from_angle(a) * r * 0.3
-			var q1 := q0 + Vector2.from_angle(a + 0.4) * r * 0.4
-			var q2 := q1 + Vector2.from_angle(a - 0.3) * r * 0.4
-			draw_polyline(PackedVector2Array([q0, q1, q2]), Color(1.0, 0.55, 0.25, 0.6 + 0.35 * pulse), 3.0)
-		if fmod(t * 3.0 + i * 0.37, 1.0) < 0.25:
-			for k in 3:
-				var sa := t * 11.0 + k * 2.0 + i
-				draw_circle(p + Vector2.from_angle(sa) * r * (0.6 + 0.4 * fmod(t * 4.0 + k, 1.0)), 2.5, Color(1.0, 0.85, 0.5))
-	if st >= 3:
-		var nc := p + Vector2.from_angle(base + 2.5) * r * 0.85
-		draw_circle(nc, r * 0.35, C_CAVITY)
-		draw_circle(nc, r * 0.18, Color(C_HEART, 0.35 + 0.3 * pulse))
-		for k in 4:
-			var life := fmod(t * 0.6 + k * 0.25 + i * 0.13, 1.0)
-			var sp := p + Vector2(sin(t + k * 1.7) * 14.0 + (k - 1.5) * 10.0, -r * 0.5 - life * 160.0)
-			draw_circle(sp, 12.0 + life * 26.0, Color(0.32, 0.33, 0.36, 0.45 * (1.0 - life)))
 
 
 func _draw_debris() -> void:
