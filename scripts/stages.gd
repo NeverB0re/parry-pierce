@@ -8,6 +8,8 @@ const LIST := [
 		"coord": "퇴각 항로 1구간"},
 	{"id": "fortress", "name": "탄막 요새", "script": "res://scripts/colossi/fortress.gd", "core": "reflect",
 		"coord": "퇴각 항로 2구간"},
+	{"id": "kraken", "name": "크라켄", "script": "res://scripts/colossi/kraken.gd", "core": "assault",
+		"coord": "퇴각 항로 3구간"},
 ]
 
 const MAP_STAGES := 9                # 월드 맵의 스테이지 수 (목적지는 그다음, 10번째)

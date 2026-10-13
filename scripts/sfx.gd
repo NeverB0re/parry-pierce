@@ -19,6 +19,8 @@ func _ready() -> void:
 	streams["perfect"] = _build(0.8, func(t: float) -> float:
 		return (sin(TAU * 1250.0 * t) * 0.45 + sin(TAU * 1870.0 * t) * 0.3 + sin(TAU * 3300.0 * t) * 0.25) * exp(-t * 6.0) * 0.5 \
 			+ sin(TAU * (75.0 - 30.0 * t) * t) * exp(-t * 5.0) * 0.8 + randf_range(-1, 1) * exp(-t * 40.0) * 0.7)
+	streams["deflect"] = _build(0.22, func(t: float) -> float:     # 근접공격 패리: 피해 없이 튕겨냄 → 맑은 울림 없는 둔탁한 금속음
+		return (sin(TAU * 340.0 * t) * 0.5 + sin(TAU * 515.0 * t) * 0.35) * exp(-t * 26.0) * 0.7 			+ randf_range(-1, 1) * exp(-t * 45.0) * 0.45)
 	streams["armor"] = _build(0.3, func(t: float) -> float:
 		return sin(TAU * 130.0 * t) * exp(-t * 18.0) * 0.8 + randf_range(-1, 1) * exp(-t * 35.0) * 0.5 \
 			+ sin(TAU * 900.0 * t) * exp(-t * 25.0) * 0.2)

@@ -31,7 +31,7 @@ func _process(_d: float) -> bool:
 	if n == 60 and main.stage_idx == 1:       # 프레스 예고(근접 위험구간) 그리기 확인
 		b.start_attack(b.Press.new())
 	if n % 40 == 0 and n < 400:          # 부위를 조금씩 깎아 단계 그림을 거친다
-		for i in 4:
+		for i in b.part_count():
 			b.damage_part(i, 4)
 	if n == 300:
 		p.buffed = true

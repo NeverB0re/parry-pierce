@@ -5,7 +5,7 @@ extends CanvasLayer
 
 const Sprites := preload("res://scripts/sprites.gd")
 
-const ORDER := ["dodge", "parry", "dashparry", "charge", "unparry", "barrage"]
+const ORDER := ["dodge", "parry", "dashparry", "charge", "unparry", "barrage", "tentacle"]
 const SAVE_PATH := "user://tutorial.cfg"
 
 var enabled := true                  # false: 자동 팝업·저장 없음 (테스트·헤드리스)
@@ -54,7 +54,7 @@ func _pages() -> Dictionary:
 			"lines": [
 				"금색 탄은 %s 으로 막을 수 있습니다. 누르는 순간 짧은 패리 판정이 열리니 탄이 닿기 직전에 누르세요." % par,
 				"성공하면 시간이 느려집니다. 마우스(스틱)로 방향을 정하고 버튼을 떼면 리버스 드라이브! 받아낸 에너지를 추진기로 방출해 충돌합니다. 피해 12 (PERFECT 패리는 16). 적중하면 돌진 쿨다운이 바로 돌아와 튕겨나는 중에도 돌진할 수 있습니다.",
-				"금색 = 패리할 수 있는 공격입니다. 팔 휘두르기를 그냥 패리하면 피해만 막고 튕겨나기만 합니다.",
+				"금색 = 패리할 수 있는 공격입니다. 팔 휘두르기 같은 근접공격을 그냥 패리하면 피해만 막고 튕겨나기만 합니다 — 둔탁한 금속음과 회색 불꽃이 '막았지만 피해는 없음' 표시입니다.",
 				"무엇이든 막아 내면(잔탄 흡수·근접공격 패리 포함) 패리 쿨다운이 없어져 바로 다시 패리할 수 있습니다. 헛치면 잠깐 쿨다운이 생깁니다.",
 			],
 		},
@@ -82,6 +82,14 @@ func _pages() -> Dictionary:
 				"잔탄은 패리해도 흡수될 뿐 리버스 드라이브는 열리지 않습니다. 흡수해도 패리 쿨다운이 없어 겹쳐 오는 잔탄을 연달아 막을 수 있습니다. 일반 돌진이 끝난 직후 0.25초는 잔탄을 맞지 않습니다(옅은 실드).",
 				"크고 둥근 금색 탄(주탄)과 붉은 불길을 두른 유도탄을 패리해야 리버스 드라이브가 열립니다. 유도탄은 쫓아오지만 크고 느려서 패리하기 좋습니다.",
 				"바닥 가까이 머물면 융해 지대에 기뢰가 내려앉아 위로 터집니다.",
+			],
+		},
+		"tentacle": {
+			"title": "크라켄 — 촉수를 요격해 끊기",
+			"lines": [
+				"촉수 공격(내려찍기·휩쓸기·조이기)은 모두 근접공격입니다. 촉수가 위치를 잡고 멈춰 붉게 점멸할 때 차지 강습으로 부딪히면 요격! 공격이 끊기고 그 촉수의 구동부(촉수 위쪽의 빛나는 점)에 바로 피해 8이 들어갑니다.",
+				"구동부를 부수면 그 촉수는 축 늘어져 다시 공격하지 못합니다. 대신 남은 촉수는 점점 빨라지고, 둘 이상 잃으면 플레이어를 둘러싸 조여 드는 고리(조이기)가 나옵니다 — 위아래 틈으로 빠져나가거나 한쪽 촉수를 요격하면 풀립니다.",
+				"바깥의 큰 다리 둘이 벽을 짚으면 방전 그물(보라, 패리 불가)이 경기장을 훑습니다. 돌진으로 통과하세요.",
 			],
 		},
 		"unparry": {
@@ -346,6 +354,8 @@ class Stage extends Control:
 				_unparry()
 			"barrage":
 				_barrage()
+			"tentacle":
+				_tentacle()
 
 	func _dodge() -> void:
 		var T := 6.0
@@ -591,6 +601,63 @@ class Stage extends Control:
 				_txt("요격! 구동부 피해 8", Vector2(el.x + 10.0, el.y - 36.0), 20, GOLD)
 			if u >= 1.5 and u < 2.4:
 				_mouse(Vector2(size.x - 40.0, 60.0), true, false)
+
+	## 촉수 요격: 겨누고 멈춘 촉수에 차지 강습 → 움츠러들고 구동부 피해 → 세 번이면 축 늘어진다
+	func _tentacle() -> void:
+		var T := 7.0
+		var tt := fmod(t, T)
+		var root := Vector2(330, -20)
+		var x := 330.0
+		var top := 70.0
+		var whip_end := top + 70.0
+		var limp := tt >= 5.0
+		var recoil := _smooth(3.0, 3.5, tt) * (1.0 - _smooth(4.2, 5.0, tt))
+		var rise := _smooth(0.0, 1.0, tt)
+		var tip := Vector2(x, lerpf(240.0, whip_end, rise)) + Vector2(0, -60.0) * recoil
+		if limp:
+			tip = Vector2(380, 230)
+		var mid := root.lerp(tip, 0.45) + Vector2(70.0 if not limp else 30.0, 0)
+		var col := Color(0.2, 0.26, 0.28) if not limp else Color(0.12, 0.13, 0.14)
+		var pts := PackedVector2Array()
+		for q in 13:
+			pts.append(root.bezier_interpolate(mid + Vector2(0, -60), mid + Vector2(0, 30), tip, q / 12.0))
+		for q in 12:
+			draw_line(pts[q], pts[q + 1], col, lerpf(26.0, 10.0, q / 11.0))
+		var drv := pts[4]
+		var flash := _smooth(3.0, 3.1, tt) * (1.0 - _smooth(3.1, 3.6, tt))
+		if not limp:
+			draw_circle(drv, 11.0, Color(1.0, 0.42, 0.22).lerp(Color.WHITE, flash))
+			_ring(drv, 16.0, Color(0.62, 0.3, 0.14), 2.0)
+		else:
+			draw_circle(drv, 9.0, Color(1.0, 0.42, 0.22, 0.25))
+		if tt >= 1.0 and tt < 2.9:                     # 겨누고 멈춤: 내리꽂힐 띠
+			var blink := 0.5 + 0.5 * sin(t * 24.0)
+			draw_rect(Rect2(x - 18.0, top, 36.0, 200.0), Color(1.0, 0.16, 0.12, 0.08 + 0.15 * blink))
+			draw_rect(Rect2(x - 18.0, top, 36.0, 200.0), Color(1.0, 0.5, 0.4, 0.4 + 0.3 * blink), false, 2.0)
+		var sp := Vector2(560, 215)
+		var pos := sp
+		if tt >= 1.4 and tt < 2.6:
+			pos += Vector2(randf_range(-1, 1), randf_range(-1, 1)) * 2.0
+			draw_arc(pos, 44.0, -PI * 0.5, -PI * 0.5 + TAU * _smooth(1.4, 2.4, tt), 32, Color(1.0, 0.6, 0.2), 3.0)
+		elif tt >= 2.6 and tt < 3.0:
+			pos = sp.lerp(tip + Vector2(14, 10), _smooth(2.6, 3.0, tt) * 0.999)
+		elif tt >= 3.0:
+			pos = tip + Vector2(14, 10) + Vector2(80.0, 40.0) * _smooth(3.0, 3.8, tt)
+		if limp:
+			pos = sp
+		_ship(pos, (tip - sp).angle() if tt < 3.0 else -PI * 0.5, 1.0, "r" if tt >= 1.4 and tt < 3.4 else "b")
+		if tt < 1.0:
+			_caption("촉수가 솟아 겨눈다 — 아직 요격 불가", Color(0.75, 0.78, 0.85))
+		elif tt < 3.0:
+			_caption("멈춰 붉게 점멸 = 차지 강습으로 요격!", Color(1.0, 0.8, 0.6))
+		elif tt < 5.0:
+			_caption("요격! 그 촉수의 구동부에 피해 8", GOLD)
+			_spark(tip, _smooth(3.0, 3.6, tt), Color(1.0, 0.85, 0.5), 14, 50.0)
+			_spark(drv, _smooth(3.0, 3.6, tt), Color(1.0, 0.6, 0.3), 8, 34.0)
+		else:
+			_caption("구동부가 부서진 촉수는 축 늘어진다", Color(0.85, 0.9, 1.0))
+		if tt >= 1.4 and tt < 2.6:
+			_mouse(Vector2(size.x - 40.0, 60.0), true, false)
 
 	func _unparry() -> void:
 		var T := 7.0

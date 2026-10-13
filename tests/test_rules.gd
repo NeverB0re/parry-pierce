@@ -33,6 +33,7 @@ func _process(_d: float) -> bool:
 	_v039_test()
 	_v042_test()
 	_v044_test()
+	_v047_test()
 	_telemetry_test()
 	print("FAILS ", fails)
 	quit(fails)
@@ -1428,4 +1429,252 @@ func _v044_test() -> void:
 		if p.dash_kind == "charge":
 			fired = true
 	_check("no charge assault follows the reverse drive (fired %s)" % fired, not fired)
+	main.start_stage(0)
+
+
+## v0.47: 크라켄(촉수 요격·구동부·조이기·방전 그물·소용돌이), 강습 코어, 코어가 열리는 중에도 맞음 + 코어 안에 박히지 않음
+func _v047_test() -> void:
+	main.start_stage(2)
+	var b = main.boss
+	var p = main.player
+	_check("stage 3 is the kraken (%s, parts %d, hp %d)" % [b.get_script().resource_path.get_file(), b.part_count(), b.part_hp[0]],
+		b.get_script().resource_path.ends_with("kraken.gd") and b.part_count() == 6 and b.part_hp[0] == 20 and b.phase == 1)
+	b.next_t = 99.0
+
+	# 내려찍기: 겨누고 멈춘 동안(set) 차지 강습으로 요격 → 그 촉수 구동부 -8, 촉수 움츠러듦
+	p.reset(Vector2(300, -1000), false)
+	var s = b.Slam.new(1)
+	b.start_attack(s)
+	s.claim()
+	for k in 200:
+		main.hitstop = 0
+		p.position = Vector2(300, -1000)
+		p.vel = Vector2.ZERO
+		p.invuln = 1.0
+		main._physics_process(DT)
+		if s.phase == "set":
+			break
+	_check("slam aims at the player column (x %.0f, top %.0f)" % [s.x, s.top], s.phase == "set" and absf(s.x - 300.0) < 1.0 and absf(s.top - (-1620.0)) < 1.0)
+	_check("slam: no hitbox while poised, but interceptable", b.hitboxes(p.position).filter(func(h): return h["id"] == "arm").is_empty() and not b.clash_box(p.position).is_empty())
+	var whip: Vector2 = b.spines[1][8]
+	p.invuln = 0.0
+	p.reset(whip + Vector2(0, 150), false)
+	var hp1: int = b.part_hp[1]
+	_dash_dir("charge", Vector2.UP)
+	for k in 6:
+		main.hitstop = 0
+		main._physics_process(DT)
+	_check("slam intercept: drive unit -8 (hp %d -> %d), tentacle recoils" % [hp1, b.part_hp[1]], b.part_hp[1] == hp1 - 8 and s.phase == "recoil")
+	_check("intercepted tentacle's drive unit glows", b._part_highlight(1))
+
+	# 내려찍기 판정: 띠 안이면 맞는다 (근접 = 회피 불가), 띠 밖은 안전
+	main.reset_run()
+	b.next_t = 99.0
+	p.reset(Vector2(-200, -900), false)
+	s = b.Slam.new(4)
+	b.start_attack(s)
+	s.claim()
+	for k in 300:
+		main.hitstop = 0
+		p.position = Vector2(-200, -900)
+		p.vel = Vector2.ZERO
+		p.invuln = 1.0
+		main._physics_process(DT)
+		if s.phase == "strike" and s.t > 0.2:
+			break
+	var hbs: Array = b.hitboxes(Vector2(-200, -900)).filter(func(h): return h["id"] == "arm")
+	_check("slam strike: melee hitbox in the band", hbs.size() == 1 and hbs[0]["melee"] and b.overlaps(hbs[0], Vector2(-200, -900), 12.0))
+	_check("slam strike: outside the band is safe", hbs.size() == 1 and not b.overlaps(hbs[0], Vector2(-200 + s.HALF + 40.0, -900), 12.0))
+
+	# 그냥 패리: 튕겨나기만 하고 구동부 피해 없음 (회색 튕김 피드백)
+	var hp4: int = b.part_hp[4]
+	p.invuln = 0.0
+	p.position = Vector2(-200, -900)
+	p.vel = Vector2.ZERO
+	p.parry_press()
+	main.hitstop = 0
+	main._physics_process(DT)
+	p.parry_release()
+	_check("slam parry: pushed away, no damage, no life lost (hp %d, |v| %.0f)" % [b.part_hp[4], p.vel.length()], b.part_hp[4] == hp4 and main.lives == p.stats.shield_cells and p.vel.length() > 600.0)
+
+	# 촉수가 끊기면 그 촉수를 쓰던 보조 공격도 끊긴다
+	main.reset_run()
+	b.next_t = 99.0
+	var side = b.Slam.new(5, false, 0.5)
+	b.start_side(side)
+	side.claim()
+	_check("second slam is a side attack holding its tentacle", b.lingering.has(side) and b.busy[5] == side)
+	b.damage_part(5, 99)
+	_check("breaking a tentacle cuts its side attack", not b.lingering.has(side))
+	main.hitstop = 0
+	main._physics_process(DT)
+	_check("broken tentacle is not ready", not b.tent_ready(5) and b.busy[5] == null)
+
+	# 휩쓸기: 겨눈 플레이어 위를 쓸고 지나간다
+	main.reset_run()
+	b.next_t = 99.0
+	var lash = b.Lash.new(1)
+	b.start_attack(lash)
+	lash.claim()
+	var pp := Vector2(700, -1300)
+	var swept := false
+	for k in 400:
+		main.hitstop = 0
+		p.position = pp
+		p.vel = Vector2.ZERO
+		p.invuln = 99.0
+		main._physics_process(DT)
+		for h in b.hitboxes(pp):
+			if h["id"] == "arm" and b.overlaps(h, pp, 12.0):
+				swept = true
+		if b.atk == null:
+			break
+	_check("sweep passes over the player it aimed at", swept)
+
+	# 조이기: 고리가 만들어지면 판정, 위에 틈, 한쪽을 요격하면 둘 다 풀린다
+	main.reset_run()
+	b.next_t = 99.0
+	var con = b.Constrict.new(0, 1)
+	b.start_attack(con)
+	con.claim()
+	for k in 200:
+		main.hitstop = 0
+		p.position = Vector2(0, -1300)
+		p.vel = Vector2.ZERO
+		p.invuln = 99.0
+		main._physics_process(DT)
+		if con.phase == "set":
+			break
+	var c0: Vector2 = con.center
+	var ring_hb: Array = b.hitboxes(c0).filter(func(h): return h["id"] == "arm")
+	_check("constrict: ring of two arcs around the player (centre untouched)", ring_hb.size() == 2 and not b.overlaps(ring_hb[0], c0, 12.0) and not b.overlaps(ring_hb[1], c0, 12.0))
+	var on_ring: Vector2 = c0 + Vector2(-con.r, 0)
+	var ring_hb2: Array = b.hitboxes(on_ring).filter(func(h): return h["id"] == "arm")
+	_check("constrict: touching the ring hurts", ring_hb2.size() == 2 and (b.overlaps(ring_hb2[0], on_ring, 12.0) or b.overlaps(ring_hb2[1], on_ring, 12.0)))
+	var top_gap: Vector2 = c0 + Vector2(0, -con.r)
+	var ring_hb3: Array = b.hitboxes(top_gap).filter(func(h): return h["id"] == "arm")
+	_check("constrict: gap at the top", not b.overlaps(ring_hb3[0], top_gap, 12.0) and not b.overlaps(ring_hb3[1], top_gap, 12.0))
+	var hb0: Dictionary = b.clash_box(on_ring)
+	var hp0: int = b.part_hp[0]
+	p.dash_kind = "charge"
+	p.dash_t = 0.1
+	p.vel = Vector2.LEFT * 3000.0
+	main._clash(hb0, on_ring)
+	_check("constrict intercept: that tentacle -8, ring released (hp %d->%d, phase %s)" % [hp0, b.part_hp[0], con.phase], b.part_hp[0] == hp0 - 8 and con.phase == "recoil")
+
+	# 방전 그물: 패리 불가, 선이 경기장을 가로질러 지나간다
+	main.reset_run()
+	b.next_t = 99.0
+	var net = b.Net.new(true)
+	b.start_attack(net)
+	var crossed := false
+	for k in 400:
+		main.hitstop = 0
+		p.position = Vector2(300, -1500)
+		p.vel = Vector2.ZERO
+		p.invuln = 99.0
+		main._physics_process(DT)
+		if b.beam_hit(Vector2(300, -1500), 12.0) != Vector2.ZERO:
+			crossed = true
+		if b.atk == null:
+			break
+	_check("net sweeps across the arena (unparryable line crosses the player)", crossed and b.atk == null and b.bg_hold.is_empty())
+
+	# 코어 페이즈: 촉수 둘이 재기동, 소용돌이는 동시에 예고하는 촉수가 최대 2개
+	main.reset_run()
+	b.next_t = 99.0
+	for i in 6:
+		b.damage_part(i, 99)
+	_check("all drive units -> mantle opens", b.phase == 2)
+	_step(int((b.OPEN_TIME + 1.0) / DT))
+	_check("kraken core phase, two tentacles revived (phase %d, busy %s)" % [b.phase, str(b.busy)], b.phase == 3 and b.tent_ready(2) and b.tent_ready(3) and not b.tent_ready(0))
+	b.next_t = 99.0
+	b.atk = null
+	var vx = b.Vortex.new([2, 3])
+	b.start_attack(vx)
+	var most := 0
+	for k in 600:
+		main.hitstop = 0
+		p.position = Vector2(sin(k * 0.05) * 500.0, -1200)
+		p.vel = Vector2.ZERO
+		p.invuln = 99.0
+		main._physics_process(DT)
+		var warn := 0
+		for a in b.lingering:
+			if a.melee_warning():
+				warn += 1
+		most = maxi(most, warn)
+		if b.atk == null:
+			break
+	_check("vortex finishes with at most 2 tentacles telegraphing at once (max %d)" % most, b.atk == null and most >= 1 and most <= 2)
+	_check("core phase: the core is the target", not b.strike_hit(b.CORE_POS, 10.0).is_empty())
+
+	# 강습 코어: 요격하면 차지 쿨다운이 사라지고 다음 차지가 바로 완료된다
+	p.reset(Vector2(300, -1000), false)
+	p.stats.assault = true
+	p.charge_cd = 1.5
+	p.on_intercept()
+	_check("assault core: intercept clears charge cooldown", p.charge_cd == 0.0 and p.quick_charge)
+	p.press_dash()
+	_check("assault core: next charge is complete at once", p.is_charged())
+	p.charging = false
+	p._dash("charge")
+	_check("assault core: used up by the charge", not p.quick_charge)
+	p.stats.assault = false
+	p.on_intercept()
+	_check("without the core intercept changes nothing", not p.quick_charge)
+
+	# 처치: 강습 코어 획득
+	var old = main.profile
+	var mp = main.Profile.new()
+	mp.persist = false
+	main.profile = mp
+	main._core_destroyed(b.core.center)
+	_check("kraken clear gives the assault core", mp.cores.has("assault") and mp.cleared.has("kraken"))
+	main.profile = old
+
+	# 코어가 열리는 중(페이즈 2)에도 돌진이 맞고, 아래에서 맞혀도 코어 안으로 솟구치지 않는다
+	main.start_stage(1)
+	b = main.boss
+	p = main.player
+	b.next_t = 99.0
+	for i in 4:
+		b.damage_part(i, 99)
+	_check("fortress opening (phase 2)", b.phase == 2)
+	main.debug.god = true
+	p.reset(Vector2(0, -1050), false)
+	var a0: int = b.core.armor_hp
+	_dash_dir("dash", Vector2.UP)
+	for k in 40:
+		main.hitstop = 0
+		main._physics_process(DT)
+	main.debug.god = false
+	_check("dash hits the core while it is opening (armor %d -> %d)" % [a0, b.core.armor_hp], b.core.armor_hp == a0 - 1)
+	_check("hit from below rebounds outward, not into the core (y %.0f)" % p.position.y, not Geometry2D.is_point_in_polygon(p.position, b.core.shell_poly) and p.position.y > -1380.0)
+
+	# 잔탄 체력 링: 평소엔 안 보이고, 잔탄 하나에 2칸, 5초 뒤 3칸으로 돌아오고 잠시 뒤 사라진다
+	main.reset_run()
+	b.next_t = 99.0
+	p.reset(Vector2(300, -1500), false)
+	_step(2)
+	_check("heat ring hidden at first", p.heat_vis <= 0.0 and p.heat_cells == 3)
+	p.invuln = 0.0
+	p.small_guard = 0.0
+	b.shots.spawn(p.position, Vector2.ZERO, 5.0, 1.0, 0.0, b.shots.Kind.SMALL)
+	main.hitstop = 0
+	main._physics_process(DT)
+	main._physics_process(DT)
+	_check("one small hit: ring shows 2 of 3 (heat %d, cells %d)" % [main.heat, p.heat_cells], main.heat == 1 and p.heat_cells == 2 and p.heat_vis > 0.0)
+	for k in int((main.HEAT_COOL + 0.2) / DT):
+		p.position = Vector2(300, -1500)
+		p.vel = Vector2.ZERO
+		main.hitstop = 0
+		main._physics_process(DT)
+	_check("cooled after 5 s: ring back to 3 and still shown", main.heat == 0 and p.heat_cells == 3 and p.heat_vis > 0.0)
+	for k in int((p.HEAT_RING_HOLD + p.HEAT_RING_FADE + 0.2) / DT):
+		p.position = Vector2(300, -1500)
+		p.vel = Vector2.ZERO
+		main.hitstop = 0
+		main._physics_process(DT)
+	_check("then the ring disappears", p.heat_vis <= 0.0)
 	main.start_stage(0)

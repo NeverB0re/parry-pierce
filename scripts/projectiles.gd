@@ -15,6 +15,7 @@ const WARMUP := 0.3                   # 발사 직후 50% 속도에서 출발해
 const WARMUP_FLOOR := 0.5
 const HOMING_TIME := 3.6              # 유도탄은 발사 후 이 시간 동안만 방향을 튼다
 const HOMING_TURN := 2.0              # 초당 회전 (라디안)
+const HOMING_BLINK := 1.2             # 적 유도탄은 수명이 이만큼 남으면 점멸한다 (곧 사라진다는 표시)
 const REFLECT_SPEED := 1500.0         # 반사된 탄 속도
 const REFLECT_DMG := [1, 1, 1, 3]     # 반사된 탄의 피해 (유도탄은 되돌리면 크게)
 const KILL_X := 1250.0                # 이 밖으로 나가면 사라진다 (벽 너머 / 용암 / 천장 위)
@@ -216,18 +217,22 @@ func draw(ci: CanvasItem) -> void:
 			ci.draw_texture_rect(_tex_small, Rect2(pos[i] - half, half * 2.0), false, mod)
 			continue
 		var hot: bool = k == Kind.HOMING and mine[i] == 0
+		var fade := 1.0
 		if hot:
 			half = Vector2.ONE * float(RADII[k]) * 2.1
+			if life[i] < HOMING_BLINK:              # 곧 사라진다: 점멸 (끝에 가까울수록 빠르게)
+				fade = 1.0 if fmod(sqrt(life[i]) * 10.0, 1.0) > 0.4 else 0.22
+				mod = Color(1, 1, 1, fade)
 		var tex: Texture2D = _tex_lava if k == Kind.LAVA else (_tex_homing if hot else _tex_bolt)
 		ci.draw_texture_rect(tex, Rect2(pos[i] - half, half * 2.0), false, mod)
 		if k == Kind.HOMING:                      # 유도탄: 바깥에서 도는 끊긴 고리 (쫓아온다는 모양 단서). 적 것은 붉게 맥동한다
 			var rr: float = RADII[k] + 9.0
 			if hot:
-				ci.draw_arc(pos[i], rr + 7.0 + 4.0 * pulse, 0.0, TAU, 20, Color(C_HOMING, 0.4), 2.0)
+				ci.draw_arc(pos[i], rr + 7.0 + 4.0 * pulse, 0.0, TAU, 20, Color(C_HOMING, 0.4 * fade), 2.0)
 			var segs := 4 if hot else 3
 			for j in segs:
 				var a0 := spin * (1.6 if hot else 1.0) + j * TAU / float(segs)
-				ci.draw_arc(pos[i], rr, a0, a0 + (1.0 if hot else 1.3), 8, Color(C_MINE, 0.9) if mine[i] == 1 else Color(1.0, 0.45, 0.2, 0.95), 4.0 if hot else 3.0)
+				ci.draw_arc(pos[i], rr, a0, a0 + (1.0 if hot else 1.3), 8, Color(C_MINE, 0.9) if mine[i] == 1 else Color(1.0, 0.45, 0.2, 0.95 * fade), 4.0 if hot else 3.0)
 
 
 ## 잔탄 텍스처: 네 갈래로 뾰족한 주황 별 (가운데는 밝은 노랑, 테두리는 짙은 갈색, 번짐 없음) — 금색 둥근 주탄과 모양부터 다르게

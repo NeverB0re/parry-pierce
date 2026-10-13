@@ -9,6 +9,9 @@ const CORES := {
 	"reflect": {"name": "반사 코어", "from": "fortress",
 		"desc": "리버스 드라이브로 돌진하는 동안만 기체 둘레 70px 안에 닿은 탄을 표적으로 되돌린다 (적중해 튕겨나면 끝). 탄 하나당 피해 1, 유도탄은 3",
 		"mods": {"reflect": ["set", true]}},
+	"assault": {"name": "강습 코어", "from": "kraken",
+		"desc": "요격(차지 강습·리버스 드라이브로 근접공격에 부딪힘)에 성공하면 차지 쿨다운이 사라지고, 다음 차지가 모으는 시간 없이 바로 완료된다 (기체 둘레의 주황 불씨)",
+		"mods": {"assault": ["set", true]}},
 }
 
 

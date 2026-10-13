@@ -41,3 +41,4 @@ extends Resource
 @export_group("코어 아이템")
 @export var counter := false                ## 반격 코어: 패리한 탄(잔탄 흡수 포함)이 사라지지 않고 표적으로 빠르게 되돌아간다
 @export var reflect := false                ## 반사 코어: 리버스 드라이브로 돌진하는 동안만 닿은 탄을 표적으로 되돌린다
+@export var assault := false                ## 강습 코어: 요격에 성공하면 차지 쿨다운이 사라지고 다음 차지가 모으는 시간 없이 바로 완료된다

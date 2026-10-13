@@ -48,8 +48,14 @@ const PRESS_PIN_SPEED := 2300.0  # 프레스(천장 근접공격)를 패리하�
 const PRESS_PIN_TIME := 1.0
 const STUN_INVULN := 0.4         # 스턴이 끝난 뒤 추가 무적
 const DASH_PARRY_GRACE := 0.12   # 돌진패리: 일반 돌진이 끝난 직후에도 이만큼은 돌진 중으로 친다
+const CORE_REBOUND := 0.45       # 코어 안쪽으로 튕길 뻔한 속도를 바깥으로 이 비율만큼 되튕긴다
+const CORE_REBOUND_SHIELD := 0.5 # 그때의 튕김 무적
 const STRIKE_PASS := 0.25         # 적중 직후 이 시간 안에 시작한 일반 돌진은, 방금 맞힌 표적의 원 안쪽에서만 충돌하지 않는다 (적 안에서 빠져나오는 돌진이 멈추지 않게)
 const SMALL_GUARD := 0.25        # 일반 돌진이 끝난 직후 이 시간 동안 잔탄에 맞지 않는다 (옅은 실드)
+const HEAT_RING_R := 64.0        # 잔탄 체력 링 (초기 빌드의 외부 시스템 원형 체력바 모양): 돌진 쿨다운 링 바깥
+const HEAT_RING_HOLD := 1.0      # 다 회복된 뒤 이만큼 보였다가
+const HEAT_RING_FADE := 0.4      # 이만큼에 걸쳐 사라진다
+const HEAT_RING_BREAK := 0.7     # 셋째 피격으로 셀이 깨질 때 빈 링이 붉게 깜빡이는 시간
 const HURT_PUSH := 500.0
 const HURT_POP := 380.0          # 맞으면 살짝 솟구친다
 const LAUNCH_SPEED := 1850.0     # 발판에서의 첫 돌진 = 발사. 정점 약 y -2400 (어깨 높이)
@@ -97,6 +103,12 @@ var charge_t := 0.0
 var charged_notified := false
 var dash_cd := 0.0
 var charge_cd := 0.0             # 차지 강습 후 다음 차지가 완료될 수 있을 때까지
+var quick_charge := false        # 강습 코어: 요격에 성공했다 → 다음 차지는 모으는 시간 없이 바로 완료
+var heat_vis := 0.0              # 잔탄 체력 링이 보이는 남은 시간 (과열 중엔 계속 가득)
+var heat_cells := 3              # 링에 그리는 남은 칸 (바뀌는 순간을 알아 번쩍임을 준다)
+var heat_flash := 0.0            # 칸이 깎이거나 돌아온 순간의 번쩍임
+var heat_flash_k := 0            # 번쩍이는 칸
+var heat_break := 0.0            # 셀이 깨진 직후: 빈 링이 붉게 깜빡인다
 var parry_active := false
 var parry_held := false
 var parry_t := 0.0
@@ -146,6 +158,11 @@ func reset(pos: Vector2, platform := false) -> void:
 	bounce_rise = 0.0
 	parry_hit = false
 	charge_cd = 0.0
+	quick_charge = false
+	heat_vis = 0.0
+	heat_cells = 3
+	heat_flash = 0.0
+	heat_break = 0.0
 	small_guard = 0.0
 	strike_pass_t = 0.0
 	pass_target = {}
@@ -236,7 +253,7 @@ func press_dash() -> void:
 		return
 	pending_kind = ""
 	charging = true
-	charge_t = 0.0
+	charge_t = charge_need() if quick_charge else 0.0
 	charged_notified = false
 
 
@@ -278,6 +295,7 @@ func _dash(kind: String) -> void:
 	dash_cd = stats.dash_cooldown
 	if kind == "charge":
 		charge_cd = stats.charge_cooldown
+		quick_charge = false
 	evade_window = stats.perfect_evade_window if kind == "dash" else 0.0
 	evade_rewarded = false
 	vel = aim * spd
@@ -492,6 +510,7 @@ func step(dt: float) -> void:
 		bouncing = false
 	launch_t = maxf(0.0, launch_t - dt)
 	parry_flash = maxf(0.0, parry_flash - dt * 4.0)
+	_step_heat_ring(dt)
 	if stun > 0.0:
 		stun -= dt
 		if stun <= 0.0:
@@ -679,6 +698,14 @@ func _on_strike(hit: Dictionary) -> void:
 	if frozen:
 		return
 	bounce_off(dir, kind)
+	if hit.get("kind", "") == "core":            # 큰 코어: 튕김이 껍질 안쪽(예: 아래에서 맞혀 위로)을 향하면 바깥으로 되튄다 (코어 안에 박히지 않게)
+		var n: Vector2 = hit["n"]
+		var vn := vel.dot(n)
+		if vn < 0.0:
+			vel -= n * vn * (1.0 + CORE_REBOUND)
+			bounce_rise = 0.0                      # 솟구치지 않으므로 튕김 무적은 짧게 고정
+			shield_t = CORE_REBOUND_SHIELD
+			shield_max = CORE_REBOUND_SHIELD
 
 
 ## 요격 피해: 리버스 드라이브로 요격하면 리버스 드라이브 피해(12, PERFECT 16) 그대로, 차지 강습이면 clash_damage
@@ -696,6 +723,38 @@ func clash_damage() -> int:
 	last_hit_strong = false
 	_clear_buff()
 	return dmg
+
+
+## 잔탄 체력 링: 과열(main.heat)이 있으면 보이고, 다 식으면 잠시 뒤 사라진다. 칸이 바뀌면 그 칸이 번쩍인다
+func _step_heat_ring(dt: float) -> void:
+	var hmax: int = main.HEAT_MAX
+	var cells: int = hmax - int(main.heat)
+	heat_flash = maxf(0.0, heat_flash - dt * 3.0)
+	heat_break = maxf(0.0, heat_break - dt)
+	if cells != heat_cells:
+		heat_flash_k = mini(cells, heat_cells)          # 깎이면 사라진 칸, 돌아오면 새로 찬 칸
+		heat_flash = 1.0
+		heat_cells = cells
+	if int(main.heat) > 0 or heat_break > 0.0:
+		heat_vis = HEAT_RING_HOLD + HEAT_RING_FADE
+	else:
+		heat_vis = maxf(0.0, heat_vis - dt)
+
+
+## 셋째 잔탄으로 셀이 깨짐 (main.gd): 빈 링을 잠깐 붉게 보인 뒤 가득 찬 링으로
+func on_heat_break() -> void:
+	heat_break = HEAT_RING_BREAK
+	heat_vis = HEAT_RING_HOLD + HEAT_RING_FADE
+
+
+## 요격 성공 (main.gd). 강습 코어가 있으면 차지 쿨다운을 없애고 다음 차지를 바로 완료시킨다 (이미 누르고 있으면 그 자리에서 완료)
+func on_intercept() -> void:
+	if not stats.assault:
+		return
+	charge_cd = 0.0
+	quick_charge = true
+	if charging:
+		charge_t = maxf(charge_t, charge_need())
 
 
 func _clear_buff() -> void:
@@ -862,6 +921,29 @@ func _draw_gold_tail(k: float) -> void:
 
 
 ## 무적이 남은 시간 (실드가 끝나기 직전 깜빡임용). 돌진·조준·발사 중엔 넉넉하게 본다
+func _draw_heat_ring() -> void:
+	var a := clampf(heat_vis / HEAT_RING_FADE, 0.0, 1.0)
+	var hmax: int = main.HEAT_MAX
+	var seg := TAU / hmax
+	var full := Color(1.0, 0.62, 0.18)
+	if heat_break > 0.0:                       # 셀이 깨졌다: 빈 칸들이 붉게 깜빡인다
+		var on := fmod(heat_break * 8.0, 1.0) > 0.4
+		for k in hmax:
+			draw_arc(Vector2.ZERO, HEAT_RING_R, -PI * 0.5 + k * seg + 0.14, -PI * 0.5 + (k + 1) * seg - 0.14, 12,
+				Color(1.0, 0.2, 0.12, (0.9 if on else 0.3) * a), 5.0)
+		return
+	for k in hmax:
+		var a0 := -PI * 0.5 + k * seg + 0.14
+		var a1 := -PI * 0.5 + (k + 1) * seg - 0.14
+		if k < heat_cells:
+			var c := full.lerp(Color.WHITE, heat_flash if k == heat_flash_k else 0.0)
+			draw_arc(Vector2.ZERO, HEAT_RING_R, a0, a1, 12, Color(c, 0.9 * a), 5.0)
+		else:                                  # 깎인 칸: 어두운 자리만 (방금 깎였으면 하얗게 사라진다)
+			draw_arc(Vector2.ZERO, HEAT_RING_R, a0, a1, 12, Color(0.3, 0.16, 0.1, 0.55 * a), 3.0)
+			if k == heat_flash_k and heat_flash > 0.0:
+				draw_arc(Vector2.ZERO, HEAT_RING_R + 6.0 * (1.0 - heat_flash), a0, a1, 12, Color(1, 1, 1, heat_flash * a), 5.0)
+
+
 func _immune_left() -> float:
 	var left := maxf(shield_t, invuln)
 	if dash_t > 0.0 or aim_phase or launch_t > 0.0:
@@ -971,6 +1053,18 @@ func _draw() -> void:
 		var ca := 1.0 if charging or pending_kind != "" else 0.7   # 누르고 기다리는 중이면 또렷하게
 		draw_arc(Vector2.ZERO, 54.0, 0.0, TAU, 48, Color(C_EVADE, 0.15), 3.0)      # 실드·패리 자세 바깥 (차지 쿨다운 막대와 겹치지 않게)
 		draw_arc(Vector2.ZERO, 54.0, -PI * 0.5, -PI * 0.5 + TAU * (1.0 - dash_cd / stats.dash_cooldown), 48, Color(C_EVADE, ca), 3.0)
+
+	# 잔탄 체력 링: 3칸. 잔탄에 맞으면 깎인 모습이 보이고, 식어서 다 차면 잠시 뒤 사라진다
+	if heat_vis > 0.0:
+		_draw_heat_ring()
+
+	# 강습 코어: 다음 차지가 바로 완료된다 → 기체 둘레를 도는 주황 불씨 셋
+	if quick_charge and not charging and not aim_phase:
+		var qa := Time.get_ticks_msec() * 0.008
+		for k in 3:
+			var qp := Vector2.from_angle(qa + k * TAU / 3.0) * 30.0
+			draw_circle(qp, 4.5, Color(C_ATTACK, 0.9))
+			draw_circle(qp, 9.0, Color(C_ATTACK, 0.25))
 
 	# 차지 쿨다운: 기체 아래의 주황 막대가 차오른다 (다 차야 다음 차지가 완료된다). 돌진 쿨다운 링과 겹치지 않게 따로 둔다
 	if charge_cd > 0.0:

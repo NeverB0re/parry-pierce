@@ -374,6 +374,10 @@ func _tutorial_triggers() -> void:
 	var kd: String = boss.attack_kind()
 	if kd == "swing":
 		tutorial.request(["charge"])
+	elif kd == "slam" or kd == "sweep" or kd == "constrict" or kd == "vortex" or kd == "slam2":
+		tutorial.request(["charge", "tentacle"])
+	elif kd == "net":
+		tutorial.request(["unparry"])
 	elif kd == "beam":
 		tutorial.request(["unparry"])
 	elif kd == "spiral" or kd == "fan" or kd == "homing" or kd == "mines":
@@ -482,7 +486,7 @@ func _check_attacks() -> void:
 				if away.length() < 0.1:
 					away = -Vector2(hb["push"])
 				player.on_parry_push(away)
-				_parry_push_feedback(p.lerp(hp_pos, 0.3))
+				_parry_push_feedback(p.lerp(hp_pos, 0.3), away)
 				return
 			var dp_dir: Vector2 = player.vel.normalized() if player.vel.length() > 10.0 else player.aim
 			player.on_parry_success(perfect, dash_parry)
@@ -545,11 +549,12 @@ func _clash(hb: Dictionary, p: Vector2) -> void:
 	player.bounce_off(dir, kind)                 # 먼저 튕긴다 (리버스 드라이브가 끝나며 풀어 주는 경직이 이번 요격의 경직을 풀지 않게)
 	boss.on_parried(hb)                          # 팔: 휩쓸던 반대쪽으로 밀려나 잠시 멈춘다 (관절 노출) / 프레스: 걸려서 도로 올라간다
 	var at := p.lerp(contact, 0.4)
-	if hb.has("part"):                           # 부위에 달린 공격(팔)이면 그 부위에 피해. 프레스는 끊기만 한다
+	if hb.has("part"):                           # 부위에 달린 공격(팔·촉수)이면 그 부위에 피해. 프레스는 끊기만 한다
 		tele.hit("intercept_power" if kind == "power" else "intercept", dmg)
 		boss.damage_part(int(hb["part"]), dmg)
 	else:
 		tele.add("intercept_" + str(hb["id"]))
+	player.on_intercept()                        # 강습 코어: 다음 차지가 바로 완료
 	_buzz(80)
 	hitstop = maxf(hitstop, 0.2)
 	shake = maxf(shake, 24.0)
@@ -622,6 +627,7 @@ func _graze(hb: Dictionary) -> void:
 		return
 	heat = 0
 	lives -= 1
+	player.on_heat_break()
 	player.invuln = maxf(player.invuln, GRAZE_BREAK_INVULN)
 	hitstop = maxf(hitstop, 0.06)
 	shake = maxf(shake, 12.0)
@@ -694,7 +700,7 @@ func _press(hb: Dictionary) -> bool:
 	if player.parry_active and p.y - player.parry_reach() < bottom:
 		tele.add("parry_press")
 		player.on_press_pin()
-		_parry_push_feedback(Vector2(p.x, bottom))
+		_parry_push_feedback(Vector2(p.x, bottom), Vector2.DOWN)
 		shake = maxf(shake, 18.0)
 		return true
 	if p.y - Player.RADIUS >= bottom:
@@ -736,15 +742,22 @@ func _reflect() -> void:
 		fx.ring(player.position, Color(0.75, 1.0, 1.0), 110.0, 0.2, 4.0)
 
 
-## 팔을 그냥 패리: 피해는 막았지만 보상은 없다 → 짧고 가벼운 연출
-func _parry_push_feedback(at: Vector2) -> void:
+## 근접공격(팔·촉수·프레스)을 그냥 패리: 막아 내 튕겨났지만 피해는 주지 못했다 → 글자 없이 "튕겨냄"으로 읽히게.
+## 둔탁한 금속음(맑게 울리는 패리음 대신) + 표면을 따라 미끄러지는 회색 강철 불꽃 + 플레이어 쪽 방패 호 + 안으로 오그라드는 회색 링.
+## 피해 표시(주황 폭발 스프라이트·적의 번쩍임)는 없다. away = 접점에서 플레이어 쪽
+func _parry_push_feedback(at: Vector2, away := Vector2.UP) -> void:
 	tele.add("parry_push")
 	_buzz(30)
 	hitstop = maxf(hitstop, 0.06)
 	shake = maxf(shake, 8.0)
-	sfx.play("parry", -4.0)
-	fx.burst(at, 14, Color(0.85, 0.92, 1.0), 600.0, 0.3, 2.5)
-	fx.ring(at, Color(0.85, 0.92, 1.0), 110.0, 0.25, 4.0)
+	sfx.play("deflect", 2.0)
+	sfx.play("parry", -14.0)
+	var d := away.normalized() if away.length() > 0.1 else Vector2.UP
+	var steel := Color(0.7, 0.75, 0.82)
+	fx.arc(at, Color(0.85, 0.95, 1.0), 64.0, d.angle(), 2.0, 0.32, 7.0)
+	fx.burst(at, 12, steel, 760.0, 0.3, 2.5, 700.0, d.orthogonal(), 0.3)
+	fx.burst(at, 12, steel, 760.0, 0.3, 2.5, 700.0, -d.orthogonal(), 0.3)
+	fx.ring(at, Color(0.55, 0.6, 0.68, 0.9), 90.0, 0.3, 3.0, true)
 
 
 func _drain_boss_events() -> void:

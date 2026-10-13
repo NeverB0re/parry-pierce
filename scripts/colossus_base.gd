@@ -260,9 +260,10 @@ func target_pos(from: Vector2) -> Vector2:
 
 
 # ── 플레이어 공격 판정 ─────────────────────────────────
-## 원(p, r)이 닿은 표적. 페이즈 1은 외부 시스템, 페이즈 3은 동력 코어(장갑). {kind, idx?, n}
+## 원(p, r)이 닿은 표적. 페이즈 1은 외부 시스템, 페이즈 2(열리는 중)·3은 동력 코어(장갑). {kind, idx?, n}
+## v0.47: 열리는 중에도 코어가 보이므로 맞는다 (전에는 돌진이 그대로 통과했다)
 func strike_hit(p: Vector2, r: float) -> Dictionary:
-	if dead or phase == 2:
+	if dead:
 		return {}
 	if phase == 1:
 		var best := {}
@@ -288,7 +289,7 @@ func assist_targets(from := Vector2.ZERO) -> Array[Dictionary]:
 		for i in part_count():
 			if part_alive(i):
 				out.append({"pos": part_pos(i), "r": part_radius(i)})
-	elif phase == 3:
+	else:
 		out.append({"pos": core.center, "r": core_assist_r})
 	for a in active_attacks():
 		a.assist_targets(from, out)
@@ -307,11 +308,20 @@ func hitboxes(ppos: Vector2) -> Array[Dictionary]:
 	return out
 
 
-## 차지 강습으로 요격할 수 있는 공격 판정 ({} = 없음)
+## 차지 강습으로 요격할 수 있는 공격 판정 ({} = 없음). 여러 공격이 동시에 요격 가능하면(크라켄 촉수 둘) 플레이어에 닿은 것을 먼저
 func clash_box(ppos: Vector2) -> Dictionary:
-	if dead or atk == null:
+	if dead:
 		return {}
-	return atk.clash_box(ppos)
+	var first := {}
+	for a in active_attacks():
+		var hb: Dictionary = a.clash_box(ppos)
+		if hb.is_empty():
+			continue
+		if overlaps(hb, ppos, 12.0):
+			return hb
+		if first.is_empty():
+			first = hb
+	return first
 
 
 ## 패리 불가 공격(레이저 등) 판정 → 밀려날 방향, 안 맞으면 ZERO
@@ -325,12 +335,14 @@ func beam_hit(p: Vector2, r: float) -> Vector2:
 	return Vector2.ZERO
 
 
-## 패리 / 요격당함: 탄은 사라지고, 공격 판정은 그 모듈이 처리한다 (팔은 밀려난다)
+## 패리 / 요격당함: 탄은 사라지고, 공격 판정은 그 모듈(src, 없으면 지금 공격)이 처리한다 (팔은 밀려난다)
 func on_parried(hb: Dictionary) -> void:
 	if hb["id"] == "bolt":
 		shots.remove(int(hb["idx"]))
-	elif atk != null:
-		atk.on_parried(hb)
+		return
+	var src = hb.get("src", atk)
+	if src != null:
+		src.on_parried(hb)
 
 
 func on_hit_player(hb: Dictionary) -> void:
@@ -350,8 +362,8 @@ func melee_warning() -> bool:
 
 ## 리버스 드라이브가 끝나면 패리로 밀려난 공격(팔)을 바로 풀어 준다
 func release_stagger() -> void:
-	if atk != null:
-		atk.release_stagger()
+	for a in active_attacks():
+		a.release_stagger()
 
 
 func overlaps(hb: Dictionary, p: Vector2, r: float) -> bool:

@@ -47,6 +47,11 @@ func ring(pos: Vector2, color: Color, max_r: float, life := 0.35, width := 4.0, 
 	rings.append({"pos": pos, "color": color, "max_r": max_r, "life": life, "max": life, "width": width, "inward": inward})
 
 
+## 호 하나 (ang 방향을 가운데로 span 만큼). 막아 낸 방패 모양 (근접공격 패리: 피해 없이 튕겨냄)
+func arc(pos: Vector2, color: Color, r: float, ang: float, span: float, life := 0.3, width := 6.0) -> void:
+	rings.append({"pos": pos, "color": color, "max_r": r, "life": life, "max": life, "width": width, "ang": ang, "span": span})
+
+
 const MAX_PARTS := 900                 # 입자 상한: 큰 연출이 겹쳐도 프레임이 무너지지 않게 (넘치면 오래된 것부터 버린다)
 
 
@@ -131,4 +136,8 @@ func _draw() -> void:
 			draw_arc(r["pos"], lerpf(float(r["max_r"]), 8.0, ease(k, 0.6)), 0.0, TAU, 48, c, float(r["width"]) * (0.4 + 0.6 * k) + 1.0)
 			continue
 		c.a *= 1.0 - k
+		if r.has("span"):
+			var a0 := float(r["ang"]) - float(r["span"]) * 0.5
+			draw_arc(r["pos"], float(r["max_r"]) * (0.75 + 0.25 * ease(k, 0.35)), a0, a0 + float(r["span"]), 20, c, float(r["width"]) * (1.0 - k) + 1.0)
+			continue
 		draw_arc(r["pos"], float(r["max_r"]) * ease(k, 0.35), 0.0, TAU, 48, c, float(r["width"]) * (1.0 - k) + 1.0)
