@@ -1,5 +1,6 @@
 extends "res://scripts/attacks/attack.gd"
 ## 부채 탄막: 조준선이 플레이어를 따라가다가, 넓은 부채꼴로 잔탄을 WAVES 번 쏜다. 각 부채의 한가운데 한 발은 주탄.
+## hard(코어 페이즈): 부채 4번, 탄 17개, 간격 짧게.
 ## boss 에 필요한 것: set_glow(c, v), glow_of(c), bolt_mult()
 
 const Projectiles := preload("res://scripts/projectiles.gd")
@@ -16,14 +17,21 @@ var cannon := -1
 var origin := Vector2.ZERO
 var aim := 0.0
 var waves := 0
+var wave_n := WAVES
+var count := COUNT
+var interval := INTERVAL
 
 
-func _init(c: int, o: Vector2, ppos: Vector2) -> void:
+func _init(c: int, o: Vector2, ppos: Vector2, hard := false) -> void:
 	kind = "fan"
 	cannon = c
 	part = c
 	origin = o
 	aim = (ppos - o).angle()
+	if hard:
+		wave_n = 4
+		count = 17
+		interval = 0.4
 
 
 func step(_dt: float, ppos: Vector2) -> void:
@@ -31,12 +39,12 @@ func step(_dt: float, ppos: Vector2) -> void:
 		boss.set_glow(cannon, t / WIND)
 		aim = (ppos - origin).angle()
 		return
-	if t >= WIND + waves * INTERVAL:
+	if t >= WIND + waves * interval:
 		aim = (ppos - origin).angle()
 		var m: float = boss.bolt_mult()
-		var half := (COUNT - 1) / 2
-		for k in COUNT:
-			var a := aim + (k - half) * SPREAD / (COUNT - 1)
+		var half := (count - 1) / 2
+		for k in count:
+			var a := aim + (k - half) * SPREAD / (count - 1)
 			if k == half:
 				boss.shots.spawn(origin, Vector2.from_angle(a) * MAIN_SPEED * m, 9.0)
 			else:
@@ -44,7 +52,7 @@ func step(_dt: float, ppos: Vector2) -> void:
 		boss.emit(Ev.BOLT, origin)
 		boss.set_glow(cannon, 1.0)
 		waves += 1
-		if waves >= WAVES:
+		if waves >= wave_n:
 			boss.finish_attack()
 
 

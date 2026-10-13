@@ -1,14 +1,15 @@
 extends "res://scripts/attacks/attack.gd"
 ## 융해 기뢰 (바닥을 쓰는 패턴): 박격포가 기뢰를 융해 지대 위로 쏘아 올린다. 내려앉은 기뢰는 깜빡이다가
 ## 위쪽 부채꼴로 잔탄을 터뜨린다 (가운데 한 발은 주탄). 낮은 곳에 머물수록 위험하다.
+## hard(코어 페이즈): 기뢰 5개, 더 넓게.
 ## boss 에 필요한 것: MORTARS (박격포 위치 2개), set_glow(c, v)
 
 const Projectiles := preload("res://scripts/projectiles.gd")
 const WIND := 0.5
 const FLIGHT := 0.9                  # 날아가는 시간
 const ARM := 1.1                     # 내려앉은 뒤 터질 때까지 (깜빡임 = 경고)
-const COUNT := 3
 const OFFSETS := [-380.0, 0.0, 380.0]
+const OFFSETS_HARD := [-700.0, -350.0, 0.0, 350.0, 700.0]
 const BURST := 9                     # 터질 때 잔탄 수 (가운데 = 주탄)
 const BURST_SPREAD := 1.7
 const BURST_SPEED := 420.0
@@ -18,10 +19,11 @@ const C_WARN := Color(1.0, 0.3, 0.25)
 var mines: Array[Dictionary] = []    # {from, to, t0, done}
 
 
-func _init(ppos: Vector2) -> void:
+func _init(ppos: Vector2, hard := false) -> void:
 	kind = "mines"
-	for k in COUNT:
-		var x := clampf(ppos.x + OFFSETS[k] + randf_range(-60.0, 60.0), -1080.0, 1080.0)
+	var offs: Array = OFFSETS_HARD if hard else OFFSETS
+	for k in offs.size():
+		var x := clampf(ppos.x + float(offs[k]) + randf_range(-60.0, 60.0), -1080.0, 1080.0)
 		mines.append({"to": Vector2(x, -16.0), "t0": WIND + k * 0.15, "done": false})
 
 

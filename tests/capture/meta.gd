@@ -1,10 +1,10 @@
 extends SceneTree
-# 승리 배너 → 정비 화면 → FTL 도약 캡처 (창 모드, 자동 종료). 인자: -- --notutorial --out=<dir>
+# 승리 배너 → 월드 맵(항로도) → 이전 스테이지 고르기 → FTL 도약 캡처 (창 모드, 자동 종료). 인자: -- --notutorial --out=<dir>
 # 진행 저장·플레이 기록은 끈다 (사용자 저장 파일을 건드리지 않음)
 var main
 var n := 0
 var out := ""
-var shots := {8: "win", 40: "hangar", 46: "hangar_pending"}
+var shots := {8: "win", 40: "world", 80: "world_replay"}
 var ftl_shots := [0.5, 1.0, 1.2, 1.6]
 var ftl_idx := 0
 
@@ -28,24 +28,22 @@ func _process(_d: float) -> bool:
 		var pr = main.Profile.new()
 		pr.persist = false
 		main.profile = pr
-		main.hangar.profile = pr
+		main.world.profile = pr
+		main.start_stage(0)
 		main.player.invuln = 99.0
 		main._core_destroyed(main.boss.core.center)
 	if n == 30:
-		main.profile.bonus_points = 2
-		main.profile.take_node("A1")
-		main.open_hangar()
+		main.open_world()
 	if n == 44:
-		main.hangar._on_node("P1")
-		main.hangar._show_info("P1")
+		main.world.select(0)
 	if shots.has(n):
 		_shot(shots[n])
-	if n == 50:
-		main.hangar.jump()
-	if n > 50 and main.ftl.is_playing() and ftl_idx < ftl_shots.size() and main.ftl.t >= ftl_shots[ftl_idx]:
+	if n == 90:
+		main.world.jump()
+	if n > 90 and main.ftl.is_playing() and ftl_idx < ftl_shots.size() and main.ftl.t >= ftl_shots[ftl_idx]:
 		_shot("ftl_%d" % ftl_idx)
 		ftl_idx += 1
-	if n > 50 and not main.ftl.is_playing():
+	if n > 90 and not main.ftl.is_playing():
 		ftl_idx += 1
 		if ftl_idx >= 10:
 			_shot("arrived")

@@ -11,6 +11,8 @@ var plan := [
 	["press_warn", "press", 80, Vector2(0, -1500), 0.23],
 	["press_hold", "press", 170, Vector2(0, -1500), 0.23],
 	["rings", "rings", 150, Vector2(0, -1640), 0.3],
+	["overload", "overload", 130, Vector2(0, -1640), 0.4],
+	["shield", "shield", 20, Vector2(250, -1200), 1.6],
 ]
 var idx := 0
 var local := 0
@@ -31,7 +33,7 @@ func _process(_d: float) -> bool:
 		var pr = main.Profile.new()
 		pr.persist = false
 		main.profile = pr
-		main.hangar.profile = pr
+		main.world.profile = pr
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	if n < 4:
 		return false
@@ -53,6 +55,18 @@ func _process(_d: float) -> bool:
 			"mines": b.start_attack(b.Mines.new(p.position))
 			"press": b.start_attack(b.Press.new())
 			"rings": b.start_attack(b.Rings.new(b.REACTOR_POS))
+			"overload":
+				for i in 4:
+					b.damage_part(i, 99)
+				b.phase = 3
+				b.atk = null
+				b.next_t = 999.0
+				b.start_attack(b.Overload.new(b.REACTOR_POS))
+			"shield":                                  # 무적 실드 + 잔탄 확대
+				var K2 = b.shots.Kind
+				for k in 3:
+					b.shots.spawn(Vector2(140 + k * 50, -1260), Vector2(-1, 0.3) * 0.01, 99.0, 1.0, 0.0, K2.SMALL)
+				b.shots.spawn(Vector2(370, -1180), Vector2(-1, 0.3) * 0.01, 99.0, 1.0)
 			"bullets":                                 # 주탄·잔탄·유도탄 비교 (멈춰 있는 탄)
 				var K = b.shots.Kind
 				for k in 6:

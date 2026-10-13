@@ -1,6 +1,7 @@
 extends "res://scripts/attacks/attack.gd"
 ## 나선 탄막: 포대가 달아오르며(회전 방향 예고) 잔탄을 양쪽으로 돌려 뿌리고, 그 사이 주탄을 플레이어에게 쏜다.
 ## 잔탄은 피하거나 패리로 흡수하고, 주탄을 패리해 리버스 드라이브를 연다.
+## hard(코어 페이즈): 갈래 3개, 더 오래, 주탄도 더 자주.
 ## boss 에 필요한 것: set_glow(c, v), bolt_mult()
 
 const Projectiles := preload("res://scripts/projectiles.gd")
@@ -19,15 +20,22 @@ var ang := 0.0
 var spin := 1.0
 var smalls := 0
 var mains := 0
+var arms := 2                        # 한 번에 뿌리는 갈래 수 (반대 방향으로 고르게)
+var duration := DURATION
+var main_every := MAIN_EVERY
 
 
-func _init(c: int, o: Vector2) -> void:
+func _init(c: int, o: Vector2, hard := false) -> void:
 	kind = "spiral"
 	cannon = c
 	part = c
 	origin = o
 	ang = randf() * TAU
 	spin = 1.0 if randf() < 0.5 else -1.0
+	if hard:
+		arms = 3
+		duration = 3.2
+		main_every = 0.45
 
 
 func step(_dt: float, ppos: Vector2) -> void:
@@ -36,17 +44,17 @@ func step(_dt: float, ppos: Vector2) -> void:
 		return
 	var ft := t - WIND
 	var m: float = boss.bolt_mult()
-	while smalls * RATE <= ft and smalls * RATE < DURATION:
-		for k in 2:
-			boss.shots.spawn(origin, Vector2.from_angle(ang + k * PI) * SMALL_SPEED * m, 9.0, 0.0, 0.0, Projectiles.Kind.SMALL)
+	while smalls * RATE <= ft and smalls * RATE < duration:
+		for k in arms:
+			boss.shots.spawn(origin, Vector2.from_angle(ang + k * TAU / arms) * SMALL_SPEED * m, 9.0, 0.0, 0.0, Projectiles.Kind.SMALL)
 		ang += TURN * spin
 		smalls += 1
-	while mains * MAIN_EVERY <= ft and mains * MAIN_EVERY < DURATION:
+	while mains * main_every <= ft and mains * main_every < duration:
 		boss.shots.spawn(origin, (ppos - origin).normalized() * MAIN_SPEED * m, 9.0)
 		boss.emit(Ev.BOLT, origin)
 		mains += 1
 	boss.set_glow(cannon, 1.0)
-	if ft >= DURATION:
+	if ft >= duration:
 		boss.finish_attack()
 
 

@@ -44,16 +44,16 @@ func _pages() -> Dictionary:
 		"dodge": {
 			"title": "회피 — 돌진",
 			"lines": [
-				"%s(짧게)으로 돌진합니다. 돌진하는 동안은 무적이라 탄과 레이저를 그대로 통과할 수 있습니다. 단, 근접공격(팔 휘두르기·프레스)은 회피 불가 — 돌진으로 통과할 수 없습니다." % dash,
+				"%s(짧게)으로 돌진합니다. 돌진하는 동안은 무적이라 탄과 레이저를 그대로 통과할 수 있습니다. 무적인 동안은 언제나 푸른 벌집 실드가 둘러쌉니다. 단, 근접공격(팔 휘두르기·프레스)은 회피 불가 — 돌진으로 통과할 수 없습니다." % dash,
 				"돌진은 쿨다운(1.35초)만 있고 횟수 제한이 없습니다. 표적에 닿으면 피해 1을 주고 위로 솟구칩니다. 솟구치는 동안만 보호막이 있고, 기체 통제를 되찾으면 사라집니다.",
-				"돌진을 시작한 직후(0.12초 안)에 공격이 스치면 '퍼펙트 회피'! 다음 차지 강습의 피해가 2배가 되고(동조), 차지가 두 배 빨라지며, 돌진 쿨다운이 즉시 초기화됩니다.",
+				"돌진을 시작한 직후(0.12초 안)에 공격이 스치면 '퍼펙트 회피'! 다음 차지 강습의 피해가 2배가 되고(동조), 차지가 두 배 빨라지며, 돌진 쿨다운이 즉시 초기화되고, 실드가 0.8초 더 남습니다.",
 			],
 		},
 		"parry": {
 			"title": "패리 — 막고 리버스 드라이브",
 			"lines": [
 				"금색 탄은 %s 으로 막을 수 있습니다. 누르는 순간 짧은 패리 판정이 열리니 탄이 닿기 직전에 누르세요." % par,
-				"성공하면 시간이 느려집니다. 마우스(스틱)로 방향을 정하고 버튼을 떼면 리버스 드라이브! 받아낸 에너지를 추진기로 방출해 충돌합니다. 피해 12 (PERFECT 패리는 16).",
+				"성공하면 시간이 느려집니다. 마우스(스틱)로 방향을 정하고 버튼을 떼면 리버스 드라이브! 받아낸 에너지를 추진기로 방출해 충돌합니다. 피해 12 (PERFECT 패리는 16). 적중하면 돌진 쿨다운이 바로 돌아와 튕겨나는 중에도 돌진할 수 있습니다.",
 				"금색 = 패리할 수 있는 공격입니다. 팔 휘두르기를 그냥 패리하면 피해만 막고 튕겨나기만 합니다.",
 				"무엇이든 막아 내면(잔탄 흡수·근접공격 패리 포함) 패리 쿨다운이 없어져 바로 다시 패리할 수 있습니다. 헛치면 잠깐 쿨다운이 생깁니다.",
 			],
@@ -61,15 +61,15 @@ func _pages() -> Dictionary:
 		"charge": {
 			"title": "차지 강습 — 강한 일격과 요격",
 			"lines": [
-				"%s 으로 0.6초 모으고 떼면 차지 강습: 피해 3으로 일반 돌진(1)보다 훨씬 강합니다. 모으는 동안 기체가 떨리고 완료되면 빛납니다. 한 번 쓰면 1.5초 동안은 다시 모을 수 없습니다(주황 링)." % hold,
+				"%s 으로 0.6초 모으고 떼면 차지 강습: 피해 3으로 일반 돌진(1)보다 훨씬 강합니다. 모으는 동안 기체가 떨리고 완료되면 빛납니다. 한 번 쓰면 1.5초 동안은 다시 모을 수 없습니다(주황 링). 적중(요격 포함)하면 돌진 쿨다운이 바로 돌아옵니다." % hold,
 				"적이 팔을 들어 위치를 잡고 붉게 점멸하며 멈춰 있을 때(또는 휘두르는 중) 차지 강습으로 부딪히면 요격! 공격을 끊고 구동부에 피해 8!",
-				"팔을 들어 올리는 중에는 요격할 수 없습니다. 팔 휘두르기는 근접공격이라 일반 돌진으로 통과할 수 없습니다 — 요격하거나, 패리로 튕겨나거나, 범위 밖으로 피하세요.",
+				"팔을 들어 올리는 중에는 요격할 수 없습니다. 근접공격(팔 휘두르기·프레스)은 일반 돌진으로 통과할 수 없습니다 — 요격하거나, 패리로 튕겨나거나, 범위 밖으로 피하세요.",
 			],
 		},
 		"barrage": {
 			"title": "탄막 — 주탄과 잔탄",
 			"lines": [
-				"작은 검붉은 별(잔탄)은 맞으면 아프지만 패리해도 흡수될 뿐, 리버스 드라이브는 열리지 않습니다. 흡수해도 패리 쿨다운이 없어 겹쳐 오는 잔탄을 연달아 막을 수 있습니다.",
+				"작은 주황 별(잔탄)은 맞으면 아프지만 패리해도 흡수될 뿐, 리버스 드라이브는 열리지 않습니다. 흡수해도 패리 쿨다운이 없어 겹쳐 오는 잔탄을 연달아 막을 수 있습니다.",
 				"크고 둥근 금색 탄(주탄)과 고리가 도는 유도탄을 패리해야 리버스 드라이브가 열립니다. 유도탄은 쫓아오지만 크고 느려서 패리하기 좋습니다.",
 				"바닥 가까이 머물면 융해 지대에 기뢰가 내려앉아 위로 터집니다.",
 			],
@@ -77,15 +77,15 @@ func _pages() -> Dictionary:
 		"press": {
 			"title": "프레스 — 천장이 내려온다 (근접, 회피 불가)",
 			"lines": [
-				"천장 전체가 내려와 경기장을 깔아뭉갭니다. 붉게 깜빡이는 정지선 아래로 내려가세요. 판에 닿으면 피해를 입고 판 아래로 밀려납니다.",
-				"근접공격이라 돌진의 무적으로 통과할 수 없습니다.",
+				"천장 전체가 내려와 경기장을 깔아뭉갭니다. 붉게 깜빡이는 정지선 아래로 내려가세요. 내려오는 판에 닿으면 피해를 입고 판 아래로 밀려납니다. 다 내려온 뒤(멈춤·올라감)에는 막히기만 하고 피해는 없습니다.",
+				"근접공격이라 돌진의 무적으로 통과할 수 없습니다. 팔처럼 차지 강습으로 판을 요격하면 프레스가 걸려 도로 올라갑니다.",
 				"패리하면 막기는 하지만 거대한 힘에 아래로 내리꽂혀 융해 지대로 빠집니다. 패리하지 말고 피하세요.",
 			],
 		},
 		"unparry": {
 			"title": "패리 불가 — 보라색 공격",
 			"lines": [
-				"검붉은 보라색 공격(눈 레이저·동심원 파동)은 패리할 수 없습니다. 돌진의 무적으로 통과하세요. 지나갈 부채꼴과 경로가 미리 표시됩니다.",
+				"검붉은 보라색 공격(눈 레이저·심장부에서 퍼지는 동심원 파동)은 패리할 수 없습니다. 돌진의 무적으로 통과하세요. 지나갈 부채꼴과 경로가 미리 표시됩니다.",
 				"돌진을 시작한 직후(0.12초 안)에 스치게 피하면 '강한 퍼펙트 회피'! 다음 차지 강습의 피해가 4배(완전 동조), 무적 1.2초, 눈에 띄는 금빛 오라가 붙습니다.",
 				"그 일격은 퍼펙트 패리에 준하는 큰 임팩트로 들어갑니다.",
 			],
@@ -255,7 +255,8 @@ class Stage extends Control:
 	const MINT := Color(0.45, 1.0, 0.85)
 	const UNP := Color(0.6, 0.08, 0.36)
 	const UNP_C := Color(1.0, 0.62, 0.86)
-	const SMALL_C := Color(0.95, 0.2, 0.22)
+	const SMALL_C := Color(1.0, 0.58, 0.12)
+	const HexShield := preload("res://scripts/hex_shield.gd")
 	var kind := ""
 	var t := 0.0
 	var font: SystemFont
@@ -359,15 +360,15 @@ class Stage extends Control:
 			if dashing:
 				for k in 3:
 					_ship(Vector2(sx - 26.0 * (k + 1), y), 0.0, 0.18, "b")
-			_ship(Vector2(sx, y), 0.0, 0.5 if dashing else 1.0)
+			_ship(Vector2(sx, y), 0.0)
+			if dashing:
+				HexShield.draw(self, Vector2(sx, y), 34.0, 1.0, t)
 			if tt < d0:
 				_flame(Vector2(sx, y), 0.0)
 			_bolt(Vector2(bx, y), Vector2.LEFT)
 			if tt < d0 + 0.05 and tt > d0 - 0.4:
 				_txt("좌클릭!", Vector2(sx - 30.0, y + 52.0), 16, GOLD)
 				_mouse(Vector2(sx + 40.0, y + 60.0), tt >= d0, false)
-			if dashing:
-				_ring(Vector2(sx, y), 36.0, Color(0.7, 0.9, 1.0, 0.5), 2.0)
 		else:
 			_caption("② 돌진 직후 0.12초 안에 스치면 PERFECT", MINT)
 			var u := tt - 3.0
@@ -382,7 +383,9 @@ class Stage extends Control:
 			if dashing:
 				for k in 3:
 					_ship(Vector2(sx - 26.0 * (k + 1), y), 0.0, 0.18, "b")
-			_ship(Vector2(sx, y), 0.0, 0.5 if dashing else 1.0)
+			_ship(Vector2(sx, y), 0.0)
+			if dashing:
+				HexShield.draw(self, Vector2(sx, y), 34.0, 1.0, t)
 			if u < d0:
 				_flame(Vector2(sx, y), 0.0)
 			_bolt(Vector2(bx, y), Vector2.LEFT)
@@ -595,7 +598,9 @@ class Stage extends Control:
 			for k in 3:
 				_ship(pos - Vector2(22.0 * (k + 1), 0), 0.0, 0.18, "b")
 		var strong := tt >= dash_t0 + 0.15
-		_ship(pos, 0.0, 0.5 if dashing else 1.0)
+		_ship(pos, 0.0)
+		if dashing:
+			HexShield.draw(self, pos, 34.0, 1.0, t)
 		if tt >= dash_t0 - 0.5 and tt < dash_t0:
 			_txt("돌진!", Vector2(pos.x - 20.0, pos.y + 54.0), 17, GOLD)
 			_mouse(Vector2(size.x - 40.0, 70.0), tt >= dash_t0 - 0.1, false)
@@ -609,22 +614,22 @@ class Stage extends Control:
 			_txt("완전 동조!", Vector2(pos.x - 70.0, pos.y - 70.0 - 6.0 * f), 20, GOLD)
 			_txt("다음 차지 ×4 · 무적 1.2초", Vector2(pos.x - 100.0, pos.y + 78.0), 16, Color(1.0, 0.95, 0.75))
 
-	## 잔탄: 작고 뾰족한 검붉은 별 (게임과 같은 모양)
+	## 잔탄: 작고 뾰족한 주황 별 (게임과 같은 모양)
 	func _small(p: Vector2, v := Vector2.LEFT) -> void:
-		draw_line(p, p - v.normalized() * 14.0, Color(SMALL_C, 0.3), 3.0)
-		var r := 9.0
+		draw_line(p, p - v.normalized() * 14.0, Color(SMALL_C, 0.4), 4.0)
+		var r := 11.0
 		var pts := PackedVector2Array()
 		for j in 8:
 			pts.append(p + Vector2.from_angle(j * TAU / 8.0) * (r if j % 2 == 0 else r * 0.35))
 		draw_colored_polygon(pts, SMALL_C if int(t * 14.0) % 2 == 0 else Color(SMALL_C, 0.75))
-		draw_circle(p, 2.5, Color(1.0, 0.55, 0.35))
+		draw_circle(p, 2.5, Color(1.0, 0.93, 0.6))
 
 	func _barrage() -> void:
 		var T := 7.6
 		var tt := fmod(t, T)
 		var sp := Vector2(170, 165)
 		if tt < 3.4:
-			_caption("① 작은 검붉은 별(잔탄): 패리하면 흡수만 된다", Color(1.0, 0.6, 0.55))
+			_caption("① 작은 주황 별(잔탄): 패리하면 흡수만 된다", Color(1.0, 0.75, 0.45))
 			var holding := tt >= 0.6 and tt < 3.0
 			_ship(sp, 0.0)
 			_flame(sp, 0.0, 14.0)
@@ -634,7 +639,7 @@ class Stage extends Control:
 					_small(Vector2(bx, sp.y + sin(k * 1.7) * 14.0))
 				elif bx <= sp.x + 42.0 and bx > sp.x - 10.0:
 					_spark(sp + Vector2(40, 0), (sp.x + 42.0 - bx) / 52.0, SMALL_C, 6, 22.0)
-					_txt("흡수 (쿨다운 없음)", Vector2(sp.x - 10.0, sp.y - 46.0), 16, Color(1.0, 0.6, 0.55))
+					_txt("흡수 (쿨다운 없음)", Vector2(sp.x - 10.0, sp.y - 46.0), 16, Color(1.0, 0.75, 0.45))
 			if holding:
 				_ring(sp, 40.0 + (4.0 if int(t * 10.0) % 2 == 0 else 0.0), Color(1.0, 0.95, 0.75, 0.9), 2.5)
 			_mouse(Vector2(size.x - 40.0, 60.0), false, holding)

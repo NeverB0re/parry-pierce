@@ -1,10 +1,11 @@
 extends "res://scripts/attacks/attack.gd"
-## 동심원 파동 (패리 불가 = 검붉은 보라): 심장부(반응로)에서 보라색 고리가 COUNT 개 차례로 퍼져 나간다.
+## 동심원 파동 (패리 불가 = 검붉은 보라): 심장부(반응로)에서 보라색 고리가 COUNT 개 차례로 퍼져 나간다 (지금은 한 줄기).
 ## 돌진 무적으로 통과한다. 돌진 직후 스치면 강한 퍼펙트 회피(완전 동조).
+## 고리를 다 내보내면 다음 공격에 자리를 내주고(boss.detach_attack) 고리는 경기장을 다 덮을 때까지 퍼진다.
 ## boss 에 필요한 것: set_glow(-4, v) (반응로 발광)
 
 const WIND := 1.2
-const COUNT := 3
+const COUNT := 1
 const GAP := 0.85                    # 고리 사이 간격 (초)
 const SPEED := 430.0
 const HALF := 20.0                   # 판정 반폭
@@ -26,10 +27,13 @@ func _radius(k: int) -> float:
 
 
 func step(_dt: float, _ppos: Vector2) -> void:
-	boss.set_glow(-4, minf(1.0, t / WIND))
+	if started < COUNT:
+		boss.set_glow(-4, minf(1.0, t / WIND))
 	while started < COUNT and _radius(started) >= 0.0:
 		boss.emit(Ev.RING, origin)
 		started += 1
+		if started == COUNT:
+			boss.detach_attack()
 	if _radius(COUNT - 1) > MAX_R:
 		boss.finish_attack()
 

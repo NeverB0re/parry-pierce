@@ -21,6 +21,8 @@ var death_t := 0.0
 var open_t := 0.0
 var open_time := 1.6                 # 가슴(코어)이 열리는 연출 시간
 var atk = null                       # 진행 중인 공격 모듈 (attacks/attack.gd) 또는 null
+var lingering: Array = []            # 자리를 내준 공격 모듈들: 판정·그림은 남아 끝날 때까지 돌고, 그동안 다음 공격이 시작된다
+var _stepping_linger = null          # 지금 진행 중인 lingering 모듈 (그 모듈이 finish_attack 을 부르면 목록에서만 빠진다)
 var next_t := 2.5                    # 다음 공격까지 남은 시간
 var attack_gap := Vector2(1.0, 1.8)  # 공격 사이 쉬는 시간 (범위)
 var hold_attacks := false            # true 인 동안(플레이어가 발판 위) 새 공격을 시작하지 않는다
@@ -46,6 +48,7 @@ func reset() -> void:
 	dead = false
 	death_t = 0.0
 	atk = null
+	lingering.clear()
 	next_t = 2.5
 	part_hp.clear()
 	part_flash.clear()
@@ -78,11 +81,44 @@ func start_attack(a) -> void:
 	atk = a
 
 
-## 공격이 끝나면 쉬는 시간을 정한다
+## 공격이 끝나면 쉬는 시간을 정한다. (자리를 내준 모듈이 끝나면 목록에서 빠지기만 한다)
 func finish_attack() -> void:
+	if _stepping_linger != null:
+		lingering.erase(_stepping_linger)
+		return
 	atk = null
 	_on_attack_finished()
 	next_t = randf_range(attack_gap.x, attack_gap.y)
+
+
+## 지금 공격이 판정은 남긴 채 자리를 내준다 (퍼져 나가는 고리, 올라가는 프레스 등). 쉬는 시간 뒤 다음 공격이 시작된다
+func detach_attack() -> void:
+	if atk == null:
+		return
+	lingering.append(atk)
+	finish_attack()
+
+
+## 다른 공격과 겹쳐 도는 보조 공격을 시작한다 (자리를 차지하지 않는다. 끝나면 스스로 빠진다)
+func start_side(a) -> void:
+	a.boss = self
+	lingering.append(a)
+
+
+## 자리를 내준 공격 중 kind 가 남아 있는가
+func is_lingering(kind: String) -> bool:
+	for a in lingering:
+		if a.kind == kind:
+			return true
+	return false
+
+
+## 진행 중·자리를 내준 공격 모듈 모두 (판정·그리기용)
+func active_attacks() -> Array:
+	var out := lingering.duplicate()
+	if atk != null:
+		out.append(atk)
+	return out
 
 
 # ── 진행 ───────────────────────────────────────────────
@@ -108,6 +144,11 @@ func step(dt: float, ppos: Vector2) -> void:
 		emit(Ev.BOLT_POP, p)
 	for h in shots.take_hits(self):              # 반사된 탄이 표적에 닿음 → main 이 피해를 준다
 		emit(Ev.REFLECT_HIT, h["pos"], h)
+	for a in lingering.duplicate():
+		_stepping_linger = a
+		a.t += dt
+		a.step(dt, ppos)
+	_stepping_linger = null
 	if atk == null:
 		if hold_attacks:
 			next_t = maxf(next_t, 1.2)         # 날아오른 뒤 잠시 여유를 준다
@@ -136,6 +177,7 @@ func die() -> void:
 	dead = true
 	death_t = 0.0
 	atk = null
+	lingering.clear()
 	shots.clear()
 
 
@@ -177,6 +219,7 @@ func damage_part(i: int, dmg: int) -> bool:
 		phase = 2
 		open_t = 0.0
 		atk = null
+		lingering.clear()
 		next_t = open_time + 1.0
 		emit(Ev.CORE_OPEN, core.center)
 	return true
@@ -256,8 +299,8 @@ func hitboxes(ppos: Vector2) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	if dead:
 		return out
-	if atk != null:
-		atk.hitboxes(ppos, out)
+	for a in active_attacks():
+		a.hitboxes(ppos, out)
 	shots.hitboxes_near(ppos, 200.0, out)
 	return out
 
@@ -271,9 +314,13 @@ func clash_box(ppos: Vector2) -> Dictionary:
 
 ## 패리 불가 공격(레이저 등) 판정 → 밀려날 방향, 안 맞으면 ZERO
 func beam_hit(p: Vector2, r: float) -> Vector2:
-	if dead or atk == null:
+	if dead:
 		return Vector2.ZERO
-	return atk.beam_hit(p, r)
+	for a in active_attacks():
+		var push: Vector2 = a.beam_hit(p, r)
+		if push != Vector2.ZERO:
+			return push
+	return Vector2.ZERO
 
 
 ## 패리 / 요격당함: 탄은 사라지고, 공격 판정은 그 모듈이 처리한다 (팔은 밀려난다)

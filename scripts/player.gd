@@ -3,6 +3,7 @@ extends Node2D
 ## 시뮬레이션은 main.gd 가 step() 으로 직접 호출한다(히트스톱/슬로모션 제어 때문).
 
 const Sprites := preload("res://scripts/sprites.gd")
+const HexShield := preload("res://scripts/hex_shield.gd")
 const PlayerStats := preload("res://scripts/player_stats.gd")
 const BASE_STATS := preload("res://data/player_stats.tres")
 
@@ -35,7 +36,9 @@ const PARRY_DASH_SPEED_PERFECT := 4000.0
 const PARRY_DASH_TIME := 0.22
 const REFLECT_LINGER := 0.3      # 반사 코어: 리버스 드라이브가 끝난 직후에도 반사 유지
 const REFLECT_RADIUS := 70.0     # 반사 범위 (기체보다 넓게)
-const PULSE_RADIUS := 150.0      # 파동 코어: 패리 성공 시 탄을 지우는 범위
+const PULSE_RADIUS := 150.0      # 파동 코어: 패리 성공 시 기체 둘레의 탄을 지우는 범위
+const PULSE_TIME := 0.3          # 파동은 기체를 따라다니며 이 시간 동안 탄을 지운다 (돌진 중이면 경로의 탄도)
+const PULSE_GROW := 0.08         # 이 시간 동안 반지름이 커진다
 const POWER_RADIUS := 8.0        # 패리 돌진은 타격 범위도 넓다
 # 직격 후: v0.6 방식 — 위로 솟구치고, 들어온 반대쪽으로 약간 밀리며, 마우스 좌우로 조종한다
 const BOUNCE_SIDE := 250.0       # 들어온 방향의 반대쪽으로 밀리는 가로 속도
@@ -93,6 +96,7 @@ var charge_t := 0.0
 var charged_notified := false
 var dash_cd := 0.0
 var reflect_t := 0.0             # 반사 코어: 리버스 드라이브가 끝난 뒤에도 반사가 남는 시간
+var pulse_t := 0.0               # 파동 코어: 남은 파동 시간 (0 = 없음)
 var charge_cd := 0.0             # 차지 강습 후 다음 차지가 완료될 수 있을 때까지
 var parry_active := false
 var parry_held := false
@@ -137,6 +141,7 @@ func reset(pos: Vector2, platform := false) -> void:
 	parry_hit = false
 	charge_cd = 0.0
 	reflect_t = 0.0
+	pulse_t = 0.0
 	evade_window = 0.0
 	evade_rewarded = false
 	dash_held = false
@@ -180,6 +185,13 @@ func is_attacking() -> bool:
 ## 반사 코어가 지금 탄을 되돌리는 중인가
 func is_reflecting() -> bool:
 	return stats.reflect and (dash_kind == "power" or reflect_t > 0.0)
+
+
+## 파동 코어: 지금 파동 반지름 (0 = 없음). 처음 PULSE_GROW 동안 커지고 그 뒤 유지
+func pulse_radius() -> float:
+	if pulse_t <= 0.0:
+		return 0.0
+	return PULSE_RADIUS * lerpf(0.4, 1.0, minf(1.0, (PULSE_TIME - pulse_t) / PULSE_GROW))
 
 
 ## 카메라용: 차지가 절반 넘게 모였을 때부터 0 → 1 (짧게 누르는 연속 돌진에는 카메라가 움직이지 않게)
@@ -435,6 +447,7 @@ func step(dt: float) -> void:
 	dash_cd = maxf(0.0, dash_cd - dt)
 	charge_cd = maxf(0.0, charge_cd - dt)
 	reflect_t = maxf(0.0, reflect_t - dt)
+	pulse_t = maxf(0.0, pulse_t - dt)
 	evade_window = maxf(0.0, evade_window - dt)
 	parry_cd = maxf(0.0, parry_cd - dt)
 	invuln = maxf(0.0, invuln - dt)
@@ -595,8 +608,6 @@ func _end_dash() -> void:
 	if was_power:
 		if stats.reflect:
 			reflect_t = REFLECT_LINGER
-		if stats.power_cd_reset:
-			dash_cd = 0.0
 		main.on_power_dash_end()
 
 
@@ -645,14 +656,18 @@ func _clear_buff() -> void:
 	buff_t = 0.0
 
 
-## 직격 후 위로 솟구친다 (차지·패리 돌진일수록 조금 더 높이). 좌우는 마우스(스틱)로 조종
+## 직격 후 위로 솟구친다 (차지·패리 돌진일수록 조금 더 높이). 좌우는 마우스(스틱)로 조종.
+## 차지 강습(요격 포함)·리버스 드라이브가 적중하면 돌진 쿨다운을 돌려준다 (튕겨나는 중에도 바로 돌진). 일반 돌진은 그대로
 func bounce_off(dir: Vector2, kind := "dash") -> void:
 	dash_t = 0.0
 	_end_dash()
 	bouncing = true
 	shield_t = STRIKE_SHIELD                     # 튕겨나는 동안 무적 (통제를 되찾으면 끝)
 	shield_max = STRIKE_SHIELD
-	parry_cd = 0.0                               # 튕겨나오는 즉시 패리 가능 (돌진 쿨다운은 그대로)
+	parry_cd = 0.0                               # 튕겨나오는 즉시 패리 가능
+	if kind != "dash":
+		dash_cd = 0.0
+		pending_kind = ""
 	parry_queue = 0.0
 	var k := 1.25 if kind == "power" else (1.1 if kind == "charge" else 1.0)
 	var m: Vector2 = main.aim_offset(position)    # 조준 보조가 아니라 실제 마우스(스틱) 방향으로 좌우 조종
@@ -776,6 +791,14 @@ func _draw_flame(off: Vector2) -> void:
 			draw_line(st, st - vd * (26.0 + 14.0 * absf(float(k))), Color(0.85, 0.92, 1.0, a), 2.0)
 
 
+## 무적이 남은 시간 (실드가 끝나기 직전 깜빡임용). 돌진·조준·발사 중엔 넉넉하게 본다
+func _immune_left() -> float:
+	var left := maxf(shield_t, invuln)
+	if dash_t > 0.0 or aim_phase or launch_t > 0.0:
+		left = maxf(left, 1.0)
+	return left
+
+
 func _draw() -> void:
 	var jitter := Vector2.ZERO
 	if is_hovering_charge():           # 차지 중엔 몸이 떨린다 (완료되면 더)
@@ -822,16 +845,14 @@ func _draw() -> void:
 
 	_ship_col = "r" if attack else "b"
 	_draw_flame(jitter)
-	var blink := invuln > 0.0 and stun <= 0.0 and int(invuln * 20.0) % 2 == 0
-	var alpha := 0.45 if evade else (0.35 if blink else 1.0)
-	var tint := Color(1, 1, 1, alpha)
-	_draw_rocket(jitter, facing, tint)
+	_draw_rocket(jitter, facing, Color.WHITE)
 
-	# 무적 보호막 (발사·공격 돌진·직격 후·돌진 여유): 기체 위에 그려 가려지지 않게, 기체보다 넓게
-	if shield_t > 0.0 or attack or launch_t > 0.0:
-		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.03)
-		draw_circle(Vector2.ZERO, 44.0 + 3.0 * pulse, Color(1.0, 0.85, 0.45, 0.10 + 0.08 * pulse))
-		draw_arc(Vector2.ZERO, 46.0, 0.0, TAU, 40, Color(1.0, 0.9, 0.6, 0.55 + 0.35 * pulse), 3.0)
+	# 무적 실드: 무적인 동안은 언제나 푸른 벌집 실드 하나로 보여 준다 (돌진·공격 돌진·발사·적중 후 튕김·피격 후·퍼펙트 회피 후).
+	# 끝나기 직전엔 깜빡인다. 기체 위에 그려 가려지지 않게, 기체보다 넓게
+	if is_immune() and not frozen:
+		var left := _immune_left()
+		var sa := 1.0 if left > 0.3 or int(Time.get_ticks_msec() / 60) % 2 == 0 else 0.35
+		HexShield.draw(self, Vector2.ZERO, 44.0, sa, Time.get_ticks_msec() * 0.001)
 	if attack:
 		draw_arc(Vector2.ZERO, 40.0, 0.0, TAU, 40, Color(C_ATTACK, 0.8), 2.0)
 
@@ -873,6 +894,14 @@ func _draw() -> void:
 	# 차지 쿨다운: 주황 링이 차오른다 (다 차야 다음 차지가 완료된다)
 	if charge_cd > 0.0:
 		draw_arc(Vector2.ZERO, 30.0, -PI * 0.5, -PI * 0.5 + TAU * (1.0 - charge_cd / stats.charge_cooldown), 40, Color(C_ATTACK, 0.75 if charging else 0.4), 2.0)
+
+	# 파동 코어: 기체를 따라다니며 탄을 지우는 고리
+	if pulse_t > 0.0:
+		var pk := pulse_t / PULSE_TIME
+		var pr := pulse_radius()
+		draw_circle(Vector2.ZERO, pr, Color(0.7, 1.0, 0.95, 0.10 * pk))
+		draw_arc(Vector2.ZERO, pr, 0.0, TAU, 48, Color(0.75, 1.0, 0.95, 0.85 * pk), 4.0)
+		draw_arc(Vector2.ZERO, pr - 10.0, 0.0, TAU, 48, Color(0.75, 1.0, 0.95, 0.35 * pk), 2.0)
 
 	# 반사 코어: 리버스 드라이브 중 반사 범위
 	if is_reflecting():

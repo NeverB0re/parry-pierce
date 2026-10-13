@@ -26,6 +26,7 @@ func _process(_d: float) -> bool:
 	_meta_test()
 	_fortress_test()
 	_v034_test()
+	_v035_test()
 	_telemetry_test()
 	print("FAILS ", fails)
 	quit(fails)
@@ -461,77 +462,77 @@ func _telemetry_test() -> void:
 	t.dir = t.DIR
 
 
-## 메타 구조: 노드·코어 수치 적용, 선행 조건·포인트, 저장, 승리 → 정비 → FTL 도약 → 개조가 반영된 출격
+## 메타 구조: 얻은 코어는 모두 영구 적용, 저장(구버전 저장 이전 포함), 승리 → 월드 맵 → FTL 도약 → 코어가 반영된 출격,
+## 월드 맵에서 깬 스테이지 다시 고르기 (안 깬 곳·아직 없는 곳은 못 고름)
 func _meta_test() -> void:
 	var Up = main.Upgrades
 	var base = main.Player.BASE_STATS
-	var st = Up.build(base, ["P1", "P2"], "pulse")
-	_check("nodes + core applied (cells %d, charge %d, pulse %s)" % [st.shield_cells, st.charge_damage, st.pulse],
-		st.shield_cells == 4 and st.charge_damage == 4 and st.pulse)
-	_check("base stats untouched", base.shield_cells == 3 and base.charge_damage == 3 and not base.pulse)
-	var st2 = Up.build(base, ["P1", "P2"], "")
-	_check("unequipping core removes its effect", not st2.pulse)
-	_check("prerequisite needed (A3 needs A1)", not Up.can_take("A3", [], 5, 3) and Up.can_take("A3", ["A1"], 5, 3) and not Up.can_take("A1", [], 0, 3))
-	_check("tier gate: after 1 colossus only tier-1 nodes (A3 locked even with A1)", Up.can_take("A1", [], 1, 1) and not Up.can_take("A3", ["A1"], 1, 1) and Up.can_take("A3", ["A1"], 1, 2))
-	_check("A2 is parry reach now (aim time unchanged)", Up.build(base, ["A2"], "").parry_reach == 40.0 and Up.build(base, ["A2"], "").aim_time == base.aim_time)
-	_check("dash cooldown 1.35, U1 -> 1.15", absf(base.dash_cooldown - 1.35) < 0.001 and absf(Up.build(base, ["U1"], "").dash_cooldown - 1.15) < 0.001)
+	var st = Up.build(base, ["pulse", "reflect"])
+	_check("all owned cores apply at once (pulse %s, reflect %s)" % [st.pulse, st.reflect], st.pulse and st.reflect)
+	_check("base stats untouched", not base.pulse and not base.reflect)
+	_check("no cores = base", not Up.build(base, []).pulse)
+	_check("skill tree is gone", not ("NODES" in Up) and not ("nodes" in main.Profile.new()))
 
 	var pr = main.Profile.new()
 	pr.path = "user://profile_test.cfg"
 	pr.reset()
 	var got: Dictionary = pr.record_clear(0)
-	_check("first clear: core + 1 point, core auto-equipped", got["first"] and got["core"] == "pulse" and got["point"] == 1 and pr.points_left() == 1 and pr.equipped == "pulse")
+	_check("first clear: gets the core", got["first"] and got["core"] == "pulse" and pr.cores.size() == 1 and pr.cores[0] == "pulse")
 	var again: Dictionary = pr.record_clear(0)
-	_check("re-clear gives nothing (no farming)", not again["first"] and pr.points_left() == 1)
-	_check("locked node refused (P3 before P2)", not pr.take_node("P3") and pr.points_left() == 1)
-	_check("take P2 spends the point", pr.take_node("P2") and pr.points_left() == 0 and not pr.take_node("P1"))
+	_check("re-clear gives nothing (no farming)", not again["first"] and again["core"] == "" and pr.cores.size() == 1)
 	var pr2 = main.Profile.new()
 	pr2.path = pr.path
 	pr2.load_from_disk()
-	_check("profile saved and loaded (nodes %s, cores %s, eq %s)" % [pr2.nodes, pr2.cores, pr2.equipped], pr2.nodes == pr.nodes and pr2.cores == pr.cores and pr2.equipped == "pulse" and pr2.cleared == pr.cleared)
-	pr2.equip("pulse")
-	_check("equip same core again = unequip", pr2.equipped == "")
+	_check("profile saved and loaded (cores %s, stage %d)" % [pr2.cores, pr2.stage], pr2.cores == pr.cores and pr2.cleared == pr.cleared and pr2.stage == 1)
+	# 구버전 저장: 노드·장착 코어·기동 코어 → 무시하고, 처리한 콜로서스의 코어는 모두 가진다
+	var cf := ConfigFile.new()
+	cf.set_value("run", "stage", 1)
+	cf.set_value("run", "cleared", ["observer", "fortress"])
+	cf.set_value("upgrade", "nodes", ["P1", "U1"])
+	cf.set_value("upgrade", "cores", ["mobility"])
+	cf.set_value("upgrade", "equipped", "mobility")
+	cf.save(pr.path)
+	var pr3 = main.Profile.new()
+	pr3.path = pr.path
+	pr3.load_from_disk()
+	_check("old save migrates (cores %s)" % [pr3.cores], pr3.cores.has("pulse") and pr3.cores.has("reflect") and pr3.cores.size() == 2)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(pr.path))
 
-	# 승리 → 정비 → FTL 도약
+	# 승리 → 월드 맵 → FTL 도약
 	var old = main.profile
 	var mp = main.Profile.new()
 	mp.persist = false
 	main.profile = mp
-	main.hangar.profile = mp
+	main.world.profile = mp
 	main.start_stage(0)
-	main._core_destroyed(main.boss.core.center)
-	_check("win records clear (state %d, cleared %s)" % [main.state, mp.cleared], main.state == main.State.WON and mp.cleared.has("observer") and mp.points_left() == 1)
-	main.open_hangar()
-	_check("hangar opens and pauses", main.hangar.visible and paused)
-	main.hangar._on_node("P1")
-	_check("first press only selects (not spent)", mp.nodes.is_empty())
-	main.hangar._on_node("P1")
-	_check("second press takes the node", mp.nodes.size() == 1 and mp.nodes[0] == "P1" and mp.points_left() == 0)
-	main.hangar.jump()
-	_check("FTL starts", main.ftl.is_playing() and not main.hangar.visible)
-	main.ftl.skip()
 	var p = main.player
-	_check("arrived: new run with upgrades (cells %d, lives %d, pulse %s)" % [p.stats.shield_cells, main.lives, p.stats.pulse],
-		not paused and main.state == main.State.PLAY and p.stats.shield_cells == 4 and main.lives == 4 and p.stats.pulse)
+	_check("no core yet: no pulse", not p.stats.pulse)
+	_check("before any clear only stage 1 is open", mp.can_play(0) and not mp.can_play(1))
+	main._core_destroyed(main.boss.core.center)
+	_check("win records clear and core (state %d, cores %s)" % [main.state, mp.cores], main.state == main.State.WON and mp.cleared.has("observer") and mp.cores.has("pulse"))
+	main.open_world()
+	_check("world map opens and pauses, ship on the next stage (%d)" % mp.stage, main.world.visible and paused and mp.stage == 1)
+	main.world.jump()
+	_check("FTL starts", main.ftl.is_playing() and not main.world.visible)
+	main.ftl.skip()
+	_check("arrived: next stage with the core on (stage %d, pulse %s)" % [main.stage_idx, p.stats.pulse],
+		not paused and main.state == main.State.PLAY and main.stage_idx == 1 and p.stats.pulse and main.lives == p.stats.shield_cells)
 
-	# U4 실드 재충전: 퍼펙트 회피로 1회 회복
-	p.stats.evade_heal = true
-	main.lives = 2
-	main.on_perfect_evade(p.position)
-	main.on_perfect_evade(p.position)
-	_check("evade heal once per sortie (lives %d)" % main.lives, main.lives == 3)
-	# U5: 리버스 드라이브가 끝나면 돌진 쿨다운 초기화
-	_air(Vector2(-700, -1500))
-	p.stats.power_cd_reset = true
-	p.aim_phase = true
-	p.aim = Vector2.RIGHT
-	p.launch_parry_dash()
-	_step(int(0.3 / DT))
-	_check("U5: dash cooldown reset after reverse drive (cd %.2f)" % p.dash_cd, p.dash_cd <= 0.0 and p.dash_kind == "")
+	# 월드 맵에서 이전 스테이지 다시 고르기
+	main.open_world()
+	_check("can't pick a stage that doesn't exist yet or isn't unlocked", not main.world.select(2) and not main.world.select(8) and not main.world.select(9) and mp.stage == 1)
+	_check("pick a cleared stage again", main.world.select(0) and mp.stage == 0)
+	main.world.jump()
+	main.ftl.skip()
+	_check("replaying stage 1 (stage %d, observer %s)" % [main.stage_idx, main.boss.get_script().resource_path.get_file()], main.stage_idx == 0 and main.boss.get_script().resource_path.ends_with("observer.gd") and p.stats.pulse)
+	main._core_destroyed(main.boss.core.center)
+	_check("re-clear: nothing new, next is stage 2 again", mp.cores.size() == 1 and mp.stage == 1)
+	main.open_world()
+	main.world.jump()
+	main.ftl.skip()
 
 	main.profile = old
-	main.hangar.profile = old
+	main.world.profile = old
 	main.start_stage(0)
 
 
@@ -543,6 +544,7 @@ func _fortress_test() -> void:
 	var K = b.shots.Kind
 	_check("stage 2 is the barrage fortress (%s, parts %d)" % [b.get_script().resource_path.get_file(), b.part_count()], b.get_script().resource_path.ends_with("fortress.gd") and b.part_count() == 4 and b.phase == 1)
 	b.next_t = 99.0
+	p.stats.pulse = false                              # 앞선 승리로 얻은 파동 코어가 탄을 지우지 않게
 	p.reset(Vector2(-700, -1500), false)
 	p.invuln = 0.0
 	p.parry_press()
@@ -663,15 +665,31 @@ func _v034_test() -> void:
 	p.parry_release()
 	_check("empty parry still has its cooldown (cd %.2f)" % p.parry_cd, p.parry_cd > 0.0)
 
-	# 파동 코어
+	# 파동 코어: 기체 중심에서 퍼져 기체를 따라다닌다
 	p.reset(Vector2(-700, -1500), false)
 	p.stats.pulse = true
 	p.parry_press()
 	b.shots.spawn(p.position + Vector2(25, 0), Vector2.ZERO, 5.0, 0.0, 0.0, b.shots.Kind.SMALL)
 	b.shots.spawn(p.position + Vector2(-110, 40), Vector2.ZERO, 5.0, 0.0, 0.0, b.shots.Kind.SMALL)
 	b.shots.spawn(p.position + Vector2(400, 0), Vector2.ZERO, 5.0, 0.0, 0.0, b.shots.Kind.SMALL)
-	_step(1)
+	_step(8)
 	_check("pulse core: parry clears nearby bullets only (left %d)" % b.shots.size(), b.shots.size() == 1)
+	_step(int(p.PULSE_TIME / DT) + 2)
+	_check("pulse ends after %.2fs" % p.PULSE_TIME, p.pulse_t <= 0.0 and p.pulse_radius() == 0.0)
+	p.parry_release()
+	b.shots.clear()
+	# 돌진 중 잔탄을 패리하면 경로의 잔탄도 지우며 나아간다 (파동이 기체를 따라간다)
+	p.reset(Vector2(-900, -1500), false)
+	_step(int(0.6 / DT))
+	_dash_dir("dash", Vector2.RIGHT)
+	p.parry_press()
+	b.shots.spawn(p.position + Vector2(25, 0), Vector2.ZERO, 5.0, 0.0, 0.0, b.shots.Kind.SMALL)
+	b.shots.spawn(p.position + Vector2(330, 0), Vector2.ZERO, 5.0, 0.0, 0.0, b.shots.Kind.SMALL)
+	b.shots.spawn(p.position + Vector2(0, -420), Vector2.ZERO, 5.0, 0.0, 0.0, b.shots.Kind.SMALL)
+	_step(1)
+	_check("bullet ahead on the path is out of reach at first (left %d)" % b.shots.size(), b.shots.size() == 2)
+	_step(8)
+	_check("pulse follows the ship and clears the path ahead (left %d)" % b.shots.size(), b.shots.size() == 1)
 	p.stats.pulse = false
 	p.parry_release()
 	b.shots.clear()
@@ -743,4 +761,154 @@ func _v034_test() -> void:
 	main._check_attacks()
 	_check("rings can't be parried (lives %d->%d)" % [lives0, main.lives], main.lives == lives0 - 1)
 	p.parry_release()
+	main.start_stage(0)
+
+
+## v0.35: 프레스 요격·다 내려온 뒤 무해, 동심원 한 줄기, 차지 강습·리버스 드라이브 적중 시 돌진 쿨다운 반환,
+## 요새가 쉬지 않고 몰아침(화면이 비지 않음), 코어 페이즈 반응로 폭주
+func _v035_test() -> void:
+	var p = main.player
+	# 차지 강습·리버스 드라이브 적중 → 돌진 쿨다운 반환 (일반 돌진은 그대로)
+	main.start_stage(0)
+	var b = main.boss
+	var pp: Vector2 = b.part_pos(0)
+	_air(pp + Vector2(-160, 0))
+	_dash_dir("charge", Vector2.RIGHT)
+	_step(6)
+	_check("charge hit refunds dash cooldown (cd %.2f, bouncing %s)" % [p.dash_cd, p.bouncing], p.dash_cd <= 0.0 and p.bouncing)
+	main._dash_input(true)
+	main._dash_input(false)
+	_check("can dash right away while bouncing", p.dash_kind == "dash" and p.dash_t > 0.0)
+	_air(pp + Vector2(-200, 0))
+	p.aim_phase = true
+	p.aim_perfect = false
+	p.aim = Vector2.RIGHT
+	p.launch_parry_dash()
+	_step(6)
+	_check("reverse drive hit refunds dash cooldown (cd %.2f)" % p.dash_cd, p.dash_cd <= 0.0 and p.bouncing)
+	_air(pp + Vector2(-140, 0))
+	_dash_dir("dash", Vector2.RIGHT)
+	_step(6)
+	_check("normal dash hit keeps its cooldown (cd %.2f)" % p.dash_cd, p.dash_cd > 0.4)
+
+	# 프레스: 차지 강습으로 요격 → 도로 올라간다, 피해 없음
+	main.start_stage(1)
+	b = main.boss
+	b.next_t = 99.0
+	p.reset(Vector2(300, -1300), false)
+	var pr = b.Press.new()
+	b.start_attack(pr)
+	_step(int((pr.WARN + pr.DROP * 0.6) / DT))
+	var lives0: int = main.lives
+	p.position = Vector2(300, pr.bottom + 150.0)
+	p.vel = Vector2.ZERO
+	_dash_dir("charge", Vector2.UP)
+	_step(4)
+	_check("charge assault intercepts the press (phase %s, lives %d->%d)" % [pr.phase, lives0, main.lives], pr.phase == "jam" and main.lives == lives0 and p.bouncing)
+	_check("intercepted press gives way to the next attack", b.atk == null and b.is_lingering("press"))
+	_step(int((pr.JAM + 0.5) / DT))
+	_check("press goes back up and ends", not b.is_lingering("press") and pr.bottom <= pr.START + 1.0)
+	# 다 내려온 뒤(멈춤·올라감)에는 판에 닿아도 피해 없음
+	main.start_stage(1)
+	b = main.boss
+	b.next_t = 99.0
+	p.reset(Vector2(300, -400), false)
+	pr = b.Press.new()
+	b.start_attack(pr)
+	for k in int((pr.WARN + pr.DROP + 0.5) / DT):          # 정지선 아래에 떠서 기다린다
+		if pr.phase == "hold":
+			break
+		p.position = Vector2(300, -400)
+		p.vel = Vector2.ZERO
+		p.invuln = 99.0
+		_step(1)
+	_check("press holding (phase %s)" % pr.phase, pr.phase == "hold")
+	lives0 = main.lives
+	p.invuln = 0.0
+	p.position = Vector2(300, pr.STOP_Y + 30.0)
+	_dash_dir("dash", Vector2.UP)
+	_step(10)
+	_check("touching the press after it landed: blocked, no damage (lives %d->%d, y %.0f)" % [lives0, main.lives, p.position.y], main.lives == lives0 and p.position.y > pr.STOP_Y)
+	_step(int(pr.HOLD / DT))
+	_check("rising press gives way to the next attack (phase %s)" % pr.phase, pr.phase == "rise" and b.atk == null and b.is_lingering("press"))
+	p.invuln = 0.0
+	p.position = Vector2(300, pr.bottom + 20.0)
+	_dash_dir("dash", Vector2.UP)
+	_step(6)
+	_check("rising press does no damage", main.lives == lives0)
+
+	# 동심원 파동: 한 줄기, 내보낸 뒤 자리를 내주고 판정은 남는다
+	main.start_stage(1)
+	b = main.boss
+	b.next_t = 99.0
+	var rg = b.Rings.new(b.REACTOR_POS)
+	b.start_attack(rg)
+	_check("rings: a single ring", rg.COUNT == 1)
+	p.reset(Vector2(-1000, -400), false)
+	p.invuln = 999.0
+	_step(int((rg.WIND + 0.2) / DT))
+	_check("ring launched -> next attack can start, ring keeps going", b.atk == null and b.is_lingering("rings"))
+	var r_now: float = rg._radius(0)
+	_check("lingering ring still hits", b.beam_hit(b.REACTOR_POS + Vector2(r_now, 0), 12.0) != Vector2.ZERO)
+
+	# 요새는 쉬지 않고 몰아친다: 30초 동안 탄도 공격도 없는 시간이 길게 이어지지 않는다 (페이즈 1·코어 페이즈)
+	for ph in [1, 3]:
+		main.start_stage(1)
+		b = main.boss
+		if ph == 3:
+			for i in 4:
+				b.damage_part(i, 99)
+			_step(int((b.OPEN_TIME + 0.2) / DT))
+		p.reset(Vector2(-500, -1500), false)
+		var quiet := 0.0
+		var longest := 0.0
+		var kinds := {}
+		var began := false                                 # 첫 공격(시작 대기·개방 연출 뒤)부터 잰다
+		for k in int(30.0 / DT):
+			p.position = Vector2(-500 + 400.0 * sin(k * 0.01), -1500)
+			p.vel = Vector2.ZERO
+			p.invuln = 999.0
+			main.lives = 9
+			main._physics_process(DT)
+			if b.atk != null:
+				kinds[b.atk.kind] = true
+			var busy: bool = b.shots.size() > 0 or b.attack_kind() == "press" or b.is_lingering("rings")
+			began = began or b.shots.size() > 0
+			if not began:
+				continue
+			quiet = 0.0 if busy else quiet + DT
+			longest = maxf(longest, quiet)
+		_check("phase %d: field never sits empty for long (longest quiet %.2fs, attacks %s)" % [ph, longest, kinds.keys()], longest < 1.6 and b.phase == ph)
+		if ph == 3:
+			_check("core phase uses the reactor overload", kinds.has("overload"))
+
+	# 반응로 폭주: 잔탄 고리 + 주탄, 끝난다
+	main.start_stage(1)
+	b = main.boss
+	for i in 4:
+		b.damage_part(i, 99)
+	_step(int((b.OPEN_TIME + 1.2) / DT))
+	b.next_t = 99.0
+	b.atk = null
+	b.lingering.clear()
+	b.shots.clear()
+	var ov = b.Overload.new(b.REACTOR_POS)
+	b.start_attack(ov)
+	p.reset(Vector2(-1000, -400), false)
+	var most := 0
+	var mains := 0
+	var done := false
+	for k in 360:
+		p.invuln = 999.0
+		main._physics_process(DT)
+		most = maxi(most, b.shots.size())
+		if b.atk == null:
+			done = true
+			break
+	for j in b.shots.size():
+		if b.shots.kind[j] != b.shots.Kind.SMALL:
+			mains += 1
+	_check("overload: dense rings with main shots, then ends (max %d, mains %d)" % [most, mains], done and most >= ov.RINGS * ov.COUNT * 0.8 and mains >= 2)
+	# 코어 페이즈엔 기존 탄막도 강해진다
+	_check("hard spiral has 3 arms, hard fan 4 waves, hard mines 5", b.Spiral.new(-1, b.SPIRE_TOP, true).arms == 3 and b.Fan.new(-1, b.SPIRE_TOP, Vector2.ZERO, true).wave_n == 4 and b.Mines.new(Vector2.ZERO, true).mines.size() == 5)
 	main.start_stage(0)

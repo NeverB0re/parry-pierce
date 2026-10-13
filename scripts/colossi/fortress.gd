@@ -5,6 +5,9 @@ extends "res://scripts/colossus_base.gd"
 ##         2) 개방 — 몸통 방폭문이 위아래로 열린다
 ##         3) 반응로 — 팔각 장갑에 싸인 동력 코어. 탄막은 첨탑에서, 유도탄은 반응로 배기구에서
 ## 공격: 나선 탄막 · 부채 탄막(가운데 주탄) · 유도탄 · 융해 기뢰(바닥) · 프레스(근접, 회피 불가, 드물게) · 동심원 파동(패리 불가, 드물게)
+##       · 반응로 폭주(코어 페이즈 전용). 코어 페이즈에선 기존 탄막도 강해진다(hard).
+## 탄막형이라 화면이 비지 않게: 쉬는 시간이 짧고, 유도탄은 다른 공격과 겹쳐 쏘며(보조 공격),
+## 동심원 파동·올라가는 프레스는 판정을 남긴 채 다음 공격에 자리를 내준다. 같은 탄막을 연달아 쓰지 않는다.
 ## 바닥 y=0, 위쪽이 음수. 몸 중심 x=0.
 
 const ArmoredCore := preload("res://scripts/armored_core.gd")
@@ -14,6 +17,7 @@ const Homing := preload("res://scripts/attacks/homing.gd")
 const Mines := preload("res://scripts/attacks/mines.gd")
 const Press := preload("res://scripts/attacks/press.gd")
 const Rings := preload("res://scripts/attacks/rings.gd")
+const Overload := preload("res://scripts/attacks/overload.gd")
 
 # ── 구조 ───────────────────────────────────────────────
 const REACTOR_POS := Vector2(0, -1640)      # 동력 코어(반응로) 중심
@@ -42,6 +46,10 @@ const OPEN_TIME := 1.6
 
 # ── 공격 고르기 ────────────────────────────────────────
 const LOW_ZONE_Y := -1000.0          # 이보다 아래면 기뢰 위주
+const GAP := Vector2(0.35, 0.7)      # 공격 사이 쉬는 시간 (짧게: 탄막형이라 화면이 비지 않게)
+const GAP_CORE := Vector2(0.2, 0.45) # 코어 페이즈는 더 몰아친다
+const SPECIAL_EVERY := 5             # 특수기(프레스·동심원)는 이만큼 공격한 뒤에야 다시 (드물게, 연달아 쓰지 않음)
+const HOMING_EVERY := 3              # 유도탄(보조 공격)은 공격 이만큼마다 (코어 페이즈는 2)
 
 # ── 색 ─────────────────────────────────────────────────
 const C_HULL := Color(0.085, 0.085, 0.095)
@@ -53,11 +61,14 @@ const C_GLOW := Color(1.0, 0.78, 0.42)
 
 var glow: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]   # 발사 전 달아오름: 부위 0~3, 4 첨탑, 5 박격포, 6 반응로(보라)
 var debris: Array[Dictionary] = []
+var last := ""                       # 직전에 고른 주 공격 (같은 탄막 반복 방지)
+var since_special := 0
+var since_homing := 0
 
 
 func _init() -> void:
 	open_time = OPEN_TIME
-	attack_gap = Vector2(1.0, 1.6)
+	attack_gap = GAP
 	core_assist_r = 220.0
 
 
@@ -69,6 +80,9 @@ func _ready() -> void:
 func reset() -> void:
 	super()
 	debris.clear()
+	last = ""
+	since_special = 0
+	since_homing = 0
 	for i in glow.size():
 		glow[i] = 0.0
 
@@ -123,32 +137,48 @@ func _step_effects(dt: float) -> void:
 
 
 func _step_phase(dt: float) -> void:
+	attack_gap = GAP_CORE if phase == 3 else GAP
 	for i in glow.size():
 		glow[i] = move_toward(glow[i], 0.0, dt * 2.0)
 
 
 func _choose(ppos: Vector2) -> void:
-	var roll := randf()
-	if ppos.y > LOW_ZONE_Y and roll < 0.5:        # 낮은 곳: 기뢰 위주
-		start_attack(Mines.new(ppos))
+	var hard := phase == 3
+	since_special += 1
+	since_homing += 1
+	if since_homing >= (2 if hard else HOMING_EVERY) and not homing_origins().is_empty():   # 유도탄은 다른 공격과 겹쳐 쏜다
+		since_homing = 0
+		start_side(Homing.new())
+	if since_special >= SPECIAL_EVERY and randf() < 0.5:    # 드물게: 천장 프레스(근접, 회피 불가) / 심장부 동심원 파동(패리 불가)
+		since_special = 0
+		if randf() < 0.5 or is_lingering("rings"):
+			_pick("press", Press.new())
+		else:
+			_pick("rings", Rings.new(REACTOR_POS))
 		return
-	if roll < 0.15:
-		start_attack(Mines.new(ppos))
+	if ppos.y > LOW_ZONE_Y and last != "mines" and randf() < 0.6:   # 낮은 곳: 기뢰 위주
+		_pick("mines", Mines.new(ppos, hard))
 		return
-	if roll < 0.24:                               # 드물게: 천장 프레스 (근접, 회피 불가)
-		start_attack(Press.new())
-		return
-	if roll < 0.34:                               # 드물게: 심장부 동심원 파동 (패리 불가)
-		start_attack(Rings.new(REACTOR_POS))
-		return
+	var pool: Array[String] = ["spiral", "fan"]
+	if hard:
+		pool.append("overload")
+		pool.append("overload")
+	while pool.has(last):
+		pool.erase(last)
 	var c := _battery(ppos)
 	var org: Vector2 = SPIRE_TOP if c < 0 else BARREL_TIPS[c]
-	if roll < 0.56:
-		start_attack(Spiral.new(c, org))
-	elif roll < 0.80 or homing_origins().is_empty():
-		start_attack(Fan.new(c, org, ppos))
-	else:
-		start_attack(Homing.new())
+	match pool[randi() % pool.size()]:
+		"spiral":
+			_pick("spiral", Spiral.new(c, org, hard))
+		"fan":
+			_pick("fan", Fan.new(c, org, ppos, hard))
+		_:
+			_pick("overload", Overload.new(REACTOR_POS))
+
+
+func _pick(kind: String, a) -> void:
+	last = kind
+	start_attack(a)
 
 
 ## 탄막 발사점: 페이즈 1은 플레이어에게서 더 먼(살아있는) 주포대, 없거나 코어 페이즈면 첨탑(-1)
@@ -205,8 +235,8 @@ func _draw() -> void:
 	_draw_part_marks()
 	_draw_debris()
 	_draw_shards()
-	if atk != null:
-		atk.draw()
+	for a in active_attacks():
+		a.draw()
 	shots.draw(self)
 
 

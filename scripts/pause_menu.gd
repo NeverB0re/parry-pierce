@@ -2,7 +2,7 @@ extends CanvasLayer
 ## ESC 메뉴. 플레이 중에는 마우스가 창 밖으로 못 나가고, 메뉴를 열어야 풀린다.
 
 signal restart_requested
-signal hangar_requested
+signal world_requested
 
 var font: SystemFont
 var ui_scale := 1.0                  # 터치 기기에서는 키운다
@@ -42,9 +42,9 @@ func _ready() -> void:
 	_button(box, "처음부터 다시", func() -> void:
 		restart_requested.emit()
 		resume())
-	_button(box, "정비 (개조 후 다시 출격)", func() -> void:
+	_button(box, "항로도 (스테이지 선택)", func() -> void:
 		visible = false
-		hangar_requested.emit())
+		world_requested.emit())
 	_button(box, "조작법", func() -> void: _show_help(true))
 	_button(box, "플레이 기록 폴더 열기", func() -> void:
 		DirAccess.make_dir_recursive_absolute("user://telemetry")

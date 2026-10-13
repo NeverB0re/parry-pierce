@@ -36,9 +36,7 @@ extends Resource
 @export var stun_time := 0.9                ## 피격 → 제어 불능
 @export var bounce_up := 900.0              ## 적중 후 솟구치는 속도. 차지 ×1.1, 리버스 드라이브 ×1.25
 @export var power_grace := 0.7              ## 리버스 드라이브가 끝난 직후 무적
-@export var power_cd_reset := false         ## 리버스 드라이브가 끝나면 돌진 쿨다운 즉시 초기화 (U5)
 @export var glide_fall := 140.0             ## 마우스를 위로: 활공 중 낙하 속도 상한
-@export var evade_heal := false             ## 퍼펙트 회피 성공 시 실드 셀 1 회복, 출격당 1회 (U4)
 
 @export_group("코어 아이템")
 @export var pulse := false                  ## 파동 코어: 패리 성공(잔탄 흡수·근접 패리 포함) 시 기체 둘레 150px 의 탄을 지운다
