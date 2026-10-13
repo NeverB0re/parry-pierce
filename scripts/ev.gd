@@ -19,4 +19,6 @@ enum {
 	REFLECT_HIT,    # 반사된 탄이 표적에 닿음 ("hit", "dmg") → main 이 피해를 준다
 	ABSORB,         # 잔탄을 패리로 흡수 (연출만)
 	MINE,           # 기뢰가 터진다
+	PRESS,          # 프레스(천장)가 정지선에 닿음
+	RING,           # 동심원 파동 하나가 퍼지기 시작
 }

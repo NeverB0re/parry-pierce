@@ -5,7 +5,7 @@ extends CanvasLayer
 
 const Sprites := preload("res://scripts/sprites.gd")
 
-const ORDER := ["dodge", "parry", "charge", "unparry", "barrage"]
+const ORDER := ["dodge", "parry", "charge", "unparry", "barrage", "press"]
 const SAVE_PATH := "user://tutorial.cfg"
 
 var enabled := true                  # false: 자동 팝업·저장 없음 (테스트·헤드리스)
@@ -44,8 +44,8 @@ func _pages() -> Dictionary:
 		"dodge": {
 			"title": "회피 — 돌진",
 			"lines": [
-				"%s(짧게)으로 돌진합니다. 돌진하는 동안은 무적이라 탄과 공격을 그대로 통과할 수 있습니다." % dash,
-				"돌진은 쿨다운(0.9초)만 있고 횟수 제한이 없습니다. 표적에 닿으면 피해 1을 주고 위로 솟구칩니다.",
+				"%s(짧게)으로 돌진합니다. 돌진하는 동안은 무적이라 탄과 레이저를 그대로 통과할 수 있습니다. 단, 근접공격(팔 휘두르기·프레스)은 회피 불가 — 돌진으로 통과할 수 없습니다." % dash,
+				"돌진은 쿨다운(1.35초)만 있고 횟수 제한이 없습니다. 표적에 닿으면 피해 1을 주고 위로 솟구칩니다. 솟구치는 동안만 보호막이 있고, 기체 통제를 되찾으면 사라집니다.",
 				"돌진을 시작한 직후(0.12초 안)에 공격이 스치면 '퍼펙트 회피'! 다음 차지 강습의 피해가 2배가 되고(동조), 차지가 두 배 빨라지며, 돌진 쿨다운이 즉시 초기화됩니다.",
 			],
 		},
@@ -55,6 +55,7 @@ func _pages() -> Dictionary:
 				"금색 탄은 %s 으로 막을 수 있습니다. 누르는 순간 짧은 패리 판정이 열리니 탄이 닿기 직전에 누르세요." % par,
 				"성공하면 시간이 느려집니다. 마우스(스틱)로 방향을 정하고 버튼을 떼면 리버스 드라이브! 받아낸 에너지를 추진기로 방출해 충돌합니다. 피해 12 (PERFECT 패리는 16).",
 				"금색 = 패리할 수 있는 공격입니다. 팔 휘두르기를 그냥 패리하면 피해만 막고 튕겨나기만 합니다.",
+				"무엇이든 막아 내면(잔탄 흡수·근접공격 패리 포함) 패리 쿨다운이 없어져 바로 다시 패리할 수 있습니다. 헛치면 잠깐 쿨다운이 생깁니다.",
 			],
 		},
 		"charge": {
@@ -62,21 +63,29 @@ func _pages() -> Dictionary:
 			"lines": [
 				"%s 으로 0.6초 모으고 떼면 차지 강습: 피해 3으로 일반 돌진(1)보다 훨씬 강합니다. 모으는 동안 기체가 떨리고 완료되면 빛납니다. 한 번 쓰면 1.5초 동안은 다시 모을 수 없습니다(주황 링)." % hold,
 				"적이 팔을 들어 위치를 잡고 붉게 점멸하며 멈춰 있을 때(또는 휘두르는 중) 차지 강습으로 부딪히면 요격! 공격을 끊고 구동부에 피해 8!",
-				"팔을 들어 올리는 중에는 요격할 수 없습니다. 일반 돌진은 팔을 통과합니다.",
+				"팔을 들어 올리는 중에는 요격할 수 없습니다. 팔 휘두르기는 근접공격이라 일반 돌진으로 통과할 수 없습니다 — 요격하거나, 패리로 튕겨나거나, 범위 밖으로 피하세요.",
 			],
 		},
 		"barrage": {
 			"title": "탄막 — 주탄과 잔탄",
 			"lines": [
-				"작은 금색 탄(잔탄)은 패리하면 흡수되어 사라지기만 합니다. 리버스 드라이브는 열리지 않습니다. 패리 판정이 열려 있는 동안은 여러 발을 연달아 흡수합니다.",
-				"큰 금색 탄(주탄)과 고리가 도는 유도탄을 패리해야 리버스 드라이브가 열립니다. 유도탄은 쫓아오지만 크고 느려서 패리하기 좋습니다.",
+				"작은 검붉은 별(잔탄)은 맞으면 아프지만 패리해도 흡수될 뿐, 리버스 드라이브는 열리지 않습니다. 흡수해도 패리 쿨다운이 없어 겹쳐 오는 잔탄을 연달아 막을 수 있습니다.",
+				"크고 둥근 금색 탄(주탄)과 고리가 도는 유도탄을 패리해야 리버스 드라이브가 열립니다. 유도탄은 쫓아오지만 크고 느려서 패리하기 좋습니다.",
 				"바닥 가까이 머물면 융해 지대에 기뢰가 내려앉아 위로 터집니다.",
+			],
+		},
+		"press": {
+			"title": "프레스 — 천장이 내려온다 (근접, 회피 불가)",
+			"lines": [
+				"천장 전체가 내려와 경기장을 깔아뭉갭니다. 붉게 깜빡이는 정지선 아래로 내려가세요. 판에 닿으면 피해를 입고 판 아래로 밀려납니다.",
+				"근접공격이라 돌진의 무적으로 통과할 수 없습니다.",
+				"패리하면 막기는 하지만 거대한 힘에 아래로 내리꽂혀 융해 지대로 빠집니다. 패리하지 말고 피하세요.",
 			],
 		},
 		"unparry": {
 			"title": "패리 불가 — 보라색 공격",
 			"lines": [
-				"검붉은 보라색 공격(눈 레이저)은 패리할 수 없습니다. 돌진의 무적으로 통과하세요. 지나갈 부채꼴과 경로가 미리 표시됩니다.",
+				"검붉은 보라색 공격(눈 레이저·동심원 파동)은 패리할 수 없습니다. 돌진의 무적으로 통과하세요. 지나갈 부채꼴과 경로가 미리 표시됩니다.",
 				"돌진을 시작한 직후(0.12초 안)에 스치게 피하면 '강한 퍼펙트 회피'! 다음 차지 강습의 피해가 4배(완전 동조), 무적 1.2초, 눈에 띄는 금빛 오라가 붙습니다.",
 				"그 일격은 퍼펙트 패리에 준하는 큰 임팩트로 들어갑니다.",
 			],
@@ -246,6 +255,7 @@ class Stage extends Control:
 	const MINT := Color(0.45, 1.0, 0.85)
 	const UNP := Color(0.6, 0.08, 0.36)
 	const UNP_C := Color(1.0, 0.62, 0.86)
+	const SMALL_C := Color(0.95, 0.2, 0.22)
 	var kind := ""
 	var t := 0.0
 	var font: SystemFont
@@ -331,6 +341,8 @@ class Stage extends Control:
 				_unparry()
 			"barrage":
 				_barrage()
+			"press":
+				_press()
 
 	func _dodge() -> void:
 		var T := 6.0
@@ -597,18 +609,22 @@ class Stage extends Control:
 			_txt("완전 동조!", Vector2(pos.x - 70.0, pos.y - 70.0 - 6.0 * f), 20, GOLD)
 			_txt("다음 차지 ×4 · 무적 1.2초", Vector2(pos.x - 100.0, pos.y + 78.0), 16, Color(1.0, 0.95, 0.75))
 
-	## 레이저 진행도 k(0~1)가 되는 시각 (sweep 가속 곡선을 이분법으로 역산)
+	## 잔탄: 작고 뾰족한 검붉은 별 (게임과 같은 모양)
 	func _small(p: Vector2, v := Vector2.LEFT) -> void:
-		draw_line(p, p - v.normalized() * 18.0, Color(GOLD, 0.35), 5.0)
-		draw_circle(p, 6.0, Color(GOLD, 0.3))
-		draw_circle(p, 4.0, GOLD)
+		draw_line(p, p - v.normalized() * 14.0, Color(SMALL_C, 0.3), 3.0)
+		var r := 9.0
+		var pts := PackedVector2Array()
+		for j in 8:
+			pts.append(p + Vector2.from_angle(j * TAU / 8.0) * (r if j % 2 == 0 else r * 0.35))
+		draw_colored_polygon(pts, SMALL_C if int(t * 14.0) % 2 == 0 else Color(SMALL_C, 0.75))
+		draw_circle(p, 2.5, Color(1.0, 0.55, 0.35))
 
 	func _barrage() -> void:
 		var T := 7.6
 		var tt := fmod(t, T)
 		var sp := Vector2(170, 165)
 		if tt < 3.4:
-			_caption("① 작은 탄(잔탄): 패리하면 흡수만 된다")
+			_caption("① 작은 검붉은 별(잔탄): 패리하면 흡수만 된다", Color(1.0, 0.6, 0.55))
 			var holding := tt >= 0.6 and tt < 3.0
 			_ship(sp, 0.0)
 			_flame(sp, 0.0, 14.0)
@@ -617,8 +633,8 @@ class Stage extends Control:
 				if bx > sp.x + 42.0 and bx < 700.0:
 					_small(Vector2(bx, sp.y + sin(k * 1.7) * 14.0))
 				elif bx <= sp.x + 42.0 and bx > sp.x - 10.0:
-					_spark(sp + Vector2(40, 0), (sp.x + 42.0 - bx) / 52.0, Color(1.0, 0.92, 0.6), 6, 22.0)
-					_txt("흡수", Vector2(sp.x + 20.0, sp.y - 46.0), 16, GOLD)
+					_spark(sp + Vector2(40, 0), (sp.x + 42.0 - bx) / 52.0, SMALL_C, 6, 22.0)
+					_txt("흡수 (쿨다운 없음)", Vector2(sp.x - 10.0, sp.y - 46.0), 16, Color(1.0, 0.6, 0.55))
 			if holding:
 				_ring(sp, 40.0 + (4.0 if int(t * 10.0) % 2 == 0 else 0.0), Color(1.0, 0.95, 0.75, 0.9), 2.5)
 			_mouse(Vector2(size.x - 40.0, 60.0), false, holding)
@@ -661,6 +677,58 @@ class Stage extends Control:
 				_txt("피해 12", Vector2(tgt.x - 30.0, tgt.y - 50.0), 20, GOLD)
 			_mouse(Vector2(size.x - 40.0, 60.0), false, holding)
 
+	## 프레스: 천장이 내려오고, 정지선 아래로 내려간 기체만 산다. 패리하면 아래로 내리꽂힌다
+	func _press() -> void:
+		var T := 7.0
+		var tt := fmod(t, T)
+		var s := size
+		var stop := s.y - 90.0
+		var top := 0.0
+		var bottom := top
+		if tt < 1.4:
+			bottom = top + 14.0 * tt
+		elif tt < 2.0:
+			var k := (tt - 1.4) / 0.6
+			bottom = lerpf(20.0, stop, k * k)
+		elif tt < 2.8:
+			bottom = stop
+		else:
+			bottom = lerpf(stop, top, _smooth(2.8, 3.6, tt))
+		if tt < 3.6:
+			_caption("① 붉은 정지선 아래로 피한다 — 돌진으로는 통과 못 함", Color(1.0, 0.6, 0.5))
+			var y := lerpf(80.0, stop + 40.0, _smooth(0.3, 1.5, tt))
+			_ship(Vector2(260, y), PI * 0.5 if tt < 1.5 else -PI * 0.5)
+		else:
+			_caption("② 패리하면 막기는 하지만 아래로 내리꽂힌다", Color(1.0, 0.6, 0.5))
+			var u := tt - 3.6
+			var b2 := 0.0
+			if u < 0.8:
+				b2 = lerpf(0.0, 120.0, u / 0.8)
+			else:
+				b2 = lerpf(120.0, stop, _smooth(0.8, 1.3, u))
+			bottom = b2
+			var py := 150.0
+			if u >= 0.8:
+				py = maxf(150.0, b2 + 20.0)
+			if u >= 1.3:
+				py = lerpf(stop + 20.0, s.y + 10.0, _smooth(1.3, 1.6, u))
+			_ship(Vector2(420, py), -PI * 0.5)
+			if u >= 0.6 and u < 0.95:
+				_ring(Vector2(420, py), 40.0, Color(1.0, 0.95, 0.75, 0.9), 2.5)
+				_mouse(Vector2(s.x - 40.0, 60.0), false, true)
+			if u >= 1.5 and u < 2.6:
+				_spark(Vector2(420, s.y - 22.0), _smooth(1.5, 2.2, u), Color(1.0, 0.45, 0.15), 12, 50.0)
+				_txt("융해 지대로!", Vector2(370, s.y - 60.0), 18, Color(1.0, 0.55, 0.3))
+		if tt < 2.0:
+			var blink := 0.5 + 0.5 * sin(t * 20.0)
+			draw_rect(Rect2(0, stop, s.x, 4), Color(1.0, 0.3, 0.25, 0.4 + 0.5 * blink))
+		draw_rect(Rect2(0, top, s.x, bottom - top), Color(0.16, 0.16, 0.18))
+		for k in 14:
+			var x := k * 50.0
+			draw_line(Vector2(x, bottom - 14.0), Vector2(x + 24.0, bottom), Color(1.0, 0.35, 0.18, 0.8), 6.0)
+		draw_line(Vector2(0, bottom), Vector2(s.x, bottom), Color(1.0, 0.35, 0.18), 3.0)
+
+	## 레이저 진행도 k(0~1)가 되는 시각 (sweep 가속 곡선을 이분법으로 역산)
 	func _beam_time(target_k: float) -> float:
 		var lo := 0.0
 		var hi := 1.0

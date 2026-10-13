@@ -28,6 +28,11 @@ func load_from_disk() -> void:
 	cores.assign(cf.get_value("upgrade", "cores", []))
 	equipped = str(cf.get_value("upgrade", "equipped", ""))
 	bonus_points = int(cf.get_value("dev", "bonus_points", 0))
+	var old := cores.find("mobility")                # v0.34: 관측자의 코어가 기동 코어 → 파동 코어로 바뀜
+	if old >= 0:
+		cores[old] = "pulse"
+	if equipped == "mobility":
+		equipped = "pulse"
 	if not cores.has(equipped):
 		equipped = ""
 

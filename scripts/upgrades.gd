@@ -32,8 +32,8 @@ const NODES := {
 		"mods": {"power_damage": ["set", 14], "power_damage_perfect": ["set", 19]}},
 	"P5": {"name": "동조 증폭", "tier": 3, "desc": "동조 배율 ×2 → ×3 (완전 동조 ×4 → ×5)", "req": ["P3", "P4"],
 		"mods": {"evade_buff_mult": ["set", 3], "evade_buff_mult_strong": ["set", 5]}},
-	"U1": {"name": "냉각 계통", "tier": 1, "desc": "돌진 쿨다운 0.9초 → 0.7초", "req": [],
-		"mods": {"dash_cooldown": ["set", 0.7]}},
+	"U1": {"name": "냉각 계통", "tier": 1, "desc": "돌진 쿨다운 1.35초 → 1.15초", "req": [],
+		"mods": {"dash_cooldown": ["set", 1.15]}},
 	"U2": {"name": "축전 회로", "tier": 1, "desc": "차지 시간 0.6초 → 0.5초", "req": [],
 		"mods": {"charge_time": ["set", 0.5]}},
 	"U3": {"name": "반동 추진", "tier": 2, "desc": "적중 후 솟구침 높이 +15%", "req": ["U1"],
@@ -45,9 +45,9 @@ const NODES := {
 }
 
 const CORES := {
-	"mobility": {"name": "기동 코어", "from": "observer", "style": "기동·돌진",
-		"desc": "돌진 거리 +25%, 활공 중 낙하 속도 감소 (140 → 90)",
-		"mods": {"dash_time": ["mul", 1.25], "glide_fall": ["set", 90.0]}},
+	"pulse": {"name": "파동 코어", "from": "observer", "style": "패리",
+		"desc": "패리에 성공하면(잔탄 흡수·근접공격 패리 포함) 기체 둘레 150px 의 탄을 지우는 파동을 낸다",
+		"mods": {"pulse": ["set", true]}},
 	"reflect": {"name": "반사 코어", "from": "fortress", "style": "리버스 드라이브",
 		"desc": "리버스 드라이브 중(과 끝난 직후 0.3초) 기체 둘레 70px 안에 닿은 탄을 표적으로 되돌린다. 탄 하나당 피해 1, 유도탄은 3",
 		"mods": {"reflect": ["set", true]}},

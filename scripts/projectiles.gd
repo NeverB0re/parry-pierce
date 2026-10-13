@@ -1,9 +1,9 @@
 extends RefCounted
 ## 탄 시스템: 탄을 딕셔너리 대신 배열 묶음(위치·속도·수명·나이·중력·종류·주인)으로 들고 한꺼번에 움직이고 그린다.
 ## 탄 하나 = 같은 인덱스의 값들. 지울 때도 순서를 지킨다(먼저 쏜 탄이 먼저 판정된다).
-## 금색 = 패리할 수 있는 것 (모든 콜로서스 공통 색 언어). 크기로 역할을 구별한다:
-##  - 주탄(BOLT·LAVA·HOMING): 크다. 패리하면 리버스 드라이브
-##  - 잔탄(SMALL): 작다. 패리하면 흡수되어 사라지기만 한다 (조준 없음)
+## 주탄과 잔탄은 색·모양·크기를 모두 다르게 해서 한눈에 구별한다:
+##  - 주탄(BOLT·LAVA·HOMING): 크고 둥근 금색 + 흰 심 + 금빛 번짐. 패리하면 리버스 드라이브 (금색 = 보상이 있는 패리)
+##  - 잔탄(SMALL): 작고 뾰족한 검붉은 별, 번짐 없음, 짧게 깜빡임. 맞으면 아프지만 패리해도 흡수될 뿐 (조준 없음)
 ## 반사 코어로 되돌린 탄은 플레이어 것(mine)이 되어 청백색으로 바뀌고, 표적에 닿으면 피해를 준다.
 
 enum Kind { BOLT, LAVA, SMALL, HOMING }   # 일반 주탄 / 용융물 덩어리(포물선) / 잔탄 / 유도탄(크고 느리게 쫓아옴)
@@ -22,6 +22,7 @@ const KILL_TOP := -3100.0
 const C_BOLT := Color(1.0, 0.88, 0.35)
 const C_LAVA := Color(1.0, 0.35, 0.12)
 const C_MINE := Color(0.7, 0.95, 1.0)  # 반사된(플레이어) 탄
+const C_SMALL := Color(0.95, 0.2, 0.22)  # 잔탄: 검붉은 색 (금색 주탄과 다른 색)
 
 var pos := PackedVector2Array()
 var vel := PackedVector2Array()
@@ -33,6 +34,7 @@ var mine := PackedByteArray()         # 1 = 플레이어 것 (반사됨)
 
 static var _tex_bolt: Texture2D
 static var _tex_lava: Texture2D
+static var _tex_small: Texture2D
 
 
 func size() -> int:
@@ -125,6 +127,18 @@ func hitboxes_near(p: Vector2, reach: float, out: Array[Dictionary]) -> void:
 				"lava": kind[i] == Kind.LAVA, "small": kind[i] == Kind.SMALL, "homing": kind[i] == Kind.HOMING})
 
 
+## 파동(파동 코어): p 에서 reach 안의 적 탄을 지운다. 지운 위치들
+func clear_near(p: Vector2, reach: float) -> PackedVector2Array:
+	var gone := PackedVector2Array()
+	var i := pos.size() - 1
+	while i >= 0:
+		if mine[i] == 0 and pos[i].distance_to(p) <= reach + RADII[kind[i]]:
+			gone.append(pos[i])
+			remove(i)
+		i -= 1
+	return gone
+
+
 ## 반사: p 에서 reach 안의 적 탄을 플레이어 것으로 바꿔 target 쪽으로 되돌린다. 바꾼 개수
 func reflect_near(p: Vector2, reach: float, target: Vector2) -> int:
 	var n := 0
@@ -161,14 +175,18 @@ func draw(ci: CanvasItem) -> void:
 	if _tex_bolt == null:
 		_tex_bolt = _make_tex(C_BOLT)
 		_tex_lava = _make_tex(C_LAVA)
+		_tex_small = _make_small_tex()
 	var tails := PackedVector2Array()
 	var lava_tails := PackedVector2Array()
 	var mine_tails := PackedVector2Array()
+	var small_tails := PackedVector2Array()
 	for i in pos.size():
 		var p := pos[i]
 		var tail := p - vel[i].normalized() * (26.0 if kind[i] == Kind.SMALL else 50.0)
 		if mine[i] == 1:
 			mine_tails.append_array(PackedVector2Array([p, tail]))
+		elif kind[i] == Kind.SMALL:
+			small_tails.append_array(PackedVector2Array([p, tail]))
 		elif kind[i] == Kind.LAVA:
 			lava_tails.append_array(PackedVector2Array([p, tail]))
 		else:
@@ -179,17 +197,46 @@ func draw(ci: CanvasItem) -> void:
 		ci.draw_multiline(lava_tails, Color(C_LAVA, 0.35), 10.0)
 	if not mine_tails.is_empty():
 		ci.draw_multiline(mine_tails, Color(C_MINE, 0.5), 8.0)
+	if not small_tails.is_empty():
+		ci.draw_multiline(small_tails, Color(C_SMALL, 0.3), 3.0)
+	var blink := 0.75 + 0.25 * float(int(Time.get_ticks_msec() / 70) % 2)
 	var spin := Time.get_ticks_msec() * 0.006
 	for i in pos.size():
 		var k := kind[i]
 		var half: Vector2 = Vector2.ONE * float(RADII[k]) * 1.8
 		var mod := Color(0.75, 1.0, 1.0) if mine[i] == 1 else Color.WHITE
+		if k == Kind.SMALL:
+			half = Vector2.ONE * RADII[k] * 1.9
+			if mine[i] == 0:
+				mod = Color(1, 1, 1, blink)
+			ci.draw_texture_rect(_tex_small, Rect2(pos[i] - half, half * 2.0), false, mod)
+			continue
 		ci.draw_texture_rect(_tex_lava if k == Kind.LAVA else _tex_bolt, Rect2(pos[i] - half, half * 2.0), false, mod)
 		if k == Kind.HOMING:                      # 유도탄: 바깥에서 도는 끊긴 고리 (쫓아온다는 모양 단서)
 			var rr: float = RADII[k] + 9.0
 			for j in 3:
 				var a0 := spin + j * TAU / 3.0
 				ci.draw_arc(pos[i], rr, a0, a0 + 1.3, 8, Color(C_MINE, 0.9) if mine[i] == 1 else Color(1.0, 0.95, 0.7, 0.9), 3.0)
+
+
+## 잔탄 텍스처: 네 갈래로 뾰족한 검붉은 별 (가운데만 밝은 주황, 번짐 없음) — 금색 둥근 주탄과 모양부터 다르게
+static func _make_small_tex() -> Texture2D:
+	var n := 48
+	var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
+	var c := (n - 1) * 0.5
+	for y in n:
+		for x in n:
+			var q := Vector2(absf(x - c), absf(y - c)) / (n * 0.5)
+			var d := sqrt(q.x) + sqrt(q.y)              # 아스트로이드(네 갈래 별) 거리
+			var col := Color(0, 0, 0, 0)
+			if d <= 0.55:
+				col = Color(1.0, 0.55, 0.35)
+			elif d <= 0.85:
+				col = C_SMALL
+			elif d <= 1.0:
+				col = Color(0.35, 0.03, 0.06)
+			img.set_pixel(x, y, col)
+	return ImageTexture.create_from_image(img)
 
 
 ## 탄 텍스처: 반지름 비율 0.55 까지 금색 몸, 0.28 까지 흰 심, 바깥은 옅은 번짐 (그리는 크기 = 반지름 × 3.6)

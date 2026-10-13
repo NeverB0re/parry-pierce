@@ -370,6 +370,10 @@ func _tutorial_triggers() -> void:
 		tutorial.request(["unparry"])
 	elif kd == "spiral" or kd == "fan" or kd == "homing" or kd == "mines":
 		tutorial.request(["barrage"])
+	elif kd == "press":
+		tutorial.request(["press"])
+	elif kd == "rings":
+		tutorial.request(["unparry"])
 
 
 func _tele_extra() -> Dictionary:
@@ -439,18 +443,25 @@ func _check_attacks() -> void:
 		player.try_evade_reward(true)                   # 패리 불가 레이저를 돌진 직후 스침 = 강한 퍼펙트 회피 (4배)
 	var beam_push: Vector2 = boss.beam_hit(p, Player.RADIUS)   # 패리 불가: 돌진 무적으로만 피한다
 	if beam_push != Vector2.ZERO and not player.is_immune():
-		hurt_player(beam_push, "beam")
+		hurt_player(beam_push, boss.attack_kind())
 		return
 	var reach: float = player.parry_reach()
 	for hb in boss.hitboxes(p):
-		if player.can_evade_reward() and boss.overlaps(hb, p, graze):
+		var melee: bool = hb.get("melee", false)        # 근접공격 = 회피 불가 (일반 돌진 무적으로 통과 못 함, 퍼펙트 회피도 없음)
+		if hb["id"] == "press":
+			if _press(hb):
+				return
+			continue
+		if not melee and player.can_evade_reward() and boss.overlaps(hb, p, graze):
 			player.try_evade_reward()                   # 돌진 직후 공격이 스침 = 퍼펙트 회피
 		if not boss.overlaps(hb, p, reach):
 			continue
 		if player.parry_active:
-			if hb.get("small", false):              # 잔탄: 패리하면 흡수되어 사라지기만 한다 (조준 없음, 패리 판정은 그대로)
+			if hb.get("small", false):              # 잔탄: 패리하면 흡수되어 사라지기만 한다 (조준 없음, 패리 판정은 그대로, 쿨다운 없음)
 				boss.on_parried(hb)
+				player.on_absorb()
 				_absorb_feedback(hb["pos"])
+				_pulse(p)
 				return
 			var perfect: bool = player.parry_t <= Player.PERFECT_WINDOW
 			if hb["id"] == "arm":                       # 팔은 그냥 패리하면 피해 없이 튕겨나기만 (받아치기는 차지 돌진)
@@ -460,12 +471,15 @@ func _check_attacks() -> void:
 					away = -Vector2(hb["push"])
 				player.on_parry_push(away)
 				_parry_push_feedback(p.lerp(hp_pos, 0.3))
+				_pulse(p)
 				return
 			player.on_parry_success(perfect)
 			boss.on_parried(hb)
 			_parry_feedback(p, perfect, hb)
+			_pulse(p)
 			return
-		if not player.is_immune() and boss.overlaps(hb, p, Player.RADIUS):
+		var immune: bool = player.is_immune_melee() if melee else player.is_immune()
+		if not immune and boss.overlaps(hb, p, Player.RADIUS):
 			var cause: String = hb["id"]
 			if cause == "bolt" and hb["lava"]:
 				cause = "lava_glob"
@@ -578,11 +592,45 @@ func _parry_feedback(p: Vector2, perfect: bool, hb: Dictionary) -> void:
 		sfx.play("parry", 2.0)
 
 
+## 프레스(천장 근접공격): 판 아래로 밀어낸다. 패리하면 막기는 하지만 아래로 내리꽂힌다(융해 지대로).
+## 회피 불가라 일반 돌진 중이어도 판에 닿으면 피해. 처리했으면 true
+func _press(hb: Dictionary) -> bool:
+	var p: Vector2 = player.position
+	var bottom: float = Rect2(hb["rect"]).end.y
+	if player.parry_active and p.y - player.parry_reach() < bottom:
+		tele.add("parry_press")
+		player.on_press_pin()
+		_parry_push_feedback(Vector2(p.x, bottom))
+		shake = maxf(shake, 18.0)
+		_pulse(p)
+		return true
+	if p.y - Player.RADIUS >= bottom:
+		return false
+	player.position.y = bottom + Player.RADIUS + 1.0          # 판 아래로 밀어낸다 (판보다 위에 있을 수 없다)
+	if not player.is_immune_melee():
+		hurt_player(Vector2.DOWN, "press")
+		player.vel.y = 0.0                                      # 맞은 충격으로 융해 지대까지 날아가지는 않게
+	else:
+		player.vel.y = maxf(player.vel.y, 0.0)
+	return true
+
+
+## 파동 코어: 패리에 성공하면(잔탄 흡수·근접 패리 포함) 기체 둘레의 탄을 지우는 파동
+func _pulse(at: Vector2) -> void:
+	if not player.stats.pulse:
+		return
+	var gone: PackedVector2Array = boss.shots.clear_near(at, Player.PULSE_RADIUS)
+	tele.add("pulse")
+	fx.ring(at, Color(0.7, 1.0, 0.95), Player.PULSE_RADIUS, 0.25, 4.0)
+	for q in gone:
+		fx.burst(q, 4, Color(0.8, 1.0, 0.95), 200.0, 0.2, 2.0)
+
+
 ## 잔탄 흡수: 아주 작은 연출 (탄막 속에서 연달아 일어난다)
 func _absorb_feedback(at: Vector2) -> void:
 	tele.add("parry_absorb")
 	sfx.play("parry", -12.0)
-	fx.burst(at, 5, Color(1.0, 0.92, 0.6), 260.0, 0.18, 2.0)
+	fx.burst(at, 5, Color(1.0, 0.4, 0.35), 260.0, 0.18, 2.0)
 
 
 ## 반사 코어: 리버스 드라이브 중 기체 둘레의 탄을 표적으로 되돌린다
@@ -700,6 +748,15 @@ func _drain_boss_events() -> void:
 				fx.sprite(pos, 1, 90.0 + dmg * 40.0, 0.3)
 				if boss.damage(ev["hit"], dmg):
 					_core_destroyed(pos)
+			Ev.PRESS:                           # 프레스가 정지선에 닿음
+				shake = maxf(shake, 26.0)
+				sfx.play("stomp", 6.0)
+				sfx.play("break", 0.0)
+				fx.burst(Vector2(player.position.x, pos.y), 30, Color(0.7, 0.68, 0.64), 900.0, 0.6, 5.0, 1200.0, Vector2.DOWN, PI * 0.4)
+			Ev.RING:                            # 동심원 파동 하나가 퍼지기 시작
+				shake = maxf(shake, 8.0)
+				sfx.play("dash", 2.0, 0.0)
+				hud.flash(0.06, Color(0.6, 0.1, 0.4))
 			Ev.MINE:                            # 기뢰 폭발
 				shake = maxf(shake, 8.0)
 				sfx.play("stomp", -4.0)

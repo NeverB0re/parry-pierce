@@ -106,6 +106,7 @@ func hitboxes(ppos: Vector2, out: Array[Dictionary]) -> void:
 	var tangent := Vector2(-s * sin(th), cos(th))
 	var hb: Dictionary = boss.arm_box(arm, ppos)
 	hb["push"] = (tangent + Vector2(0, -0.5)).normalized()
+	hb["melee"] = true                         # 근접공격 = 회피 불가
 	out.append(hb)
 
 

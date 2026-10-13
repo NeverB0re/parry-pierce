@@ -6,12 +6,11 @@ var n := 0
 var out := ""
 # [시작 프레임, 이름, 공격, 찍을 프레임 오프셋, 카메라 위치, 줌]
 var plan := [
-	["overview", "", 10, Vector2(0, -1500), 0.23],
-	["spiral", "spiral", 110, Vector2(0, -1800), 0.32],
-	["fan", "fan", 85, Vector2(0, -1800), 0.32],
-	["homing", "homing", 110, Vector2(0, -1500), 0.32],
-	["mines", "mines", 120, Vector2(200, -500), 0.5],
-	["reactor", "core", 40, Vector2(0, -1640), 0.6],
+	["spiral", "spiral", 150, Vector2(-300, -2000), 0.5],
+	["bullets", "bullets", 20, Vector2(250, -1200), 1.0],
+	["press_warn", "press", 80, Vector2(0, -1500), 0.23],
+	["press_hold", "press", 170, Vector2(0, -1500), 0.23],
+	["rings", "rings", 150, Vector2(0, -1640), 0.3],
 ]
 var idx := 0
 var local := 0
@@ -52,6 +51,15 @@ func _process(_d: float) -> bool:
 			"fan": b.start_attack(b.Fan.new(1, b.BARREL_TIPS[1], p.position))
 			"homing": b.start_attack(b.Homing.new())
 			"mines": b.start_attack(b.Mines.new(p.position))
+			"press": b.start_attack(b.Press.new())
+			"rings": b.start_attack(b.Rings.new(b.REACTOR_POS))
+			"bullets":                                 # 주탄·잔탄·유도탄 비교 (멈춰 있는 탄)
+				var K = b.shots.Kind
+				for k in 6:
+					b.shots.spawn(Vector2(-150 + k * 60, -1320), Vector2(-1, 0.3) * 0.01, 99.0, 1.0, 0.0, K.SMALL)
+				for k in 3:
+					b.shots.spawn(Vector2(-120 + k * 110, -1100), Vector2(-1, 0.3) * 0.01, 99.0, 1.0)
+				b.shots.spawn(Vector2(480, -1220), Vector2(-1, 0) * 0.01, 99.0, 1.0, 0.0, K.HOMING)
 			"core":
 				for i in 4:
 					b.damage_part(i, 99)
@@ -60,6 +68,7 @@ func _process(_d: float) -> bool:
 	local += 1
 	p.invuln = 999.0
 	p.vel = Vector2.ZERO
+	p.position = Vector2(250, -400) if pl[1] == "mines" or pl[1] == "press" else Vector2(250, -1200)
 	main.cam.position = pl[3]
 	main.cam.zoom = Vector2(pl[4], pl[4])
 	main.hud.clear_banner()

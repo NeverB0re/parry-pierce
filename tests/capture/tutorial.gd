@@ -10,6 +10,8 @@ var plan := [
 	["charge", 0.8], ["charge", 2.6], ["charge", 5.2], ["charge", 6.2],
 	["unparry", 1.0], ["unparry", 3.2],
 	["barrage", 2.0], ["barrage", 5.6],
+	["press", 1.6], ["press", 4.9],
+	["dodge", 0.5],
 ]
 var idx := 0
 var cur := ""

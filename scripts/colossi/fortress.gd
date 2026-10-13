@@ -4,7 +4,7 @@ extends "res://scripts/colossus_base.gd"
 ## 페이즈: 1) 외부 시스템 파괴 — 좌/우 주포대(위), 좌/우 유도탄 사일로(아래)
 ##         2) 개방 — 몸통 방폭문이 위아래로 열린다
 ##         3) 반응로 — 팔각 장갑에 싸인 동력 코어. 탄막은 첨탑에서, 유도탄은 반응로 배기구에서
-## 공격: 나선 탄막 · 부채 탄막(가운데 주탄) · 유도탄 · 융해 기뢰(바닥)
+## 공격: 나선 탄막 · 부채 탄막(가운데 주탄) · 유도탄 · 융해 기뢰(바닥) · 프레스(근접, 회피 불가, 드물게) · 동심원 파동(패리 불가, 드물게)
 ## 바닥 y=0, 위쪽이 음수. 몸 중심 x=0.
 
 const ArmoredCore := preload("res://scripts/armored_core.gd")
@@ -12,6 +12,8 @@ const Spiral := preload("res://scripts/attacks/spiral.gd")
 const Fan := preload("res://scripts/attacks/fan.gd")
 const Homing := preload("res://scripts/attacks/homing.gd")
 const Mines := preload("res://scripts/attacks/mines.gd")
+const Press := preload("res://scripts/attacks/press.gd")
+const Rings := preload("res://scripts/attacks/rings.gd")
 
 # ── 구조 ───────────────────────────────────────────────
 const REACTOR_POS := Vector2(0, -1640)      # 동력 코어(반응로) 중심
@@ -49,7 +51,7 @@ const C_RUST := Color(0.36, 0.2, 0.12)
 const C_TREAD := Color(0.06, 0.06, 0.065)
 const C_GLOW := Color(1.0, 0.78, 0.42)
 
-var glow: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]   # 발사 전 달아오름: 부위 0~3, 4 첨탑, 5 박격포
+var glow: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]   # 발사 전 달아오름: 부위 0~3, 4 첨탑, 5 박격포, 6 반응로(보라)
 var debris: Array[Dictionary] = []
 
 
@@ -130,14 +132,20 @@ func _choose(ppos: Vector2) -> void:
 	if ppos.y > LOW_ZONE_Y and roll < 0.5:        # 낮은 곳: 기뢰 위주
 		start_attack(Mines.new(ppos))
 		return
-	if roll < 0.18:
+	if roll < 0.15:
 		start_attack(Mines.new(ppos))
+		return
+	if roll < 0.24:                               # 드물게: 천장 프레스 (근접, 회피 불가)
+		start_attack(Press.new())
+		return
+	if roll < 0.34:                               # 드물게: 심장부 동심원 파동 (패리 불가)
+		start_attack(Rings.new(REACTOR_POS))
 		return
 	var c := _battery(ppos)
 	var org: Vector2 = SPIRE_TOP if c < 0 else BARREL_TIPS[c]
-	if roll < 0.46:
+	if roll < 0.56:
 		start_attack(Spiral.new(c, org))
-	elif roll < 0.74 or homing_origins().is_empty():
+	elif roll < 0.80 or homing_origins().is_empty():
 		start_attack(Fan.new(c, org, ppos))
 	else:
 		start_attack(Homing.new())
@@ -169,7 +177,7 @@ func homing_origins() -> Array:
 	return out
 
 
-## 발사 전 발광: 0~3 부위, -1 첨탑(코어 페이즈 배기구 포함), -3 박격포
+## 발사 전 발광: 0~3 부위, -1 첨탑(코어 페이즈 배기구 포함), -3 박격포, -4 반응로(동심원 파동)
 func set_glow(c: int, v: float) -> void:
 	glow[_glow_idx(c)] = v
 
@@ -181,6 +189,8 @@ func glow_of(c: int) -> float:
 static func _glow_idx(c: int) -> int:
 	if c >= 0:
 		return c
+	if c == -4:
+		return 6
 	return 4 if c == -1 else 5
 
 
@@ -331,6 +341,8 @@ func _draw_doors() -> void:
 		draw_rect(Rect2(rc.position.x, REACTOR_POS.y - gap * 0.5, rc.size.x, gap), Color(C_HEART, 0.25 * (1.0 - open_k)))
 	else:
 		draw_line(Vector2(rc.position.x, REACTOR_POS.y), Vector2(rc.end.x, REACTOR_POS.y), Color(C_HEART, 0.18 + 0.1 * sin(t * 3.0)), 3.0)
+	if glow[6] > 0.0:                                 # 동심원 파동 예고: 문틈으로 보랏빛
+		draw_line(Vector2(rc.position.x, REACTOR_POS.y), Vector2(rc.end.x, REACTOR_POS.y), Color(1.0, 0.62, 0.86, glow[6]), 4.0 + 10.0 * glow[6])
 
 
 ## 반응로: 안쪽은 회전하는 제어봉과 맥동하는 코어, 바깥은 강철 판(장갑)

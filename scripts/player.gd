@@ -35,13 +35,17 @@ const PARRY_DASH_SPEED_PERFECT := 4000.0
 const PARRY_DASH_TIME := 0.22
 const REFLECT_LINGER := 0.3      # 반사 코어: 리버스 드라이브가 끝난 직후에도 반사 유지
 const REFLECT_RADIUS := 70.0     # 반사 범위 (기체보다 넓게)
+const PULSE_RADIUS := 150.0      # 파동 코어: 패리 성공 시 탄을 지우는 범위
 const POWER_RADIUS := 8.0        # 패리 돌진은 타격 범위도 넓다
 # 직격 후: v0.6 방식 — 위로 솟구치고, 들어온 반대쪽으로 약간 밀리며, 마우스 좌우로 조종한다
 const BOUNCE_SIDE := 250.0       # 들어온 방향의 반대쪽으로 밀리는 가로 속도
 const BOUNCE_STEER := 750.0      # 튕길 때 마우스 좌우 방향으로 더하는 가로 속도 (좌우 조종)
 const ASSIST_SLACK := 60.0           # 사거리 여유
 const BOUNCE_THRUST := 2.0       # 튕겨나는 동안 좌우 추진 배율
-const STRIKE_SHIELD := 0.9       # 직격 후 튕겨나는 동안 무적 시간
+const STRIKE_SHIELD := 0.9       # 직격 후 튕겨나는 동안 무적 (최대). 튕김이 끝나 기체 통제를 되찾으면 바로 끝난다
+const BOUNCE_END := 0.4          # 솟구치는 속도가 처음의 이 비율 아래로 떨어지면 튕김 끝 = 통제 회복
+const PRESS_PIN_SPEED := 2300.0  # 프레스(천장 근접공격)를 패리하면 이 속도로 아래로 내리꽂힌다
+const PRESS_PIN_TIME := 1.0
 const STUN_INVULN := 0.4         # 스턴이 끝난 뒤 추가 무적
 const HURT_PUSH := 500.0
 const HURT_POP := 380.0          # 맞으면 살짝 솟구친다
@@ -99,6 +103,8 @@ var aim_left := 0.0
 var aim_perfect := false
 var invuln := 0.0                # 피격 후 무적
 var bouncing := false            # 직격 후 튕겨나는 중
+var bounce_rise := 0.0           # 직격 튕김의 처음 솟구치는 속도 (0 = 직격 튕김 아님). 통제 회복 판정용
+var parry_hit := false           # 이번 패리 판정에서 무언가를 막았다 → 판정이 끝나도 패리 쿨다운 없음
 var shield_t := 0.0              # 돌진/직격 후 무적
 var shield_max := 1.0
 var stun := 0.0
@@ -127,6 +133,8 @@ func reset(pos: Vector2, platform := false) -> void:
 	charge_t = 0.0
 	bouncing = false
 	dash_cd = 0.0
+	bounce_rise = 0.0
+	parry_hit = false
 	charge_cd = 0.0
 	reflect_t = 0.0
 	evade_window = 0.0
@@ -153,6 +161,11 @@ func reset(pos: Vector2, platform := false) -> void:
 	bank = 0.0
 	trail.clear()
 	queue_redraw()
+
+
+## 근접공격(팔·프레스)은 회피 불가: 일반 돌진의 무적으로는 통과할 수 없다 (리버스 드라이브·차지 강습·피격 후 무적 등은 그대로)
+func is_immune_melee() -> bool:
+	return frozen or aim_phase or shield_t > 0.0 or invuln > 0.0 or launch_t > 0.0 or (dash_t > 0.0 and dash_kind != "dash")
 
 
 func is_immune() -> bool:
@@ -252,6 +265,9 @@ func _dash(kind: String) -> void:
 	evade_rewarded = false
 	vel = aim * spd
 	bouncing = false
+	if bounce_rise > 0.0:                    # 직격 튕김 중 돌진: 튕김 무적은 여기서 끝 (돌진 자체가 무적)
+		bounce_rise = 0.0
+		shield_t = 0.0
 	main.on_dash(position, aim, kind)
 
 
@@ -273,6 +289,7 @@ func parry_press() -> void:
 		parry_queue = stats.parry_buffer            # 쿨다운이 곧 끝나면 그때 발동
 		return
 	parry_active = true
+	parry_hit = false
 	parry_t = 0.0
 
 
@@ -299,6 +316,30 @@ func on_parry_success(perfect: bool) -> void:
 	aim_perfect = perfect
 	aim_left = stats.aim_time_perfect if perfect else stats.aim_time
 	parry_flash = 1.0
+
+
+## 잔탄 흡수: 패리 판정은 그대로 열려 있고, 판정이 끝나도 쿨다운이 없다
+func on_absorb() -> void:
+	parry_hit = true
+
+
+## 프레스(천장 근접공격)를 패리: 막기는 했지만 거대한 힘에 아래로 내리꽂힌다 (제어 불능, 융해 지대로)
+func on_press_pin() -> void:
+	parry_active = false
+	parry_cd = 0.0
+	cancel_charge()
+	queued_press = false
+	dash_t = 0.0
+	_end_dash()
+	bouncing = false
+	bounce_rise = 0.0
+	on_platform = false
+	launch_t = 0.0
+	vel = Vector2(0.0, PRESS_PIN_SPEED)
+	stun = PRESS_PIN_TIME
+	shield_t = PRESS_PIN_TIME                    # 막기는 했으니 피해는 없다 (대신 내리꽂힘)
+	shield_max = PRESS_PIN_TIME
+	parry_flash = 0.6
 
 
 ## 휩쓰는 팔을 그냥 패리: 피해는 없지만 패리 돌진도 없다. 팔 반대쪽으로 튕겨나기만 한다
@@ -398,6 +439,9 @@ func step(dt: float) -> void:
 	parry_cd = maxf(0.0, parry_cd - dt)
 	invuln = maxf(0.0, invuln - dt)
 	shield_t = maxf(0.0, shield_t - dt)
+	if bounce_rise > 0.0 and vel.y > -bounce_rise * BOUNCE_END:   # 직격 튕김이 끝나 통제를 되찾음 → 무적도 끝
+		bounce_rise = 0.0
+		shield_t = 0.0
 	if shield_t <= 0.0:
 		bouncing = false
 	launch_t = maxf(0.0, launch_t - dt)
@@ -427,15 +471,16 @@ func step(dt: float) -> void:
 		if parry_cd <= 0.0 and parry_held and not parry_active and stun <= 0.0:
 			parry_queue = 0.0
 			parry_active = true
+			parry_hit = false
 			parry_t = 0.0
 	if parry_active:
 		parry_t += dt
 		if parry_t > stats.parry_hold_max:
 			parry_active = false
-			parry_cd = PARRY_COOLDOWN
+			parry_cd = 0.0 if parry_hit else PARRY_COOLDOWN     # 막은 게 있으면 쿨다운 없이 바로 다시
 		elif not parry_held and parry_t >= PARRY_MIN:
 			parry_active = false
-			parry_cd = PARRY_RELEASE_CD
+			parry_cd = 0.0 if parry_hit else PARRY_RELEASE_CD
 
 	if on_platform:
 		vel.y = 0.0
@@ -605,7 +650,7 @@ func bounce_off(dir: Vector2, kind := "dash") -> void:
 	dash_t = 0.0
 	_end_dash()
 	bouncing = true
-	shield_t = STRIKE_SHIELD                     # 튕겨나는 동안 무적
+	shield_t = STRIKE_SHIELD                     # 튕겨나는 동안 무적 (통제를 되찾으면 끝)
 	shield_max = STRIKE_SHIELD
 	parry_cd = 0.0                               # 튕겨나오는 즉시 패리 가능 (돌진 쿨다운은 그대로)
 	parry_queue = 0.0
@@ -615,6 +660,7 @@ func bounce_off(dir: Vector2, kind := "dash") -> void:
 	if m.length() > AIM_DEADZONE:
 		steer = m.normalized().x
 	vel = Vector2(-dir.x * BOUNCE_SIDE + steer * BOUNCE_STEER, -stats.bounce_up * k)
+	bounce_rise = stats.bounce_up * k
 
 
 ## 에임 어시스트: 사거리 안에서 조준선이 표적 가장자리 일정 각도(PC 24도, 터치 40도) 이내면 표적 중심으로 달라붙는다.

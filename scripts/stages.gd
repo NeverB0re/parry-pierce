@@ -3,7 +3,7 @@ extends RefCounted
 ## 마지막 스테이지를 깨면 같은 스테이지로 다시 도약한다 (다음 콜로서스가 생기면 이어진다).
 
 const LIST := [
-	{"id": "observer", "name": "관측자", "script": "res://scripts/colossi/observer.gd", "core": "mobility",
+	{"id": "observer", "name": "관측자", "script": "res://scripts/colossi/observer.gd", "core": "pulse",
 		"coord": "퇴각 항로 1구간"},
 	{"id": "fortress", "name": "탄막 요새", "script": "res://scripts/colossi/fortress.gd", "core": "reflect",
 		"coord": "퇴각 항로 2구간"},

@@ -25,6 +25,7 @@ func _process(_d: float) -> bool:
 	_sync_test()
 	_meta_test()
 	_fortress_test()
+	_v034_test()
 	_telemetry_test()
 	print("FAILS ", fails)
 	quit(fails)
@@ -80,7 +81,7 @@ func _run() -> void:
 	main.touch_ui = FakeStick.new()
 
 	_check("numbers (cd %.2f, dmg %d/%d/%d/%d, part %d, core %d)" % [p.stats.dash_cooldown, p.DASH_DAMAGE, p.stats.charge_damage, p.stats.power_damage, p.stats.clash_damage, b.PART_HP, b.core.CORE_HP],
-		absf(p.stats.dash_cooldown - 0.9) < 0.001 and p.DASH_DAMAGE == 1 and p.stats.charge_damage == 3 and p.stats.power_damage == 12 and p.stats.power_damage_perfect == 16 and p.stats.clash_damage == 8 and b.PART_HP == 24 and b.ARMOR_HP == 160 and b.core.CORE_HP == 1)
+		absf(p.stats.dash_cooldown - 1.35) < 0.001 and p.DASH_DAMAGE == 1 and p.stats.charge_damage == 3 and p.stats.power_damage == 12 and p.stats.power_damage_perfect == 16 and p.stats.clash_damage == 8 and b.PART_HP == 24 and b.ARMOR_HP == 160 and b.core.CORE_HP == 1)
 
 	# ── 돌진: 짧게 = 돌진, 쿨다운 ──
 	_air(Vector2(-900, -1500))
@@ -464,22 +465,22 @@ func _telemetry_test() -> void:
 func _meta_test() -> void:
 	var Up = main.Upgrades
 	var base = main.Player.BASE_STATS
-	var st = Up.build(base, ["P1", "P2"], "mobility")
-	_check("nodes + core applied (cells %d, charge %d, dash_time %.2f, glide %.0f)" % [st.shield_cells, st.charge_damage, st.dash_time, st.glide_fall],
-		st.shield_cells == 4 and st.charge_damage == 4 and absf(st.dash_time - 0.35) < 0.001 and st.glide_fall == 90.0)
-	_check("base stats untouched", base.shield_cells == 3 and base.charge_damage == 3 and absf(base.dash_time - 0.28) < 0.001)
+	var st = Up.build(base, ["P1", "P2"], "pulse")
+	_check("nodes + core applied (cells %d, charge %d, pulse %s)" % [st.shield_cells, st.charge_damage, st.pulse],
+		st.shield_cells == 4 and st.charge_damage == 4 and st.pulse)
+	_check("base stats untouched", base.shield_cells == 3 and base.charge_damage == 3 and not base.pulse)
 	var st2 = Up.build(base, ["P1", "P2"], "")
-	_check("unequipping core removes its effect", absf(st2.dash_time - 0.28) < 0.001 and st2.glide_fall == 140.0)
+	_check("unequipping core removes its effect", not st2.pulse)
 	_check("prerequisite needed (A3 needs A1)", not Up.can_take("A3", [], 5, 3) and Up.can_take("A3", ["A1"], 5, 3) and not Up.can_take("A1", [], 0, 3))
 	_check("tier gate: after 1 colossus only tier-1 nodes (A3 locked even with A1)", Up.can_take("A1", [], 1, 1) and not Up.can_take("A3", ["A1"], 1, 1) and Up.can_take("A3", ["A1"], 1, 2))
 	_check("A2 is parry reach now (aim time unchanged)", Up.build(base, ["A2"], "").parry_reach == 40.0 and Up.build(base, ["A2"], "").aim_time == base.aim_time)
-	_check("dash cooldown 0.9, U1 -> 0.7", absf(base.dash_cooldown - 0.9) < 0.001 and absf(Up.build(base, ["U1"], "").dash_cooldown - 0.7) < 0.001)
+	_check("dash cooldown 1.35, U1 -> 1.15", absf(base.dash_cooldown - 1.35) < 0.001 and absf(Up.build(base, ["U1"], "").dash_cooldown - 1.15) < 0.001)
 
 	var pr = main.Profile.new()
 	pr.path = "user://profile_test.cfg"
 	pr.reset()
 	var got: Dictionary = pr.record_clear(0)
-	_check("first clear: core + 1 point, core auto-equipped", got["first"] and got["core"] == "mobility" and got["point"] == 1 and pr.points_left() == 1 and pr.equipped == "mobility")
+	_check("first clear: core + 1 point, core auto-equipped", got["first"] and got["core"] == "pulse" and got["point"] == 1 and pr.points_left() == 1 and pr.equipped == "pulse")
 	var again: Dictionary = pr.record_clear(0)
 	_check("re-clear gives nothing (no farming)", not again["first"] and pr.points_left() == 1)
 	_check("locked node refused (P3 before P2)", not pr.take_node("P3") and pr.points_left() == 1)
@@ -487,8 +488,8 @@ func _meta_test() -> void:
 	var pr2 = main.Profile.new()
 	pr2.path = pr.path
 	pr2.load_from_disk()
-	_check("profile saved and loaded (nodes %s, cores %s, eq %s)" % [pr2.nodes, pr2.cores, pr2.equipped], pr2.nodes == pr.nodes and pr2.cores == pr.cores and pr2.equipped == "mobility" and pr2.cleared == pr.cleared)
-	pr2.equip("mobility")
+	_check("profile saved and loaded (nodes %s, cores %s, eq %s)" % [pr2.nodes, pr2.cores, pr2.equipped], pr2.nodes == pr.nodes and pr2.cores == pr.cores and pr2.equipped == "pulse" and pr2.cleared == pr.cleared)
+	pr2.equip("pulse")
 	_check("equip same core again = unequip", pr2.equipped == "")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(pr.path))
 
@@ -511,8 +512,8 @@ func _meta_test() -> void:
 	_check("FTL starts", main.ftl.is_playing() and not main.hangar.visible)
 	main.ftl.skip()
 	var p = main.player
-	_check("arrived: new run with upgrades (cells %d, lives %d, core dash %.2f)" % [p.stats.shield_cells, main.lives, p.stats.dash_time],
-		not paused and main.state == main.State.PLAY and p.stats.shield_cells == 4 and main.lives == 4 and absf(p.stats.dash_time - 0.35) < 0.001)
+	_check("arrived: new run with upgrades (cells %d, lives %d, pulse %s)" % [p.stats.shield_cells, main.lives, p.stats.pulse],
+		not paused and main.state == main.State.PLAY and p.stats.shield_cells == 4 and main.lives == 4 and p.stats.pulse)
 
 	# U4 실드 재충전: 퍼펙트 회피로 1회 회복
 	p.stats.evade_heal = true
@@ -628,4 +629,118 @@ func _fortress_test() -> void:
 	main._core_destroyed(b.core.center)
 	_check("fortress clear gives reflect core", mp.cores.has("reflect") and mp.cleared.has("fortress"))
 	main.profile = old
+	main.start_stage(0)
+
+
+## v0.34: 직격 튕김 무적은 통제 회복까지, 패리 성공 시 쿨다운 초기화, 파동 코어, 근접공격 회피 불가, 프레스, 동심원 파동
+func _v034_test() -> void:
+	main.start_stage(0)
+	var b = main.boss
+	var p = main.player
+	var pp: Vector2 = b.part_pos(0)
+	_air(pp + Vector2(-140, 0))
+	_dash_dir("dash", Vector2.RIGHT)
+	_step(6)
+	_check("strike bounce gives a shield (%.2f)" % p.shield_t, p.shield_t > 0.0 and p.bouncing)
+	var frames := 0
+	while p.shield_t > 0.0 and frames < 120:
+		_step(1)
+		frames += 1
+	_check("bounce shield ends when control returns (%.2fs, before dash cooldown %.2f)" % [frames * DT, p.stats.dash_cooldown], frames * DT < p.stats.dash_cooldown - 0.28 and not p.bouncing)
+
+	# 잔탄 흡수 → 판정이 끝나도 쿨다운 없음
+	main.start_stage(1)
+	b = main.boss
+	b.next_t = 99.0
+	p.reset(Vector2(-700, -1500), false)
+	p.parry_press()
+	b.shots.spawn(p.position + Vector2(25, 0), Vector2.ZERO, 5.0, 0.0, 0.0, b.shots.Kind.SMALL)
+	_step(int(0.3 / DT))
+	_check("parry window that absorbed something ends with no cooldown (cd %.2f)" % p.parry_cd, not p.parry_active and p.parry_cd <= 0.0)
+	p.parry_release()
+	p.parry_press()
+	_step(int(0.3 / DT))
+	p.parry_release()
+	_check("empty parry still has its cooldown (cd %.2f)" % p.parry_cd, p.parry_cd > 0.0)
+
+	# 파동 코어
+	p.reset(Vector2(-700, -1500), false)
+	p.stats.pulse = true
+	p.parry_press()
+	b.shots.spawn(p.position + Vector2(25, 0), Vector2.ZERO, 5.0, 0.0, 0.0, b.shots.Kind.SMALL)
+	b.shots.spawn(p.position + Vector2(-110, 40), Vector2.ZERO, 5.0, 0.0, 0.0, b.shots.Kind.SMALL)
+	b.shots.spawn(p.position + Vector2(400, 0), Vector2.ZERO, 5.0, 0.0, 0.0, b.shots.Kind.SMALL)
+	_step(1)
+	_check("pulse core: parry clears nearby bullets only (left %d)" % b.shots.size(), b.shots.size() == 1)
+	p.stats.pulse = false
+	p.parry_release()
+	b.shots.clear()
+
+	# 프레스: 정지선 위에 있으면 피해 + 아래로 밀림, 일반 돌진으로 못 피함
+	main.start_stage(1)
+	b = main.boss
+	b.next_t = 99.0
+	p.reset(Vector2(300, -1600), false)
+	var pr = b.Press.new()
+	b.start_attack(pr)
+	var lives0: int = main.lives
+	var hit := false
+	for k in int((pr.WARN + pr.DROP + 0.3) / DT):
+		if pr.phase == "drop" and not hit and p.dash_t <= 0.0 and p.dash_cd <= 0.0:
+			_dash_dir("dash", Vector2.UP)
+		_step(1)
+		if main.lives < lives0:
+			hit = true
+	_check("press: dash i-frames don't help, pushed below the plate (lives %d->%d, y %.0f)" % [lives0, main.lives, p.position.y], main.lives == lives0 - 1 and p.position.y > pr.STOP_Y and main.state == main.State.PLAY)
+	# 패리하면 아래로 내리꽂힌다
+	main.start_stage(1)
+	b = main.boss
+	b.next_t = 99.0
+	p.reset(Vector2(300, -1200), false)
+	pr = b.Press.new()
+	b.start_attack(pr)
+	var pinned := false
+	for k in int((pr.WARN + pr.DROP + 1.5) / DT):
+		if not pinned and p.stun <= 0.0:              # 맞을 때까지 그 자리에 떠 있는다
+			p.position = Vector2(300, -1200)
+			p.vel = Vector2.ZERO
+		if pr.phase == "drop" and pr.bottom > p.position.y - 300.0 and not p.parry_active and not pinned:
+			p.parry_press()
+		_step(1)
+		if p.vel.y > 1500.0 and p.stun > 0.0:
+			pinned = true
+		if main.state != main.State.PLAY:
+			break
+	_check("parrying the press pins you down into the lava (state %d, pinned %s, lives %d)" % [main.state, pinned, main.lives], pinned and main.state == main.State.RESPAWN)
+	p.parry_release()
+
+	# 근접(팔): 일반 돌진으로 통과 못 함
+	main.start_stage(0)
+	b = main.boss
+	_air(Vector2(-700, -1500))
+	_swing("swing", 0.0, 1.0, 1.0)
+	var mid: Vector2 = b.SHOULDERS[1].lerp(b.fists[1], 0.8)
+	var side: Vector2 = (b.fists[1] - b.SHOULDERS[1]).orthogonal().normalized()
+	p.position = mid + side * 120.0
+	_swing("swing", 0.0, 1.0, 1.0)
+	lives0 = main.lives
+	_dash_dir("dash", -side)
+	_step(4)
+	_check("arm swing is not dodgeable by dash i-frames (lives %d->%d)" % [lives0, main.lives], main.lives == lives0 - 1)
+
+	# 동심원 파동: 패리 불가, 돌진으로 통과
+	main.start_stage(1)
+	b = main.boss
+	b.next_t = 99.0
+	var rg = b.Rings.new(b.REACTOR_POS)
+	b.start_attack(rg)
+	rg.t = rg.WIND + 1.0
+	var at: Vector2 = b.REACTOR_POS + Vector2(rg.SPEED * 1.0, 0)
+	_check("rings hit at their radius, not between", b.beam_hit(at, 12.0) != Vector2.ZERO and b.beam_hit(at + Vector2(150, 0), 12.0) == Vector2.ZERO)
+	p.reset(at, false)
+	p.parry_press()
+	lives0 = main.lives
+	main._check_attacks()
+	_check("rings can't be parried (lives %d->%d)" % [lives0, main.lives], main.lives == lives0 - 1)
+	p.parry_release()
 	main.start_stage(0)
