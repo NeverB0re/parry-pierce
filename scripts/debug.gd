@@ -1,6 +1,6 @@
 extends CanvasLayer
 ## 개발용 디버그: F1 오버레이(상태·수치·프레임), F2 무적, F3 적 공격 정지, F4 코어 페이즈로 건너뛰기,
-## F5 게임 속도 0.5배, F6 튜토리얼 기록 초기화. 플레이어에게 보여 주는 화면이 아니라 시험용이다.
+## F5 게임 속도 0.5배, F6 튜토리얼 기록 초기화, F7 부산물 포인트 +1, F8 진행 초기화(저장 삭제). 플레이어에게 보여 주는 화면이 아니라 시험용이다.
 
 var main: Node
 var show := false
@@ -52,6 +52,13 @@ func _unhandled_input(e: InputEvent) -> void:
 		KEY_F6:
 			DirAccess.remove_absolute(ProjectSettings.globalize_path("user://tutorial.cfg"))
 			main.tutorial.seen = {}
+		KEY_F7:
+			main.profile.bonus_points += 1
+			main.profile.save()
+		KEY_F8:
+			main.profile.reset()
+			main.profile.save()
+			main.start_stage(0)
 		_:
 			return
 	get_viewport().set_input_as_handled()
@@ -71,7 +78,8 @@ func _process(_dt: float) -> void:
 	var b = main.boss
 	var lines := PackedStringArray()
 	lines.append("[디버그] FPS %d · 물리 %.0f µs · 탄 %d · 입자 %d" % [Engine.get_frames_per_second(), _phys_us, b.shots.size(), main.fx.parts.size()])
-	lines.append("F2 무적 %s · F3 공격 정지 %s · F4 코어로 · F5 속도 0.5x %s · F6 튜토리얼 초기화" % [_on(god), _on(freeze), _on(slow)])
+	lines.append("F2 무적 %s · F3 공격 정지 %s · F4 코어로 · F5 속도 0.5x %s · F6 튜토리얼 초기화 · F7 포인트+1 · F8 진행 초기화" % [_on(god), _on(freeze), _on(slow)])
+	lines.append("스테이지 %d · 포인트 %d 남음 · 노드 %s · 코어 %s" % [main.stage_idx, main.profile.points_left(), str(main.profile.nodes), main.profile.equipped])
 	lines.append("페이즈 %d · 외부 시스템 %s · 장갑 %d/%d · 코어 %d · 공격 %s" % [b.phase, str(b.part_hp), b.core.armor_hp, b.ARMOR_HP, b.core.core_hp, b.attack_kind()])
 	lines.append("실드 셀 %d · 돌진 쿨 %.2f · 차지 쿨 %.2f · 차지 %.2f · 무적 %.2f · 제어 불능 %.2f" % [main.lives, p.dash_cd, p.charge_cd, p.charge_t if p.charging else 0.0, maxf(p.invuln, p.shield_t), p.stun])
 	lines.append("동조 %s %.2fs · 패리 %s · 시간 %.1fs" % ["완전" if p.buff_strong else ("일반" if p.buffed else "-"), p.buff_t, "열림" if p.parry_active else "-", main.run_time])

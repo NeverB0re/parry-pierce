@@ -23,6 +23,7 @@ func _process(_d: float) -> bool:
 	_run()
 	_hold_test()
 	_sync_test()
+	_meta_test()
 	_telemetry_test()
 	print("FAILS ", fails)
 	quit(fails)
@@ -456,3 +457,74 @@ func _telemetry_test() -> void:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path("user://telemetry_test"))
 	t.enabled = false
 	t.dir = t.DIR
+
+
+## 메타 구조: 노드·코어 수치 적용, 선행 조건·포인트, 저장, 승리 → 정비 → FTL 도약 → 개조가 반영된 출격
+func _meta_test() -> void:
+	var Up = main.Upgrades
+	var base = main.Player.BASE_STATS
+	var st = Up.build(base, ["P1", "P2"], "mobility")
+	_check("nodes + core applied (cells %d, charge %d, dash_time %.2f, glide %.0f)" % [st.shield_cells, st.charge_damage, st.dash_time, st.glide_fall],
+		st.shield_cells == 4 and st.charge_damage == 4 and absf(st.dash_time - 0.35) < 0.001 and st.glide_fall == 90.0)
+	_check("base stats untouched", base.shield_cells == 3 and base.charge_damage == 3 and absf(base.dash_time - 0.28) < 0.001)
+	var st2 = Up.build(base, ["P1", "P2"], "")
+	_check("unequipping core removes its effect", absf(st2.dash_time - 0.28) < 0.001 and st2.glide_fall == 140.0)
+	_check("prerequisite needed (A3 needs A1)", not Up.can_take("A3", [], 5) and Up.can_take("A3", ["A1"], 5) and not Up.can_take("A1", [], 0))
+
+	var pr = main.Profile.new()
+	pr.path = "user://profile_test.cfg"
+	pr.reset()
+	var got: Dictionary = pr.record_clear(0)
+	_check("first clear: core + 1 point, core auto-equipped", got["first"] and got["core"] == "mobility" and got["point"] == 1 and pr.points_left() == 1 and pr.equipped == "mobility")
+	var again: Dictionary = pr.record_clear(0)
+	_check("re-clear gives nothing (no farming)", not again["first"] and pr.points_left() == 1)
+	_check("locked node refused (P3 before P2)", not pr.take_node("P3") and pr.points_left() == 1)
+	_check("take P2 spends the point", pr.take_node("P2") and pr.points_left() == 0 and not pr.take_node("P1"))
+	var pr2 = main.Profile.new()
+	pr2.path = pr.path
+	pr2.load_from_disk()
+	_check("profile saved and loaded (nodes %s, cores %s, eq %s)" % [pr2.nodes, pr2.cores, pr2.equipped], pr2.nodes == pr.nodes and pr2.cores == pr.cores and pr2.equipped == "mobility" and pr2.cleared == pr.cleared)
+	pr2.equip("mobility")
+	_check("equip same core again = unequip", pr2.equipped == "")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(pr.path))
+
+	# 승리 → 정비 → FTL 도약
+	var old = main.profile
+	var mp = main.Profile.new()
+	mp.persist = false
+	main.profile = mp
+	main.hangar.profile = mp
+	main.start_stage(0)
+	main._core_destroyed(main.boss.core.center)
+	_check("win records clear (state %d, cleared %s)" % [main.state, mp.cleared], main.state == main.State.WON and mp.cleared.has("observer") and mp.points_left() == 1)
+	main.open_hangar()
+	_check("hangar opens and pauses", main.hangar.visible and paused)
+	main.hangar._on_node("P1")
+	_check("first press only selects (not spent)", mp.nodes.is_empty())
+	main.hangar._on_node("P1")
+	_check("second press takes the node", mp.nodes.size() == 1 and mp.nodes[0] == "P1" and mp.points_left() == 0)
+	main.hangar.jump()
+	_check("FTL starts", main.ftl.is_playing() and not main.hangar.visible)
+	main.ftl.skip()
+	var p = main.player
+	_check("arrived: new run with upgrades (cells %d, lives %d, core dash %.2f)" % [p.stats.shield_cells, main.lives, p.stats.dash_time],
+		not paused and main.state == main.State.PLAY and p.stats.shield_cells == 4 and main.lives == 4 and absf(p.stats.dash_time - 0.35) < 0.001)
+
+	# U4 실드 재충전: 퍼펙트 회피로 1회 회복
+	p.stats.evade_heal = true
+	main.lives = 2
+	main.on_perfect_evade(p.position)
+	main.on_perfect_evade(p.position)
+	_check("evade heal once per sortie (lives %d)" % main.lives, main.lives == 3)
+	# U5: 리버스 드라이브가 끝나면 돌진 쿨다운 초기화
+	_air(Vector2(-700, -1500))
+	p.stats.power_cd_reset = true
+	p.aim_phase = true
+	p.aim = Vector2.RIGHT
+	p.launch_parry_dash()
+	_step(int(0.3 / DT))
+	_check("U5: dash cooldown reset after reverse drive (cd %.2f)" % p.dash_cd, p.dash_cd <= 0.0 and p.dash_kind == "")
+
+	main.profile = old
+	main.hangar.profile = old
+	main.start_stage(0)

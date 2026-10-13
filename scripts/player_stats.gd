@@ -4,6 +4,7 @@ extends Resource
 ## 나머지 튜닝값(속도·중력 등)은 player.gd 맨 위 상수에 있다.
 
 @export_group("돌진·차지")
+@export var dash_time := 0.28              ## 일반 돌진 시간 (속도 2000 → 사거리 약 560px)
 @export var dash_cooldown := 0.7            ## 돌진 시작부터 다음 돌진까지 (차지 강습도 이 쿨다운을 쓴다)
 @export var dash_buffer := 0.2              ## 쿨다운이 이만큼 남았을 때 뗀 짧은 입력은 기억했다가 바로 돌진
 @export var charge_time := 0.6              ## 좌클릭을 이만큼 누르면 차지 완료 → 떼면 차지 강습 (덜 모으고 떼면 일반 돌진)
@@ -34,3 +35,6 @@ extends Resource
 @export var stun_time := 0.9                ## 피격 → 제어 불능
 @export var bounce_up := 900.0              ## 적중 후 솟구치는 속도. 차지 ×1.1, 리버스 드라이브 ×1.25
 @export var power_grace := 0.7              ## 리버스 드라이브가 끝난 직후 무적
+@export var power_cd_reset := false         ## 리버스 드라이브가 끝나면 돌진 쿨다운 즉시 초기화 (U5)
+@export var glide_fall := 140.0             ## 마우스를 위로: 활공 중 낙하 속도 상한
+@export var evade_heal := false             ## 퍼펙트 회피 성공 시 실드 셀 1 회복, 출격당 1회 (U4)

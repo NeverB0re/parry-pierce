@@ -103,6 +103,7 @@ func _draw() -> void:
 
 	# 상태 정보
 	var left: String = ("외부 시스템 %d" % boss.parts_left()) if boss.phase == 1 else "동력 코어"
+	left = "%s  ·  %s" % [main.Stages.LIST[main.stage_idx]["name"], left]
 	_text(Vector2(28, 100), "%s   %.1fs" % [left, main.run_time], 15, Color(0.75, 0.77, 0.82, 0.7))
 
 	# 배너

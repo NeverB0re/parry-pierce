@@ -1,8 +1,8 @@
 extends Node2D
 ## 프로토타입 메인: 루프, 입력, 패리/피격 판정, 카메라, 피드백(히트스톱/흔들림/플래시/사운드).
+## 메타 구조: 스테이지(콜로서스 하나) 클리어 → 정비(노드·코어) → FTL 도약 → 다음 스테이지. 진행은 profile 에 저장된다.
 
 const Player := preload("res://scripts/player.gd")
-const Boss := preload("res://scripts/colossi/observer.gd")
 const Ev := preload("res://scripts/ev.gd")
 const Fx := preload("res://scripts/fx.gd")
 const Ground := preload("res://scripts/ground.gd")
@@ -15,6 +15,11 @@ const Telemetry := preload("res://scripts/telemetry.gd")
 const Debug := preload("res://scripts/debug.gd")
 const TouchControls := preload("res://scripts/touch_controls.gd")
 const Quality := preload("res://scripts/quality.gd")
+const Profile := preload("res://scripts/profile.gd")
+const Stages := preload("res://scripts/stages.gd")
+const Upgrades := preload("res://scripts/upgrades.gd")
+const Hangar := preload("res://scripts/hangar.gd")
+const Ftl := preload("res://scripts/ftl.gd")
 
 const SPAWN := Vector2(650, -52)   # 시작 발판 위 (Player.PLAT_CENTER - 반지름)
 const CAM_ZOOM := 0.72             # 기본 줌아웃 (튕겨 올라가도 표적이 시야에 남도록)
@@ -41,7 +46,11 @@ var touch_ui                          # 모바일 터치 조작 (없으면 마�
 var menu
 var tutorial                          # 튜토리얼 팝업
 var tele                              # 플레이 기록 (user://telemetry)
-var debug                             # 개발용 디버그 (F1~F6)
+var debug                             # 개발용 디버그 (F1~F8)
+var profile                           # 진행 저장 (user://profile.cfg)
+var hangar                            # 정비 화면
+var ftl                               # FTL 도약 연출
+var stage_idx := 0                    # 지금 싸우는 스테이지 (Stages.LIST)
 
 var state := State.PLAY
 var hitstop := 0.0
@@ -57,6 +66,8 @@ var plat_dir := 0.0                # +1 가라앉는 중, -1 떠오르는 중
 var lava                           # 바닥(용암·발판) 노드
 var spawn := SPAWN
 var spawn_on_platform := true
+var win_t := 0.0                   # 승리 후 흐른 시간 (바로 클릭해 정비로 넘어가는 실수 방지)
+var evade_healed := false          # 실드 재충전(U4)을 이번 출격에 썼는가
 
 
 func _ready() -> void:
@@ -86,9 +97,13 @@ func _ready() -> void:
 	bg = Background.new()
 	bg_layer.add_child(bg)
 
+	profile = Profile.new()
+	profile.persist = DisplayServer.get_name() != "headless"
+	profile.load_from_disk()
+	stage_idx = profile.stage
 	lava = Ground.new()
 	add_child(lava)
-	boss = Boss.new()
+	boss = load(Stages.LIST[stage_idx]["script"]).new()
 	add_child(boss)
 	player = Player.new()
 	player.main = self
@@ -117,11 +132,21 @@ func _ready() -> void:
 	hud_layer.add_child(hud)
 
 	sfx = Sfx.new()
+	sfx.process_mode = Node.PROCESS_MODE_ALWAYS          # FTL 도약(일시정지 중)에도 소리
 	add_child(sfx)
 	menu = PauseMenu.new()
 	menu.ui_scale = 1.7 if touch_mode else 1.0
 	add_child(menu)
 	menu.restart_requested.connect(reset_run)
+	menu.hangar_requested.connect(open_hangar)
+	hangar = Hangar.new()
+	hangar.profile = profile
+	hangar.ui_scale = menu.ui_scale
+	add_child(hangar)
+	hangar.jump_requested.connect(_on_jump)
+	ftl = Ftl.new()
+	add_child(ftl)
+	ftl.arrived.connect(_on_arrived)
 	tutorial = Tutorial.new()
 	tutorial.touch = touch_mode
 	tutorial.enabled = DisplayServer.get_name() != "headless" and not OS.get_cmdline_user_args().has("--notutorial")
@@ -139,6 +164,7 @@ func _ready() -> void:
 		touch_ui = TouchControls.new()
 		touch_ui.main = self
 		touch_layer.add_child(touch_ui)
+	_apply_loadout()
 	reset_run()
 	tutorial.request(["dodge", "parry"])        # 처음 실행: 회피 → 패리 순서로 한 장씩
 
@@ -151,6 +177,8 @@ func reset_run() -> void:
 	fx.clear()
 	state = State.PLAY
 	run_time = 0.0
+	win_t = 0.0
+	evade_healed = false
 	lives = player.stats.shield_cells
 	hitstop = 0.0
 	slowmo = 0.0
@@ -159,6 +187,49 @@ func reset_run() -> void:
 	hud.clear_banner()
 	cam.position = player.position + Vector2(0, -80)
 	cam.reset_smoothing()
+
+
+## 찍은 노드와 장착 코어를 플레이어 수치에 반영 (기본 수치 → 노드 → 코어)
+func _apply_loadout() -> void:
+	player.stats = Upgrades.build(Player.BASE_STATS, profile.nodes, profile.equipped)
+
+
+## 스테이지 시작: 콜로서스가 다르면 바꿔 끼우고, 개조를 반영해 처음부터
+func start_stage(i: int) -> void:
+	stage_idx = i
+	var path: String = Stages.LIST[i]["script"]
+	if boss.get_script().resource_path != path:
+		var at: int = boss.get_index()
+		remove_child(boss)
+		boss.free()
+		boss = load(path).new()
+		add_child(boss)
+		move_child(boss, at)
+		player.boss = boss
+	_apply_loadout()
+	reset_run()
+	hud.queue_redraw()                       # FTL 섬광 중(일시정지)에도 배너·실드 셀 표시를 새로
+
+
+## 정비 화면 (승리 후, 또는 ESC 메뉴에서 — 이 경우 도약하면 지금 스테이지를 처음부터)
+func open_hangar() -> void:
+	if ftl.is_playing():
+		return
+	hud.clear_banner()
+	hud.queue_redraw()
+	hangar.open()
+
+
+func _on_jump() -> void:
+	var st: Dictionary = Stages.LIST[profile.stage]
+	sfx.play("dash", 6.0, 0.0)
+	sfx.play("perfect", 0.0, 0.0)
+	ftl.play("%s — 콜로서스 「%s」" % [st["coord"], st["name"]], func() -> void: start_stage(profile.stage))
+
+
+func _on_arrived() -> void:
+	if touch_ui == null:
+		Input.mouse_mode = Input.MOUSE_MODE_CONFINED
 
 
 ## 발판을 띄운다 (instant: 바로 / 아니면 용암에서 솟아오르는 연출)
@@ -199,6 +270,10 @@ func _unhandled_input(e: InputEvent) -> void:
 	if e is InputEventMouseButton:
 		if touch_ui != null and e.device == InputEvent.DEVICE_ID_EMULATION:
 			return                            # 터치가 만든 가짜 마우스 클릭은 무시 (터치 UI가 따로 처리)
+		if state == State.WON:
+			if e.button_index == MOUSE_BUTTON_LEFT and e.pressed and win_t > 1.0:
+				open_hangar()                  # 승리 후 클릭: 정비 → FTL 도약
+			return
 		if state != State.PLAY:
 			return
 		if e.button_index == MOUSE_BUTTON_LEFT:
@@ -210,6 +285,8 @@ func _unhandled_input(e: InputEvent) -> void:
 			_parry_input(e.pressed)
 		elif e.keycode == KEY_R and e.pressed:
 			reset_run()
+		elif (e.keycode == KEY_ENTER or e.keycode == KEY_KP_ENTER) and e.pressed and state == State.WON and win_t > 1.0:
+			open_hangar()
 
 
 ## 돌진 버튼: 패리 후 방향 지정 중에 누르면 즉시 패리 돌진
@@ -255,6 +332,8 @@ func _physics_body(delta: float) -> void:
 		slowmo -= delta
 	if state == State.PLAY:
 		run_time += dt
+	elif state == State.WON:
+		win_t += delta
 	_update_platform(dt)
 	boss.strike_glow = player.is_attacking()
 	boss.focus_glow = 1.0 if (player.aim_phase or player.is_charged()) else 0.0
@@ -291,7 +370,8 @@ func _tutorial_triggers() -> void:
 
 
 func _tele_extra() -> Dictionary:
-	return {"phase": boss.phase, "part_hp": boss.part_hp.duplicate(), "armor_hp": boss.core.armor_hp}
+	return {"stage": Stages.LIST[stage_idx]["id"], "nodes": Array(profile.nodes), "core": profile.equipped,
+		"phase": boss.phase, "part_hp": boss.part_hp.duplicate(), "armor_hp": boss.core.armor_hp}
 
 
 func _exit_tree() -> void:
@@ -664,6 +744,12 @@ func _respawn() -> void:
 ## strong(패리 불가 공격을 피함)은 확실히 더 크게 — 긴 슬로우, 금빛·청록 이중 링, 입자
 func on_perfect_evade(pos: Vector2, strong := false) -> void:
 	tele.add("perfect_evade_strong" if strong else "perfect_evade")
+	if player.stats.evade_heal and not evade_healed and lives < player.stats.shield_cells:   # 실드 재충전(U4): 출격당 1회
+		evade_healed = true
+		lives += 1
+		tele.add("evade_heal")
+		hud.flash(0.12, Color(0.5, 1.0, 0.88))
+		sfx.play("win", -8.0, 0.0)
 	var mint := Color(0.5, 1.0, 0.88)
 	if not strong:
 		slowmo = maxf(slowmo, 0.25)
@@ -764,7 +850,15 @@ func _core_destroyed(pos: Vector2) -> void:
 	fx.ring(pos, Color(1, 0.9, 0.7), 500.0, 0.8, 10.0)
 	sfx.play("perfect", 4.0, 0.0)
 	sfx.play("win", 0.0, 0.0)
-	hud.banner("코어 에너지 확보", "%.1f초 · 남은 실드 셀 %d · R: 다시" % [run_time, lives])
+	var got: Dictionary = profile.record_clear(stage_idx)
+	var reward := ""
+	if got["first"]:
+		var items := PackedStringArray()
+		if got["core"] != "":
+			items.append(Upgrades.CORES[got["core"]]["name"])
+		items.append("부산물 포인트 +%d" % got["point"])
+		reward = " · 획득: " + ", ".join(items)
+	hud.banner("코어 에너지 확보", "%.1f초 · 남은 실드 셀 %d%s · 클릭: 정비 → FTL 도약 · R: 다시" % [run_time, lives, reward])
 
 
 func _die() -> void:

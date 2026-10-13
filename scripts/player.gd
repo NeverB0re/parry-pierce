@@ -10,13 +10,11 @@ const BASE_STATS := preload("res://data/player_stats.tres")
 const RADIUS := 12.0
 const GRAVITY := 900.0
 const BASE_FALL := 480.0         # 마우스가 수평일 때 낙하 속도 상한
-const GLIDE_FALL := 140.0        # 마우스를 위로: 거의 떠 있다 (공격을 기다려 패리). 스스로 상승은 불가
 const DIVE_FALL := 1000.0        # 마우스를 아래로: 빨리 떨어진다
 const THRUST := 560.0            # 약한 무한 추진(좌우/하강)
 const AIR_DRAG := 0.9
 const PLATFORM_SPEED := 260.0
 const DASH_SPEED := 2000.0       # 돌진: 무적 + 표적에 닿으면 피해 1. 사거리 약 560px. 자원 없이 쿨다운만
-const DASH_TIME := 0.28
 const DASH_KEEP := 0.5           # 돌진이 끝난 뒤 남기는 속도 비율 (위쪽 관성은 남기지 않는다)
 const DASH_DAMAGE := 1
 const CHARGE_HOVER := 0.15       # 이 시간 이상 누르면 차지 자세(공중 정지)로 들어간다
@@ -70,7 +68,7 @@ var vel := Vector2.ZERO
 var on_platform := false
 var dash_t := 0.0
 var dash_kind := ""              # "dash" | "charge" | "power"
-var dash_total := DASH_TIME
+var dash_total := 0.28
 var perfect_dash := false        # PERFECT 패리 돌진
 var evade_window := 0.0          # 퍼펙트 회피 판정이 남은 시간
 var evade_rewarded := false      # 이번 돌진에서 이미 퍼펙트 회피 보상을 받음
@@ -234,7 +232,7 @@ func _dash(kind: String) -> void:
 	dash_kind = kind
 	pending_kind = ""
 	var spd := DASH_SPEED
-	dash_total = DASH_TIME
+	dash_total = stats.dash_time
 	if kind == "charge":
 		spd = CHARGE_SPEED
 		dash_total = CHARGE_DASH_TIME
@@ -457,7 +455,7 @@ func step(dt: float) -> void:
 				vel.y += aim.y * THRUST * dt
 				fall_cap = lerpf(BASE_FALL, DIVE_FALL, aim.y)
 			else:
-				fall_cap = lerpf(BASE_FALL, GLIDE_FALL, -aim.y)
+				fall_cap = lerpf(BASE_FALL, stats.glide_fall, -aim.y)
 		if is_hovering_charge():              # 차지 중엔 공중에서 거의 멈춰 조준한다
 			vel.y += GRAVITY * 0.2 * dt
 			vel.y = move_toward(vel.y, 0.0, 1500.0 * dt)
@@ -541,6 +539,8 @@ func _end_dash() -> void:
 	dash_kind = ""
 	perfect_dash = false
 	if was_power:
+		if stats.power_cd_reset:
+			dash_cd = 0.0
 		main.on_power_dash_end()
 
 
