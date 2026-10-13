@@ -1255,7 +1255,25 @@ func _v038_test() -> void:
 	# 차지 강습·리버스 드라이브 중에는 해당 없음 (일반 돌진만)
 	p.reset(Vector2(-700, -1500), false)
 	_dash_dir("charge", Vector2.RIGHT)
-	_check("charge assault is not a dash-parry", not p.is_dash_parry())
+	_check("charge assault counts as a dash for dash-parry", p.is_dash_parry())
+	p.dash_kind = "power"
+	p.dash_t = 0.2
+	_check("reverse drive does not", not p.is_dash_parry())
+	p.dash_t = 0.0
+	p.dash_kind = ""
+	# 차지 강습 중 패리: 오래전에 누른 패리도 PERFECT + 사거리 증가
+	p.reset(Vector2(-700, -1500), false)
+	main.hitstop = 0.0
+	main.slowmo = 0.0
+	b.shots.clear()
+	p.parry_press()
+	_step(10)
+	_dash_dir("charge", Vector2.RIGHT)
+	b.shots.spawn(p.position + Vector2(40, 0), Vector2.ZERO, 5.0)
+	_step(1)
+	_check("parry during a charge assault is a PERFECT dash-parry (aim %s, perfect %s, boost %s)" % [p.aim_phase, p.aim_perfect, p.aim_boost], p.aim_phase and p.aim_perfect and p.aim_boost)
+	p.parry_release()
+	p.aim_phase = false
 	# 돌진이 끝난 직후 잠깐은 인정, 곧 끝난다. 맞으면 사라진다
 	p.reset(Vector2(-700, -1500), false)
 	main.hitstop = 0.0

@@ -311,9 +311,10 @@ func parry_reach() -> float:
 
 
 ## 탄 패리 성공: 시간이 느려지고 방향을 정한다 → 패리 돌진
-## 돌진패리: 스스로 돌진해 탄막으로 다가가며(돌진 중, 끝난 직후 잠깐 포함) 하는 패리. 성공하면 타이밍과 상관없이 PERFECT 패리
+## 돌진패리: 스스로 돌진해(일반 돌진·차지 강습, 끝난 직후 잠깐 포함) 탄막으로 다가가며 하는 패리. 성공하면 타이밍과 상관없이 PERFECT 패리.
+## (리버스 드라이브 중에는 해당 없음)
 func is_dash_parry() -> bool:
-	return (dash_t > 0.0 and dash_kind == "dash") or dash_parry_t > 0.0
+	return (dash_t > 0.0 and (dash_kind == "dash" or dash_kind == "charge")) or dash_parry_t > 0.0
 
 
 func on_parry_success(perfect: bool, boosted := false) -> void:
@@ -531,6 +532,7 @@ func step(dt: float) -> void:
 			vel *= DASH_KEEP
 			if dash_kind == "dash":
 				small_guard = SMALL_GUARD
+			if dash_kind == "dash" or dash_kind == "charge":
 				dash_parry_t = DASH_PARRY_GRACE
 			var grace := stats.power_grace if dash_kind == "power" else (CHARGE_GRACE if dash_kind == "charge" else 0.0)
 			if grace > 0.0:                   # 무적 여유는 패리 돌진/차지 돌진만
@@ -935,12 +937,17 @@ func _draw() -> void:
 	# 돌진 쿨다운: 플레이어 주변 얇은 링이 차오른다 (다 차면 다시 돌진)
 	if dash_cd > 0.0 and dash_t <= 0.0:
 		var ca := 1.0 if charging or pending_kind != "" else 0.7   # 누르고 기다리는 중이면 또렷하게
-		draw_arc(Vector2.ZERO, 36.0, 0.0, TAU, 40, Color(C_EVADE, 0.15), 2.5)
-		draw_arc(Vector2.ZERO, 36.0, -PI * 0.5, -PI * 0.5 + TAU * (1.0 - dash_cd / stats.dash_cooldown), 40, Color(C_EVADE, ca), 2.5)
+		draw_arc(Vector2.ZERO, 54.0, 0.0, TAU, 48, Color(C_EVADE, 0.15), 3.0)      # 실드·패리 자세 바깥 (차지 쿨다운 막대와 겹치지 않게)
+		draw_arc(Vector2.ZERO, 54.0, -PI * 0.5, -PI * 0.5 + TAU * (1.0 - dash_cd / stats.dash_cooldown), 48, Color(C_EVADE, ca), 3.0)
 
-	# 차지 쿨다운: 주황 링이 차오른다 (다 차야 다음 차지가 완료된다)
+	# 차지 쿨다운: 기체 아래의 주황 막대가 차오른다 (다 차야 다음 차지가 완료된다). 돌진 쿨다운 링과 겹치지 않게 따로 둔다
 	if charge_cd > 0.0:
-		draw_arc(Vector2.ZERO, 30.0, -PI * 0.5, -PI * 0.5 + TAU * (1.0 - charge_cd / stats.charge_cooldown), 40, Color(C_ATTACK, 0.75 if charging else 0.4), 2.0)
+		var fr := 1.0 - charge_cd / stats.charge_cooldown
+		var ba := 0.9 if charging else 0.55
+		var br := Rect2(-28.0, 68.0, 56.0, 6.0)
+		draw_rect(br, Color(0, 0, 0, 0.35))
+		draw_rect(Rect2(br.position, Vector2(br.size.x * fr, br.size.y)), Color(C_ATTACK, ba))
+		draw_rect(br, Color(C_ATTACK, 0.5 * ba), false, 1.5)
 
 	# 돌진패리: 돌진하는 동안 패리 자세를 잡으면 청록 고리가 겹쳐 뜬다 (이때 막으면 타이밍과 상관없이 PERFECT)
 	if parry_active and is_dash_parry():
