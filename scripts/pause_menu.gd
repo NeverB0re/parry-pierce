@@ -61,8 +61,8 @@ func _ready() -> void:
 	ht.add_theme_font_override("font", font)
 	ht.add_theme_font_size_override("font_size", int(36 * ui_scale))
 	help_box.add_child(ht)
-	var names := {"dodge": "회피 — 돌진", "parry": "패리 — 리버스 드라이브", "charge": "차지 강습 · 요격", "unparry": "패리 불가 공격"}
-	for id in ["dodge", "parry", "charge", "unparry"]:
+	var names := {"dodge": "회피 — 돌진", "parry": "패리 — 리버스 드라이브", "charge": "차지 강습 · 요격", "unparry": "패리 불가 공격", "barrage": "탄막 — 주탄과 잔탄"}
+	for id in ["dodge", "parry", "charge", "unparry", "barrage"]:
 		var sid: String = id
 		_button(help_box, names[sid], func() -> void: tutorial.replay(sid))
 	_button(help_box, "뒤로", func() -> void: _show_help(false))

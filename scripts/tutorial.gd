@@ -5,7 +5,7 @@ extends CanvasLayer
 
 const Sprites := preload("res://scripts/sprites.gd")
 
-const ORDER := ["dodge", "parry", "charge", "unparry"]
+const ORDER := ["dodge", "parry", "charge", "unparry", "barrage"]
 const SAVE_PATH := "user://tutorial.cfg"
 
 var enabled := true                  # false: 자동 팝업·저장 없음 (테스트·헤드리스)
@@ -45,7 +45,7 @@ func _pages() -> Dictionary:
 			"title": "회피 — 돌진",
 			"lines": [
 				"%s(짧게)으로 돌진합니다. 돌진하는 동안은 무적이라 탄과 공격을 그대로 통과할 수 있습니다." % dash,
-				"돌진은 쿨다운(0.7초)만 있고 횟수 제한이 없습니다. 표적에 닿으면 피해 1을 주고 위로 솟구칩니다.",
+				"돌진은 쿨다운(0.9초)만 있고 횟수 제한이 없습니다. 표적에 닿으면 피해 1을 주고 위로 솟구칩니다.",
 				"돌진을 시작한 직후(0.12초 안)에 공격이 스치면 '퍼펙트 회피'! 다음 차지 강습의 피해가 2배가 되고(동조), 차지가 두 배 빨라지며, 돌진 쿨다운이 즉시 초기화됩니다.",
 			],
 		},
@@ -63,6 +63,14 @@ func _pages() -> Dictionary:
 				"%s 으로 0.6초 모으고 떼면 차지 강습: 피해 3으로 일반 돌진(1)보다 훨씬 강합니다. 모으는 동안 기체가 떨리고 완료되면 빛납니다. 한 번 쓰면 1.5초 동안은 다시 모을 수 없습니다(주황 링)." % hold,
 				"적이 팔을 들어 위치를 잡고 붉게 점멸하며 멈춰 있을 때(또는 휘두르는 중) 차지 강습으로 부딪히면 요격! 공격을 끊고 구동부에 피해 8!",
 				"팔을 들어 올리는 중에는 요격할 수 없습니다. 일반 돌진은 팔을 통과합니다.",
+			],
+		},
+		"barrage": {
+			"title": "탄막 — 주탄과 잔탄",
+			"lines": [
+				"작은 금색 탄(잔탄)은 패리하면 흡수되어 사라지기만 합니다. 리버스 드라이브는 열리지 않습니다. 패리 판정이 열려 있는 동안은 여러 발을 연달아 흡수합니다.",
+				"큰 금색 탄(주탄)과 고리가 도는 유도탄을 패리해야 리버스 드라이브가 열립니다. 유도탄은 쫓아오지만 크고 느려서 패리하기 좋습니다.",
+				"바닥 가까이 머물면 융해 지대에 기뢰가 내려앉아 위로 터집니다.",
 			],
 		},
 		"unparry": {
@@ -321,6 +329,8 @@ class Stage extends Control:
 				_charge()
 			"unparry":
 				_unparry()
+			"barrage":
+				_barrage()
 
 	func _dodge() -> void:
 		var T := 6.0
@@ -588,6 +598,69 @@ class Stage extends Control:
 			_txt("다음 차지 ×4 · 무적 1.2초", Vector2(pos.x - 100.0, pos.y + 78.0), 16, Color(1.0, 0.95, 0.75))
 
 	## 레이저 진행도 k(0~1)가 되는 시각 (sweep 가속 곡선을 이분법으로 역산)
+	func _small(p: Vector2, v := Vector2.LEFT) -> void:
+		draw_line(p, p - v.normalized() * 18.0, Color(GOLD, 0.35), 5.0)
+		draw_circle(p, 6.0, Color(GOLD, 0.3))
+		draw_circle(p, 4.0, GOLD)
+
+	func _barrage() -> void:
+		var T := 7.6
+		var tt := fmod(t, T)
+		var sp := Vector2(170, 165)
+		if tt < 3.4:
+			_caption("① 작은 탄(잔탄): 패리하면 흡수만 된다")
+			var holding := tt >= 0.6 and tt < 3.0
+			_ship(sp, 0.0)
+			_flame(sp, 0.0, 14.0)
+			for k in 6:
+				var bx := 700.0 - (tt - 0.2 - k * 0.32) * 420.0
+				if bx > sp.x + 42.0 and bx < 700.0:
+					_small(Vector2(bx, sp.y + sin(k * 1.7) * 14.0))
+				elif bx <= sp.x + 42.0 and bx > sp.x - 10.0:
+					_spark(sp + Vector2(40, 0), (sp.x + 42.0 - bx) / 52.0, Color(1.0, 0.92, 0.6), 6, 22.0)
+					_txt("흡수", Vector2(sp.x + 20.0, sp.y - 46.0), 16, GOLD)
+			if holding:
+				_ring(sp, 40.0 + (4.0 if int(t * 10.0) % 2 == 0 else 0.0), Color(1.0, 0.95, 0.75, 0.9), 2.5)
+			_mouse(Vector2(size.x - 40.0, 60.0), false, holding)
+		else:
+			var u := tt - 3.4
+			_caption("② 큰 탄·유도탄(주탄): 패리하면 리버스 드라이브", GOLD)
+			var tgt := Vector2(560, 80)
+			var parried := u >= 1.6
+			var holding := u >= 1.2 and u < 2.8
+			var heading := 0.0
+			var ship_pos := sp
+			if parried and u < 2.8:
+				draw_rect(Rect2(Vector2.ZERO, size), Color(0.3, 0.5, 0.95, 0.1))
+				heading = lerp_angle(0.0, (tgt - sp).angle(), _smooth(1.8, 2.5, u))
+				var aim := Vector2.from_angle(heading)
+				draw_line(sp + aim * 30.0, sp + aim * 330.0, Color(0.75, 0.92, 1.0, 0.8), 2.0)
+			elif u >= 2.8:
+				heading = (tgt - sp).angle()
+				ship_pos = sp.lerp(tgt - Vector2(30, -14), _smooth(2.8, 3.05, u))
+			_target(tgt, _smooth(3.05, 3.3, u) * (1.0 - _smooth(3.3, 3.7, u)), 3 if u >= 3.05 else 0)
+			_ship(ship_pos, heading, 1.0, "r" if u >= 2.8 and u < 3.05 else "b")
+			if not parried:                              # 유도탄: 휘어 들어온다 + 도는 고리
+				var k := _smooth(0.0, 1.6, u)
+				var a := Vector2(660, 40)
+				var c := Vector2(560, 260)
+				var b := sp + Vector2(22, 0)
+				var hp := a.lerp(c, k).lerp(c.lerp(b, k), k)
+				draw_circle(hp, 17.0, Color(GOLD, 0.25))
+				draw_circle(hp, 12.0, GOLD)
+				draw_circle(hp, 6.0, Color(1, 1, 0.9))
+				for j in 3:
+					var a0 := t * 6.0 + j * TAU / 3.0
+					draw_arc(hp, 24.0, a0, a0 + 1.3, 8, Color(1.0, 0.95, 0.7, 0.9), 3.0)
+			if holding:
+				_ring(sp, 40.0, Color(1.0, 0.95, 0.75, 0.9), 2.5)
+			if parried and u < 2.0:
+				_spark(sp + Vector2(20, 0), (u - 1.6) / 0.4, Color(1, 1, 1), 12, 56.0)
+				_txt("막았다!", Vector2(sp.x - 24.0, sp.y - 62.0), 18, GOLD)
+			if u >= 3.05 and u < 4.0:
+				_txt("피해 12", Vector2(tgt.x - 30.0, tgt.y - 50.0), 20, GOLD)
+			_mouse(Vector2(size.x - 40.0, 60.0), false, holding)
+
 	func _beam_time(target_k: float) -> float:
 		var lo := 0.0
 		var hi := 1.0

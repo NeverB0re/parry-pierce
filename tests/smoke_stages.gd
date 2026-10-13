@@ -9,6 +9,10 @@ func _initialize() -> void:
 func _process(_d: float) -> bool:
 	n += 1
 	if n == 1:
+		for a in OS.get_cmdline_user_args():      # -- --stage=1 : 다른 콜로서스로
+			if a.begins_with("--stage="):
+				main.start_stage(a.trim_prefix("--stage=").to_int())
+	if n == 1:
 		main.boss.draw.connect(func(): draws += 1)
 	var b = main.boss
 	var p = main.player
@@ -31,7 +35,7 @@ func _process(_d: float) -> bool:
 		p.dash_cd = 0.5
 	if n % 60 == 0 and b.phase == 3 and not b.dead:
 		if b.damage_core(31):
-			main._core_destroyed(b.HEART_POS)
+			main._core_destroyed(b.core.center)
 	main._physics_process(1.0 / 60.0)
 	if n >= 1100:
 		print("stages ok frames=", n, " phase=", b.phase, " core_stage=", b.core.stage, " dead=", b.dead, " shards=", b.shards.size(), " boss_draws=", draws)

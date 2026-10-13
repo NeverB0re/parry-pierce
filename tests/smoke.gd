@@ -6,6 +6,10 @@ func _initialize() -> void:
 	root.add_child(main)
 func _process(_d: float) -> bool:
 	n += 1
+	if n == 1:
+		for a in OS.get_cmdline_user_args():      # -- --stage=1 : 다른 콜로서스로
+			if a.begins_with("--stage="):
+				main.start_stage(a.trim_prefix("--stage=").to_int())
 	if n == 2:
 		main.lives = 1
 		main.boss.next_t = 0.5

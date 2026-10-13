@@ -62,6 +62,11 @@ func points_left() -> int:
 	return points_total() - nodes.size()
 
 
+## 열린 노드 단계 = 처리한 콜로서스 수 (+ 개발용 F7 로 얻은 포인트만큼)
+func max_tier() -> int:
+	return cleared.size() + bonus_points
+
+
 ## 스테이지 클리어: 처음이면 코어 + 포인트 1. 다음 스테이지로 넘어간다 (마지막이면 그대로). 보상 내용을 돌려준다
 func record_clear(stage_idx: int) -> Dictionary:
 	var st: Dictionary = Stages.LIST[stage_idx]
@@ -83,7 +88,7 @@ func record_clear(stage_idx: int) -> Dictionary:
 
 
 func take_node(id: String) -> bool:
-	if not Upgrades.can_take(id, nodes, points_left()):
+	if not Upgrades.can_take(id, nodes, points_left(), max_tier()):
 		return false
 	nodes.append(id)
 	save()

@@ -142,6 +142,10 @@ func refresh() -> void:
 			b.text = head + "\n✓ 개조 완료"
 			b.add_theme_color_override("font_color", C_TAKEN)
 			b.add_theme_color_override("font_hover_color", C_TAKEN)
+		elif int(n["tier"]) > profile.max_tier():
+			b.text = head + "\n%d단계 — 콜로서스 %d기 처리 후" % [n["tier"], n["tier"]]
+			b.add_theme_color_override("font_color", C_LOCKED)
+			b.add_theme_color_override("font_hover_color", C_LOCKED)
 		elif not Upgrades.requirements_met(id, profile.nodes):
 			b.text = head + "\n선행: " + ", ".join(n["req"])
 			b.add_theme_color_override("font_color", C_LOCKED)
@@ -171,7 +175,7 @@ func refresh() -> void:
 
 
 func _on_node(id: String) -> void:
-	if not Upgrades.can_take(id, profile.nodes, profile.points_left()):
+	if not Upgrades.can_take(id, profile.nodes, profile.points_left(), profile.max_tier()):
 		pending = ""
 		_show_info(id)
 		refresh()
@@ -194,7 +198,7 @@ func _on_core(id: String) -> void:
 func _show_info(id: String) -> void:
 	var n: Dictionary = Upgrades.NODES[id]
 	var req: String = "" if n["req"].is_empty() else "   (선행: %s)" % ", ".join(n["req"])
-	info.text = "%s %s — %s%s" % [id, n["name"], n["desc"], req]
+	info.text = "%s %s — %s%s   [%d단계]" % [id, n["name"], n["desc"], req, n["tier"]]
 
 
 func _show_core_info(id: String) -> void:

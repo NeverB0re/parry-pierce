@@ -24,6 +24,7 @@ func _process(_d: float) -> bool:
 	_hold_test()
 	_sync_test()
 	_meta_test()
+	_fortress_test()
 	_telemetry_test()
 	print("FAILS ", fails)
 	quit(fails)
@@ -79,7 +80,7 @@ func _run() -> void:
 	main.touch_ui = FakeStick.new()
 
 	_check("numbers (cd %.2f, dmg %d/%d/%d/%d, part %d, core %d)" % [p.stats.dash_cooldown, p.DASH_DAMAGE, p.stats.charge_damage, p.stats.power_damage, p.stats.clash_damage, b.PART_HP, b.core.CORE_HP],
-		p.stats.dash_cooldown == 0.7 and p.DASH_DAMAGE == 1 and p.stats.charge_damage == 3 and p.stats.power_damage == 12 and p.stats.power_damage_perfect == 16 and p.stats.clash_damage == 8 and b.PART_HP == 24 and b.ARMOR_HP == 160 and b.core.CORE_HP == 1)
+		absf(p.stats.dash_cooldown - 0.9) < 0.001 and p.DASH_DAMAGE == 1 and p.stats.charge_damage == 3 and p.stats.power_damage == 12 and p.stats.power_damage_perfect == 16 and p.stats.clash_damage == 8 and b.PART_HP == 24 and b.ARMOR_HP == 160 and b.core.CORE_HP == 1)
 
 	# ── 돌진: 짧게 = 돌진, 쿨다운 ──
 	_air(Vector2(-900, -1500))
@@ -469,7 +470,10 @@ func _meta_test() -> void:
 	_check("base stats untouched", base.shield_cells == 3 and base.charge_damage == 3 and absf(base.dash_time - 0.28) < 0.001)
 	var st2 = Up.build(base, ["P1", "P2"], "")
 	_check("unequipping core removes its effect", absf(st2.dash_time - 0.28) < 0.001 and st2.glide_fall == 140.0)
-	_check("prerequisite needed (A3 needs A1)", not Up.can_take("A3", [], 5) and Up.can_take("A3", ["A1"], 5) and not Up.can_take("A1", [], 0))
+	_check("prerequisite needed (A3 needs A1)", not Up.can_take("A3", [], 5, 3) and Up.can_take("A3", ["A1"], 5, 3) and not Up.can_take("A1", [], 0, 3))
+	_check("tier gate: after 1 colossus only tier-1 nodes (A3 locked even with A1)", Up.can_take("A1", [], 1, 1) and not Up.can_take("A3", ["A1"], 1, 1) and Up.can_take("A3", ["A1"], 1, 2))
+	_check("A2 is parry reach now (aim time unchanged)", Up.build(base, ["A2"], "").parry_reach == 40.0 and Up.build(base, ["A2"], "").aim_time == base.aim_time)
+	_check("dash cooldown 0.9, U1 -> 0.7", absf(base.dash_cooldown - 0.9) < 0.001 and absf(Up.build(base, ["U1"], "").dash_cooldown - 0.7) < 0.001)
 
 	var pr = main.Profile.new()
 	pr.path = "user://profile_test.cfg"
@@ -527,4 +531,101 @@ func _meta_test() -> void:
 
 	main.profile = old
 	main.hangar.profile = old
+	main.start_stage(0)
+
+
+## 탄막 요새: 잔탄 흡수 / 주탄 패리 / 유도탄 / 반사 코어 / 공격 4종 / 처치
+func _fortress_test() -> void:
+	main.start_stage(1)
+	var b = main.boss
+	var p = main.player
+	var K = b.shots.Kind
+	_check("stage 2 is the barrage fortress (%s, parts %d)" % [b.get_script().resource_path.get_file(), b.part_count()], b.get_script().resource_path.ends_with("fortress.gd") and b.part_count() == 4 and b.phase == 1)
+	b.next_t = 99.0
+	p.reset(Vector2(-700, -1500), false)
+	p.invuln = 0.0
+	p.parry_press()
+	b.shots.spawn(p.position + Vector2(25, 0), Vector2.ZERO, 5.0, 0.0, 0.0, K.SMALL)
+	_step(1)
+	_check("small bullet parried = absorbed, no aim, parry stays open", b.shots.is_empty() and not p.aim_phase and p.parry_active and main.lives == p.stats.shield_cells)
+	b.shots.spawn(p.position + Vector2(25, 0), Vector2.ZERO, 5.0, 0.0, 0.0, K.SMALL)
+	_step(1)
+	_check("absorbs several in one parry window", b.shots.is_empty() and not p.aim_phase)
+	b.shots.spawn(p.position + Vector2(30, 0), Vector2.ZERO, 5.0, 0.0, 0.0, K.HOMING)
+	_step(1)
+	_check("homing (main) parry -> reverse drive aim", p.aim_phase)
+	p.parry_release()
+	p.reset(Vector2(-700, -1500), false)
+	p.invuln = 99.0
+	b.shots.clear()
+	b.shots.spawn(p.position + Vector2(500, -300), Vector2(0, -230), 7.0, 0.0, 0.0, K.HOMING)
+	_step(120)
+	var to_p: Vector2 = (p.position - b.shots.pos[0]).normalized()
+	_check("homing turns toward the player (dot %.2f)" % b.shots.vel[0].normalized().dot(to_p), b.shots.vel[0].normalized().dot(to_p) > 0.5)
+	b.shots.clear()
+
+	# 반사 코어
+	p.reset(Vector2(-300, -1300), false)
+	p.invuln = 99.0
+	p.stats.reflect = true
+	p.reflect_t = 0.3
+	var tgt: Vector2 = b.target_pos(p.position)
+	var ti := -1
+	for i in 4:
+		if b.part_pos(i) == tgt:
+			ti = i
+	var hp0: int = b.part_hp[ti]
+	b.shots.spawn(p.position + Vector2(30, 0), Vector2(-200, 0), 5.0)
+	_step(1)
+	_check("reflect core turns nearby bullet into player shot", b.shots.size() == 1 and b.shots.mine[0] == 1)
+	_step(90)
+	_check("reflected shot damages the target part (%d -> %d)" % [hp0, b.part_hp[ti]], b.part_hp[ti] == hp0 - 1 and b.shots.is_empty())
+	p.stats.reflect = false
+
+	# 공격 4종이 오류 없이 돌고 끝난다
+	for kd in ["spiral", "fan", "homing", "mines"]:
+		main.start_stage(1)
+		b = main.boss
+		p.reset(Vector2(300, -1500), false)
+		p.invuln = 999.0
+		var a
+		match kd:
+			"spiral": a = b.Spiral.new(0, b.BARREL_TIPS[0])
+			"fan": a = b.Fan.new(0, b.BARREL_TIPS[0], p.position)
+			"homing": a = b.Homing.new()
+			"mines": a = b.Mines.new(Vector2(300, -400))
+		b.start_attack(a)
+		var most := 0
+		var smalls := 0
+		var done := false
+		for k in 360:
+			p.invuln = 999.0
+			main._physics_process(DT)
+			most = maxi(most, b.shots.size())
+			for j in b.shots.size():
+				if b.shots.kind[j] == K.SMALL:
+					smalls += 1
+			if b.atk == null:
+				done = true
+				break
+		_check("%s fires (max %d bullets, small seen %s) and finishes" % [kd, most, smalls > 0], done and most > 0 and (kd == "homing" or smalls > 0))
+
+	# 처치: 반사 코어 획득
+	main.start_stage(1)
+	b = main.boss
+	var old = main.profile
+	var mp = main.Profile.new()
+	mp.persist = false
+	main.profile = mp
+	b.next_t = 99.0
+	for i in 4:
+		b.damage_part(i, 99)
+	_step(int((b.OPEN_TIME + 1.0) / DT))
+	_check("fortress core phase", b.phase == 3)
+	b.damage_core(999)
+	_step(30)
+	b.damage_core(1)
+	main._core_destroyed(b.core.center)
+	_check("fortress clear gives reflect core", mp.cores.has("reflect") and mp.cleared.has("fortress"))
+	main.profile = old
 	main.start_stage(0)

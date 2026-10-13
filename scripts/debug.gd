@@ -67,7 +67,7 @@ func _unhandled_input(e: InputEvent) -> void:
 func _skip_to_core() -> void:
 	var b = main.boss
 	if b.phase == 1:
-		for i in 4:
+		for i in b.part_count():
 			b.damage_part(i, 999)
 
 

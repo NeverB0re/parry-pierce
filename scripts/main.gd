@@ -345,6 +345,7 @@ func _physics_body(delta: float) -> void:
 	_tutorial_triggers()
 	_drain_boss_events()
 	player.step(delta)
+	_reflect()
 	if state == State.PLAY:
 		_check_attacks()
 	elif state == State.RESPAWN:
@@ -367,6 +368,8 @@ func _tutorial_triggers() -> void:
 		tutorial.request(["charge"])
 	elif kd == "beam":
 		tutorial.request(["unparry"])
+	elif kd == "spiral" or kd == "fan" or kd == "homing" or kd == "mines":
+		tutorial.request(["barrage"])
 
 
 func _tele_extra() -> Dictionary:
@@ -445,6 +448,10 @@ func _check_attacks() -> void:
 		if not boss.overlaps(hb, p, reach):
 			continue
 		if player.parry_active:
+			if hb.get("small", false):              # 잔탄: 패리하면 흡수되어 사라지기만 한다 (조준 없음, 패리 판정은 그대로)
+				boss.on_parried(hb)
+				_absorb_feedback(hb["pos"])
+				return
 			var perfect: bool = player.parry_t <= Player.PERFECT_WINDOW
 			if hb["id"] == "arm":                       # 팔은 그냥 패리하면 피해 없이 튕겨나기만 (받아치기는 차지 돌진)
 				var hp_pos: Vector2 = hb["pos"]
@@ -571,6 +578,24 @@ func _parry_feedback(p: Vector2, perfect: bool, hb: Dictionary) -> void:
 		sfx.play("parry", 2.0)
 
 
+## 잔탄 흡수: 아주 작은 연출 (탄막 속에서 연달아 일어난다)
+func _absorb_feedback(at: Vector2) -> void:
+	tele.add("parry_absorb")
+	sfx.play("parry", -12.0)
+	fx.burst(at, 5, Color(1.0, 0.92, 0.6), 260.0, 0.18, 2.0)
+
+
+## 반사 코어: 리버스 드라이브 중 기체 둘레의 탄을 표적으로 되돌린다
+func _reflect() -> void:
+	if state != State.PLAY or not player.is_reflecting():
+		return
+	var n: int = boss.shots.reflect_near(player.position, Player.REFLECT_RADIUS, boss.target_pos(player.position))
+	if n > 0:
+		tele.add("reflect", n)
+		sfx.play("parry", -6.0)
+		fx.ring(player.position, Color(0.75, 1.0, 1.0), 110.0, 0.2, 4.0)
+
+
 ## 팔을 그냥 패리: 피해는 막았지만 보상은 없다 → 짧고 가벼운 연출
 func _parry_push_feedback(at: Vector2) -> void:
 	tele.add("parry_push")
@@ -583,7 +608,9 @@ func _parry_push_feedback(at: Vector2) -> void:
 
 
 func _drain_boss_events() -> void:
-	for ev in boss.events:
+	var evs: Array[Dictionary] = boss.events.duplicate()
+	boss.events.clear()                      # 처리 중 새로 생긴 이벤트(반사 피해 → 부위 파괴 등)는 다음 프레임에
+	for ev in evs:
 		var pos: Vector2 = ev["pos"]
 		match ev["type"]:
 			Ev.STOMP:                            # 발 구르기 → 용암이 튄다
@@ -662,11 +689,26 @@ func _drain_boss_events() -> void:
 				fx.rays_burst(pos, 20, Color(1.0, 0.55, 0.3), 700.0, 0.8, 8.0)
 				fx.ring(pos, Color(1.0, 0.6, 0.35), 500.0, 0.7, 10.0)
 				hud.flash(0.2, Color(1.0, 0.6, 0.4))
+			Ev.REFLECT_HIT:                     # 반사된 탄이 표적에 닿음
+				if state != State.PLAY:
+					continue
+				var dmg: int = ev["dmg"]
+				tele.hit("reflect", dmg)
+				shake = maxf(shake, 6.0 + dmg * 2.0)
+				sfx.play("armor", -4.0)
+				fx.burst(pos, 10 + dmg * 4, Color(0.75, 1.0, 1.0), 600.0, 0.3, 2.5)
+				fx.sprite(pos, 1, 90.0 + dmg * 40.0, 0.3)
+				if boss.damage(ev["hit"], dmg):
+					_core_destroyed(pos)
+			Ev.MINE:                            # 기뢰 폭발
+				shake = maxf(shake, 8.0)
+				sfx.play("stomp", -4.0)
+				fx.burst(pos, 22, Color(1.0, 0.55, 0.25, 0.9), 700.0, 0.5, 4.0, 900.0, Vector2.UP, PI * 0.45)
+				fx.ring(pos, Color(1.0, 0.5, 0.25, 0.7), 140.0, 0.3, 5.0)
 			Ev.CORE_READY:
 				shake = maxf(shake, 12.0)
 				sfx.play("perfect", 0.0, 0.0)
 				fx.ring(pos, Color(1.0, 0.45, 0.25), 320.0, 0.5, 8.0)
-	boss.events.clear()
 
 
 # ── player.gd 에서 호출 ───────────────────────────────

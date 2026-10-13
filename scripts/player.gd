@@ -30,10 +30,11 @@ const PERFECT_WINDOW := 0.07     # 패리 누른 뒤 이 시간 안에 막으면
 const PARRY_MIN := 0.12          # 짧게 눌러도 이 시간만큼은 패리 유지
 const PARRY_COOLDOWN := 0.55     # 끝까지 버틴 뒤 재입력 대기 (남발 방지)
 const PARRY_RELEASE_CD := 0.25   # 중간에 뗐을 때 재입력 대기
-const PARRY_REACH := 30.0        # 패리 판정은 몸보다 이만큼 넓다
 const PARRY_DASH_SPEED := 3600.0 # 패리 돌진: 주력 공격. 월드가 느려져도 플레이어는 실시간
 const PARRY_DASH_SPEED_PERFECT := 4000.0
 const PARRY_DASH_TIME := 0.22
+const REFLECT_LINGER := 0.3      # 반사 코어: 리버스 드라이브가 끝난 직후에도 반사 유지
+const REFLECT_RADIUS := 70.0     # 반사 범위 (기체보다 넓게)
 const POWER_RADIUS := 8.0        # 패리 돌진은 타격 범위도 넓다
 # 직격 후: v0.6 방식 — 위로 솟구치고, 들어온 반대쪽으로 약간 밀리며, 마우스 좌우로 조종한다
 const BOUNCE_SIDE := 250.0       # 들어온 방향의 반대쪽으로 밀리는 가로 속도
@@ -87,6 +88,7 @@ var charging := false            # 좌클릭 누르는 중 (짧게 떼면 돌진
 var charge_t := 0.0
 var charged_notified := false
 var dash_cd := 0.0
+var reflect_t := 0.0             # 반사 코어: 리버스 드라이브가 끝난 뒤에도 반사가 남는 시간
 var charge_cd := 0.0             # 차지 강습 후 다음 차지가 완료될 수 있을 때까지
 var parry_active := false
 var parry_held := false
@@ -126,6 +128,7 @@ func reset(pos: Vector2, platform := false) -> void:
 	bouncing = false
 	dash_cd = 0.0
 	charge_cd = 0.0
+	reflect_t = 0.0
 	evade_window = 0.0
 	evade_rewarded = false
 	dash_held = false
@@ -159,6 +162,11 @@ func is_immune() -> bool:
 ## 모든 돌진은 표적에 닿으면 타격한다 (일반 돌진도 피해 1)
 func is_attacking() -> bool:
 	return dash_t > 0.0 and dash_kind != ""
+
+
+## 반사 코어가 지금 탄을 되돌리는 중인가
+func is_reflecting() -> bool:
+	return stats.reflect and (dash_kind == "power" or reflect_t > 0.0)
 
 
 ## 카메라용: 차지가 절반 넘게 모였을 때부터 0 → 1 (짧게 누르는 연속 돌진에는 카메라가 움직이지 않게)
@@ -273,7 +281,7 @@ func parry_release() -> void:
 
 
 func parry_reach() -> float:
-	return RADIUS + (PARRY_REACH if parry_active else 0.0)
+	return RADIUS + (stats.parry_reach if parry_active else 0.0)
 
 
 ## 탄 패리 성공: 시간이 느려지고 방향을 정한다 → 패리 돌진
@@ -385,6 +393,7 @@ func step(dt: float) -> void:
 
 	dash_cd = maxf(0.0, dash_cd - dt)
 	charge_cd = maxf(0.0, charge_cd - dt)
+	reflect_t = maxf(0.0, reflect_t - dt)
 	evade_window = maxf(0.0, evade_window - dt)
 	parry_cd = maxf(0.0, parry_cd - dt)
 	invuln = maxf(0.0, invuln - dt)
@@ -539,6 +548,8 @@ func _end_dash() -> void:
 	dash_kind = ""
 	perfect_dash = false
 	if was_power:
+		if stats.reflect:
+			reflect_t = REFLECT_LINGER
 		if stats.power_cd_reset:
 			dash_cd = 0.0
 		main.on_power_dash_end()
@@ -817,10 +828,14 @@ func _draw() -> void:
 	if charge_cd > 0.0:
 		draw_arc(Vector2.ZERO, 30.0, -PI * 0.5, -PI * 0.5 + TAU * (1.0 - charge_cd / stats.charge_cooldown), 40, Color(C_ATTACK, 0.75 if charging else 0.4), 2.0)
 
+	# 반사 코어: 리버스 드라이브 중 반사 범위
+	if is_reflecting():
+		draw_arc(Vector2.ZERO, REFLECT_RADIUS, 0.0, TAU, 40, Color(0.75, 1.0, 1.0, 0.55), 2.5)
+
 	# 패리 자세
 	if parry_active:
 		var perfect_phase := parry_t <= PERFECT_WINDOW
 		var c2 := Color(1.0, 0.95, 0.75, 0.9) if perfect_phase else Color(0.8, 0.85, 1.0, 0.55)
-		draw_arc(Vector2.ZERO, RADIUS + PARRY_REACH, 0.0, TAU, 40, c2, 2.5 if perfect_phase else 1.5)
+		draw_arc(Vector2.ZERO, RADIUS + stats.parry_reach, 0.0, TAU, 40, c2, 2.5 if perfect_phase else 1.5)
 	if parry_flash > 0.0:
 		draw_circle(Vector2.ZERO, 14.0 + (1.0 - parry_flash) * 44.0, Color(1, 1, 1, parry_flash * 0.5))
