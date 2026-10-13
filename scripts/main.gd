@@ -521,6 +521,18 @@ func try_clash(p: Vector2) -> bool:
 	return false
 
 
+## 리버스 드라이브 성공: 쌓인 잔탄 긁힘(과열) 한 칸을 치료한다. 5초 식는 시계도 다시 시작
+func _cure_heat(at: Vector2) -> void:
+	if heat <= 0:
+		return
+	heat -= 1
+	heat_t = HEAT_COOL
+	tele.add("heat_cure")
+	sfx.play("bolt", -2.0, 0.0)
+	fx.ring(at, Color(1.0, 0.75, 0.35), 90.0, 0.35, 4.0, true)
+	fx.burst(at, 8, Color(1.0, 0.8, 0.45), 380.0, 0.3, 2.5)
+
+
 ## 퍼펙트 패리 급 임팩트 (적에게 가하는 일격에 쓴다)
 func _perfect_impact(at: Vector2, dir: Vector2) -> void:
 	_buzz(80)
@@ -555,7 +567,9 @@ func _clash(hb: Dictionary, p: Vector2) -> void:
 		boss.damage_part(int(hb["part"]), dmg)
 	else:
 		tele.add("intercept_" + str(hb["id"]))
-	player.on_intercept()                        # 강습 코어: 다음 차지가 바로 완료
+	player.on_intercept()                        # 기본 시스템: 차지 쿨다운 초기화 (연속 요격). 강습 코어는 연쇄 단계도 올린다
+	if kind == "power":
+		_cure_heat(at)                           # 리버스 드라이브 성공: 긁힘 한 칸 치료
 	_buzz(80)
 	hitstop = maxf(hitstop, 0.2)
 	shake = maxf(shake, 24.0)
@@ -1010,6 +1024,7 @@ func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, kind := "d
 		return
 	match kind:
 		"power":
+			_cure_heat(contact)
 			hitstop = maxf(hitstop, 0.18)
 			shake = maxf(shake, 26.0)
 			sfx.play("break", 4.0)

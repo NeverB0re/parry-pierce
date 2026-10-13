@@ -50,6 +50,9 @@ const STUN_INVULN := 0.4         # 스턴이 끝난 뒤 추가 무적
 const DASH_PARRY_GRACE := 0.12   # 돌진패리: 일반 돌진이 끝난 직후에도 이만큼은 돌진 중으로 친다
 const CORE_REBOUND := 0.45       # 코어 안쪽으로 튕길 뻔한 속도를 바깥으로 이 비율만큼 되튕긴다
 const CORE_REBOUND_SHIELD := 0.5 # 그때의 튕김 무적
+const CHAIN_TIME := 4.0          # 강습 코어: 이 시간 안에 다음 요격이 없으면 연쇄가 끊긴다
+const CHAIN_BONUS := 2           # 연쇄 한 단계당 요격 피해 +2
+const CHAIN_MAX := 3
 const STRIKE_PASS := 0.25         # 적중 직후 이 시간 안에 시작한 일반 돌진은, 방금 맞힌 표적의 원 안쪽에서만 충돌하지 않는다 (적 안에서 빠져나오는 돌진이 멈추지 않게)
 const SMALL_GUARD := 0.25        # 일반 돌진이 끝난 직후 이 시간 동안 잔탄에 맞지 않는다 (옅은 실드)
 const HEAT_RING_R := 64.0        # 잔탄 체력 링 (초기 빌드의 외부 시스템 원형 체력바 모양): 돌진 쿨다운 링 바깥
@@ -103,7 +106,8 @@ var charge_t := 0.0
 var charged_notified := false
 var dash_cd := 0.0
 var charge_cd := 0.0             # 차지 강습 후 다음 차지가 완료될 수 있을 때까지
-var quick_charge := false        # 강습 코어: 요격에 성공했다 → 다음 차지는 모으는 시간 없이 바로 완료
+var chain := 0                   # 강습 코어: 연쇄 요격 횟수 (요격 피해 +2 씩, 최대 +6). 시간이 지나거나 맞으면 끊긴다
+var chain_t := 0.0
 var heat_vis := 0.0              # 잔탄 체력 링이 보이는 남은 시간 (과열 중엔 계속 가득)
 var heat_cells := 3              # 링에 그리는 남은 칸 (바뀌는 순간을 알아 번쩍임을 준다)
 var heat_flash := 0.0            # 칸이 깎이거나 돌아온 순간의 번쩍임
@@ -158,7 +162,8 @@ func reset(pos: Vector2, platform := false) -> void:
 	bounce_rise = 0.0
 	parry_hit = false
 	charge_cd = 0.0
-	quick_charge = false
+	chain = 0
+	chain_t = 0.0
 	heat_vis = 0.0
 	heat_cells = 3
 	heat_flash = 0.0
@@ -253,7 +258,7 @@ func press_dash() -> void:
 		return
 	pending_kind = ""
 	charging = true
-	charge_t = charge_need() if quick_charge else 0.0
+	charge_t = 0.0
 	charged_notified = false
 
 
@@ -295,7 +300,6 @@ func _dash(kind: String) -> void:
 	dash_cd = stats.dash_cooldown
 	if kind == "charge":
 		charge_cd = stats.charge_cooldown
-		quick_charge = false
 	evade_window = stats.perfect_evade_window if kind == "dash" else 0.0
 	evade_rewarded = false
 	vel = aim * spd
@@ -455,6 +459,8 @@ func refresh_evade_invuln() -> void:
 
 ## 피격: 잠시 조작 불가(스턴), 살짝 솟구친 뒤 추락
 func on_hurt(push: Vector2) -> void:
+	chain = 0                                       # 맞으면 연쇄 요격이 끊긴다
+	chain_t = 0.0
 	dash_parry_t = 0.0
 	cancel_charge()
 	_clear_buff()
@@ -510,6 +516,10 @@ func step(dt: float) -> void:
 		bouncing = false
 	launch_t = maxf(0.0, launch_t - dt)
 	parry_flash = maxf(0.0, parry_flash - dt * 4.0)
+	if chain > 0:
+		chain_t -= dt
+		if chain_t <= 0.0:
+			chain = 0
 	_step_heat_ring(dt)
 	if stun > 0.0:
 		stun -= dt
@@ -712,8 +722,8 @@ func _on_strike(hit: Dictionary) -> void:
 func intercept_damage() -> int:
 	if dash_kind == "power":
 		last_hit_strong = false
-		return _strike_damage()
-	return clash_damage()
+		return _strike_damage() + chain_bonus()
+	return clash_damage() + chain_bonus()
 
 
 ## 받아치기: 휩쓰는 팔에 차지 돌진이 부딪힘 → 피해량 반환 (버프가 있으면 2배, 소모)
@@ -747,14 +757,17 @@ func on_heat_break() -> void:
 	heat_vis = HEAT_RING_HOLD + HEAT_RING_FADE
 
 
-## 요격 성공 (main.gd). 강습 코어가 있으면 차지 쿨다운을 없애고 다음 차지를 바로 완료시킨다 (이미 누르고 있으면 그 자리에서 완료)
+## 요격 성공 (main.gd): 기본 시스템 — 차지 쿨다운이 바로 초기화된다 (연속 요격). 강습 코어가 있으면 연쇄 요격 단계도 오른다
 func on_intercept() -> void:
-	if not stats.assault:
-		return
 	charge_cd = 0.0
-	quick_charge = true
-	if charging:
-		charge_t = maxf(charge_t, charge_need())
+	if stats.assault:
+		chain = mini(chain + 1, CHAIN_MAX)
+		chain_t = CHAIN_TIME
+
+
+## 강습 코어: 연쇄 요격으로 붙는 요격 피해
+func chain_bonus() -> int:
+	return chain * CHAIN_BONUS if stats.assault else 0
 
 
 func _clear_buff() -> void:
@@ -1061,13 +1074,14 @@ func _draw() -> void:
 	if heat_vis > 0.0:
 		_draw_heat_ring()
 
-	# 강습 코어: 다음 차지가 바로 완료된다 → 기체 둘레를 도는 주황 불씨 셋
-	if quick_charge and not charging and not aim_phase:
+	# 강습 코어: 연쇄 요격 단계만큼 기체 둘레를 도는 주황 불씨 (최대 3, 시간이 지나면 하나씩 꺼진다)
+	if chain > 0 and not aim_phase:
 		var qa := Time.get_ticks_msec() * 0.008
-		for k in 3:
-			var qp := Vector2.from_angle(qa + k * TAU / 3.0) * 30.0
-			draw_circle(qp, 4.5, Color(C_ATTACK, 0.9))
-			draw_circle(qp, 9.0, Color(C_ATTACK, 0.25))
+		for k in chain:
+			var qp := Vector2.from_angle(qa + k * TAU / float(chain)) * 30.0
+			var qf := 1.0 if chain_t > 1.0 else 0.4 + 0.6 * float(int(Time.get_ticks_msec() / 90) % 2)   # 끝나기 전 깜빡임
+			draw_circle(qp, 4.5, Color(C_ATTACK, 0.9 * qf))
+			draw_circle(qp, 9.0, Color(C_ATTACK, 0.25 * qf))
 
 	# 차지 쿨다운: 기체 아래의 주황 막대가 차오른다 (다 차야 다음 차지가 완료된다). 돌진 쿨다운 링과 겹치지 않게 따로 둔다
 	if charge_cd > 0.0:

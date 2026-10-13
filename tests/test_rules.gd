@@ -1689,32 +1689,39 @@ func _v047_test() -> void:
 	main._clash(hb0, on_ring)
 	_check("constrict intercept: that tentacle -8, ring released (hp %d->%d, phase %s)" % [hp0, b.part_hp[0], con.phase], b.part_hp[0] == hp0 - 8 and con.phase == "recoil")
 
-	# 방전 그물: 패리 불가, 선이 경기장을 가로질러 지나간다
+	# 방전 그물: 패리 불가, 세로 띠가 좌→우 / 우→좌로 경기장을 훑는다 (아래→위는 없다)
+	for to_right in [true, false]:
+		main.reset_run()
+		b.next_t = 99.0
+		var net = b.Net.new(to_right)
+		b.start_attack(net)
+		var crossed := false
+		var px := -200.0 if to_right else 200.0
+		for k in 600:
+			main.hitstop = 0
+			p.position = Vector2(px, -1500)
+			p.vel = Vector2.ZERO
+			p.invuln = 99.0
+			main._physics_process(DT)
+			if b.beam_hit(Vector2(px, -1500), 12.0) != Vector2.ZERO:
+				crossed = true
+			if b.atk == null:
+				break
+		_check("net sweeps %s: the band crosses the player and ends (bg_hold cleared)" % ("left->right" if to_right else "right->left"), crossed and b.atk == null and b.bg_hold.is_empty())
 	main.reset_run()
 	b.next_t = 99.0
-	var net = b.Net.new(true)
-	b.start_attack(net)
-	var crossed := false
-	for k in 400:
-		main.hitstop = 0
-		p.position = Vector2(300, -1500)
-		p.vel = Vector2.ZERO
-		p.invuln = 99.0
-		main._physics_process(DT)
-		if b.beam_hit(Vector2(300, -1500), 12.0) != Vector2.ZERO:
-			crossed = true
-		if b.atk == null:
-			break
-	_check("net sweeps across the arena (unparryable line crosses the player)", crossed and b.atk == null and b.bg_hold.is_empty())
-	main.reset_run()
-	b.next_t = 99.0
-	net = b.Net.new(false)
-	b.start_attack(net)
+	var net2 = b.Net.new(true)
+	b.start_attack(net2)
 	main.hitstop = 0
 	main._physics_process(DT)
-	var wp: Array = b.unparry_points(Vector2(300, -2500))
-	_check("net from below: warning point on the line under the player (%s)" % str(wp), wp.size() == 1 and absf(wp[0].x - 300.0) < 1.0 and wp[0].y > -500.0)
-	_check("net: no warning once it has passed the player", b.unparry_points(Vector2(300, -50)).is_empty())
+	var wp: Array = b.unparry_points(Vector2(300, -1500))
+	_check("net warning point is on the band at the player's height (%s)" % str(wp), wp.size() == 1 and absf(wp[0].y + 1500.0) < 1.0 and wp[0].x < -1000.0)
+	net2.x = 800.0
+	net2.x_prev = 790.0
+	_check("net: no warning once the band has passed the player", b.unparry_points(Vector2(300, -1500)).is_empty())
+	net2.x_prev = net2.x
+	net2.set_phase("sweep")
+	_check("net hit width equals the drawn band (inside hurts, 80px outside is safe)", b.beam_hit(Vector2(800.0 + net2.HALF - 5.0, -1500), 0.0) != Vector2.ZERO and b.beam_hit(Vector2(800.0 + net2.HALF + 80.0, -1500), 0.0) == Vector2.ZERO)
 	b.atk = null
 	b.bg_hold = []
 
@@ -1747,20 +1754,50 @@ func _v047_test() -> void:
 	_check("vortex finishes with at most 2 tentacles telegraphing at once (max %d)" % most, b.atk == null and most >= 1 and most <= 2)
 	_check("core phase: the core is the target", not b.strike_hit(b.CORE_POS, 10.0).is_empty())
 
-	# 강습 코어: 요격하면 차지 쿨다운이 사라지고 다음 차지가 바로 완료된다
+	# 기본 시스템: 요격에 성공하면 차지 쿨다운이 바로 초기화된다 (코어 없이도). 강습 코어는 연쇄 요격 피해 +2 씩 (최대 +6)
 	p.reset(Vector2(300, -1000), false)
-	p.stats.assault = true
+	p.stats.assault = false
 	p.charge_cd = 1.5
 	p.on_intercept()
-	_check("assault core: intercept clears charge cooldown", p.charge_cd == 0.0 and p.quick_charge)
-	p.press_dash()
-	_check("assault core: next charge is complete at once", p.is_charged())
-	p.charging = false
-	p._dash("charge")
-	_check("assault core: used up by the charge", not p.quick_charge)
-	p.stats.assault = false
+	_check("base: intercept clears the charge cooldown without any core", p.charge_cd == 0.0 and p.chain == 0)
+	p.dash_kind = "charge"
+	_check("base: intercept damage is the plain 8 without the core", p.intercept_damage() == 8)
+	p.stats.assault = true
+	p.dash_kind = "charge"
+	var dm := []
+	for k in 5:
+		dm.append(p.intercept_damage())
+		p.on_intercept()
+	_check("assault core: chain +2 per intercept, capped at +6 (%s)" % str(dm), dm == [8, 10, 12, 14, 14])
+	p.chain_t = 0.01
+	p.step(0.05)
+	_check("assault core: chain breaks after the time runs out", p.chain == 0)
 	p.on_intercept()
-	_check("without the core intercept changes nothing", not p.quick_charge)
+	p.on_hurt(Vector2.RIGHT)
+	_check("assault core: being hit breaks the chain", p.chain == 0)
+	p.stats.assault = false
+
+	# 리버스 드라이브 성공 = 잔탄 긁힘(과열) 한 칸 치료
+	main.reset_run()
+	b.next_t = 99.0
+	main.heat = 2
+	main.heat_t = 1.0
+	main._cure_heat(Vector2(0, -1500))
+	_check("reverse drive cures one graze (heat %d, timer %.1f)" % [main.heat, main.heat_t], main.heat == 1 and main.heat_t == main.HEAT_COOL)
+	main._cure_heat(Vector2(0, -1500))
+	main._cure_heat(Vector2(0, -1500))
+	_check("cure never goes below 0", main.heat == 0)
+	main.heat = 2
+	b.phase = 1
+	p.reset(Vector2(0, -1500), false)
+	var hit_p := {"kind": "part", "idx": 0, "n": Vector2.UP}
+	main.on_strike(hit_p, 1, p.position, Vector2.UP, "dash", false, false)
+	_check("a normal dash hit does not cure", main.heat == 2)
+	main.on_strike(hit_p, 12, p.position, Vector2.UP, "power", false, false)
+	_check("a reverse drive hit cures one graze (heat %d)" % main.heat, main.heat == 1)
+	main.on_strike(hit_p, 3, p.position, Vector2.UP, "charge", false, false)
+	_check("a charge assault hit does not cure", main.heat == 1)
+	main.heat = 0
 
 	# 처치: 강습 코어 획득
 	var old = main.profile
