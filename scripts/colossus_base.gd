@@ -350,6 +350,18 @@ func on_hit_player(hb: Dictionary) -> void:
 		shots.remove(int(hb["idx"]))
 
 
+## 패리 불가 공격이 다가오는 지점들 (HUD 가 화면 밖이면 가장자리에 보라 ⚠ + 화살표로 알린다)
+func unparry_points(ppos: Vector2) -> Array[Vector2]:
+	var out: Array[Vector2] = []
+	if dead:
+		return out
+	for a in active_attacks():
+		var q: Vector2 = a.unparry_point(ppos)
+		if q.is_finite():
+			out.append(q)
+	return out
+
+
 ## 지금 근접공격을 예고하는 중인가 (HUD 경고 띠)
 func melee_warning() -> bool:
 	if dead:
@@ -428,7 +440,8 @@ func _draw_shards() -> void:
 	draw_set_transform(Vector2.ZERO, 0.0)
 
 
-## 페이즈 1 표적: 외부 시스템에 맥동하는 약점 표시 + 손상 단계(체력바 대신)
+## 페이즈 1 표적: 평소엔 테두리 없이 가운데 약점 점 + 손상 단계(체력바 대신)만.
+## 차지 중·패리 후 조준 중(focus_glow)에만 노릴 수 있는 표적을 빛과 테두리로 강조한다 (사거리 안이면 더 밝게). v0.48: 모든 콜로서스
 func _draw_part_marks() -> void:
 	if phase != 1 or dead:
 		return
@@ -438,21 +451,19 @@ func _draw_part_marks() -> void:
 			continue
 		var p := part_pos(i)
 		var r := part_radius(i)
-		if focus_glow > 0.0:                    # 방향 지정·차지 중: 노릴 수 있는 표적 강조 (사거리 안이면 더 밝게)
+		if focus_glow > 0.0:
 			var in_reach := p.distance_to(focus_from) <= focus_reach
 			draw_circle(p, r * 1.7, Color(C_HEART, focus_glow * (0.3 if in_reach else 0.12) * (0.6 + 0.4 * pulse)))
+			draw_arc(p, r + 6.0, 0.0, TAU, 32, Color(1.0, 0.85, 0.5, focus_glow * (0.9 if in_reach else 0.35)), 3.0)
 			if in_reach:
 				draw_arc(p, r * 1.7, 0.0, TAU, 32, Color(1.0, 0.85, 0.55, focus_glow * 0.8), 3.0)
-		if _part_highlight(i):                  # 요격으로 멈춘 팔 등: 크게 빛난다
-			draw_circle(p, r * 1.3 + 8.0 * pulse, Color(1.0, 0.75, 0.4, 0.35))
+			if _part_highlight(i):              # 요격으로 멈춘 팔 등: 크게 빛난다
+				draw_circle(p, r * 1.3 + 8.0 * pulse, Color(1.0, 0.75, 0.4, 0.35 * focus_glow))
 		var flick := 1.0
 		if part_stage[i] >= 3:                  # 거의 부서짐: 약점 빛이 깜빡인다
 			flick = 0.4 + 0.6 * float(int(t * 9.0 + i) % 3 != 0)
 		var cc := Color(C_HEART, 0.85 * flick).lerp(Color.WHITE, part_flash[i])
-		draw_circle(p, r * 0.45 + 4.0 * pulse, Color(C_HEART, (0.18 + 0.12 * pulse + (0.15 if strike_glow else 0.0)) * flick))
 		draw_circle(p, r * 0.28, cc)
-		var edge := Color(1.0, 0.85, 0.5, 0.9) if strike_glow else Color(C_PLATE_EDGE, 0.9)
-		draw_arc(p, r + 6.0, 0.0, TAU, 32, edge, 3.0)
 		_draw_part_damage(i, p, r, pulse)
 
 

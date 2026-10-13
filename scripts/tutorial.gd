@@ -87,9 +87,9 @@ func _pages() -> Dictionary:
 		"tentacle": {
 			"title": "크라켄 — 촉수를 요격해 끊기",
 			"lines": [
-				"촉수 공격(내려찍기·휩쓸기·조이기)은 모두 근접공격입니다. 촉수가 위치를 잡고 멈춰 붉게 점멸할 때 차지 강습으로 부딪히면 요격! 공격이 끊기고 그 촉수의 구동부(촉수 위쪽의 빛나는 점)에 바로 피해 8이 들어갑니다.",
-				"구동부를 부수면 그 촉수는 축 늘어져 다시 공격하지 못합니다. 대신 남은 촉수는 점점 빨라지고, 둘 이상 잃으면 플레이어를 둘러싸 조여 드는 고리(조이기)가 나옵니다 — 위아래 틈으로 빠져나가거나 한쪽 촉수를 요격하면 풀립니다.",
-				"바깥의 큰 다리 둘이 벽을 짚으면 방전 그물(보라, 패리 불가)이 경기장을 훑습니다. 돌진으로 통과하세요.",
+				"촉수 공격(몸통 내려치기·압착·추적 감아치기·휩쓸기·조이기)은 모두 근접공격입니다. 촉수가 위치를 잡고 멈춰 붉게 점멸할 때 차지 강습으로 부딪히면 요격! 촉수가 크게 튕겨 나가고 그 촉수의 구동부(촉수 위쪽의 빛나는 점)에 바로 피해 8이 들어갑니다. 차지 중엔 요격할 수 있는 촉수가 밝게 빛나고 조준 보조도 그쪽을 먼저 잡습니다.",
+				"구동부를 부수면 그 촉수는 뿌리째 떨어져 나갑니다. 대신 남은 촉수는 점점 빨라지고, 둘 이상 잃으면 플레이어를 둘러싸 조여 드는 고리(조이기)가 나옵니다 — 위아래 틈으로 빠져나가거나 한쪽 촉수를 요격하면 풀립니다. 코어가 드러나면 촉수 둘이 다시 자라납니다.",
+				"바깥의 큰 다리 둘이 벽을 짚으면 방전 그물(보라, 패리 불가)이 경기장을 훑습니다. 돌진으로 통과하세요. 화면 밖에서 다가오면 화면 가장자리에 보라 ⚠와 화살표가 뜹니다.",
 			],
 		},
 		"unparry": {
@@ -621,15 +621,16 @@ class Stage extends Control:
 		var pts := PackedVector2Array()
 		for q in 13:
 			pts.append(root.bezier_interpolate(mid + Vector2(0, -60), mid + Vector2(0, 30), tip, q / 12.0))
-		for q in 12:
-			draw_line(pts[q], pts[q + 1], col, lerpf(26.0, 10.0, q / 11.0))
+		if not limp:
+			for q in 12:
+				draw_line(pts[q], pts[q + 1], col, lerpf(26.0, 10.0, q / 11.0))
 		var drv := pts[4]
 		var flash := _smooth(3.0, 3.1, tt) * (1.0 - _smooth(3.1, 3.6, tt))
 		if not limp:
 			draw_circle(drv, 11.0, Color(1.0, 0.42, 0.22).lerp(Color.WHITE, flash))
 			_ring(drv, 16.0, Color(0.62, 0.3, 0.14), 2.0)
-		else:
-			draw_circle(drv, 9.0, Color(1.0, 0.42, 0.22, 0.25))
+		else:                                          # 떨어져 나간 자리
+			draw_circle(root + Vector2(0, 30), 14.0, Color(1.0, 0.42, 0.22, 0.35))
 		if tt >= 1.0 and tt < 2.9:                     # 겨누고 멈춤: 내리꽂힐 띠
 			var blink := 0.5 + 0.5 * sin(t * 24.0)
 			draw_rect(Rect2(x - 18.0, top, 36.0, 200.0), Color(1.0, 0.16, 0.12, 0.08 + 0.15 * blink))
@@ -647,7 +648,7 @@ class Stage extends Control:
 			pos = sp
 		_ship(pos, (tip - sp).angle() if tt < 3.0 else -PI * 0.5, 1.0, "r" if tt >= 1.4 and tt < 3.4 else "b")
 		if tt < 1.0:
-			_caption("촉수가 솟아 겨눈다 — 아직 요격 불가", Color(0.75, 0.78, 0.85))
+			_caption("촉수가 들려 올라간다 — 아직 요격 불가", Color(0.75, 0.78, 0.85))
 		elif tt < 3.0:
 			_caption("멈춰 붉게 점멸 = 차지 강습으로 요격!", Color(1.0, 0.8, 0.6))
 		elif tt < 5.0:
@@ -655,7 +656,7 @@ class Stage extends Control:
 			_spark(tip, _smooth(3.0, 3.6, tt), Color(1.0, 0.85, 0.5), 14, 50.0)
 			_spark(drv, _smooth(3.0, 3.6, tt), Color(1.0, 0.6, 0.3), 8, 34.0)
 		else:
-			_caption("구동부가 부서진 촉수는 축 늘어진다", Color(0.85, 0.9, 1.0))
+			_caption("구동부가 부서진 촉수는 뿌리째 떨어져 나간다", Color(0.85, 0.9, 1.0))
 		if tt >= 1.4 and tt < 2.6:
 			_mouse(Vector2(size.x - 40.0, 60.0), true, false)
 

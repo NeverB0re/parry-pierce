@@ -106,9 +106,9 @@ func _draw() -> void:
 		draw_polyline(wo, Color(1.0, 0.85, 0.8, 0.55 + 0.35 * mb), 3.0)
 		draw_rect(Rect2(wc.x - 3.0, wc.y - 10.0, 6.0, 15.0), Color(1, 1, 1, 0.85))
 		draw_circle(wc + Vector2(0, 12.0), 3.5, Color(1, 1, 1, 0.85))
-	_draw_target_marker(s, boss)
-	if not boss.dead and boss.attack_kind() == "beam" and s.x >= 300.0:   # 레이저 중 머리가 화면 밖이면 방향 표시
-		_edge_arrow(s, (main.get_viewport().get_canvas_transform() * boss.HEAD_POS) / ui_k, Color(0.85, 0.2, 0.55))
+	if s.x >= 300.0 and s.y >= 300.0:                  # 패리 불가 공격이 화면 밖에서 다가오면 가장자리에 보라 ⚠ + 화살표
+		for q in boss.unparry_points(pl.position):
+			_unparry_edge(s, (main.get_viewport().get_canvas_transform() * q) / ui_k)
 
 	# 상태 정보
 	var left: String = ("외부 시스템 %d" % boss.parts_left()) if boss.phase == 1 else "동력 코어"
@@ -152,27 +152,30 @@ func _draw() -> void:
 
 
 ## 다음 표적(부위 또는 심장)이 화면 밖이면 가장자리에 방향 표시
-func _draw_target_marker(s: Vector2, boss) -> void:
-	if boss.dead or s.x < 300.0 or s.y < 300.0:
-		return
-	var sp: Vector2 = (main.get_viewport().get_canvas_transform() * boss.target_pos(main.player.position)) / ui_k
-	_edge_arrow(s, sp, Color(1.0, 0.5, 0.25))
-
-
-## 화면 밖의 지점 sp 를 가리키는 가장자리 화살표
-func _edge_arrow(s: Vector2, sp: Vector2, col: Color) -> void:
-	var m := 36.0
+## 화면 밖의 패리 불가 공격(sp) 쪽 가장자리: 보라 ⚠ 표지 + 그쪽을 가리키는 화살표 (글자 없음, 점멸)
+func _unparry_edge(s: Vector2, sp: Vector2) -> void:
 	if Rect2(Vector2.ZERO, s).has_point(sp):
 		return
+	var m := 30.0
 	var center := s * 0.5
 	var d := sp - center
 	var k := minf((s.x * 0.5 - m) / maxf(absf(d.x), 0.001), (s.y * 0.5 - m) / maxf(absf(d.y), 0.001))
 	var p := center + d * k
 	var dir := d.normalized()
-	var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.008)
-	var a := dir * 14.0
-	var o := dir.orthogonal() * (9.0 + 1.0 * pulse)
-	draw_colored_polygon(PackedVector2Array([p + a, p - a * 0.6 + o, p - a * 0.2, p - a * 0.6 - o]), Color(col, 0.75 + 0.25 * pulse))
+	var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.02)
+	var core := Color(1.0, 0.62, 0.86)
+	var deep := Color(0.6, 0.08, 0.36)
+	var a := dir * 18.0                                     # 화살표 (바깥 = 공격 쪽)
+	var o := dir.orthogonal() * 13.0
+	draw_colored_polygon(PackedVector2Array([p + a, p - a * 0.6 + o, p - a * 0.2, p - a * 0.6 - o]), Color(core, 0.75 + 0.25 * pulse))
+	var wc := p - dir * 44.0                                # ⚠ 표지 (화살표 안쪽)
+	var wt := PackedVector2Array([wc + Vector2(0, -22), wc + Vector2(-25, 16), wc + Vector2(25, 16)])
+	draw_colored_polygon(wt, Color(deep, 0.6 + 0.3 * pulse))
+	var wo := wt.duplicate()
+	wo.append(wt[0])
+	draw_polyline(wo, Color(core, 0.7 + 0.3 * pulse), 3.0)
+	draw_rect(Rect2(wc.x - 3.0, wc.y - 9.0, 6.0, 13.0), Color(1, 1, 1, 0.9))
+	draw_circle(wc + Vector2(0, 10.0), 3.0, Color(1, 1, 1, 0.9))
 
 
 ## 목숨 아이콘: 플레이어 기체 스프라이트. 잃은 목숨은 어둡게 식은 회색 + 금 간 모양

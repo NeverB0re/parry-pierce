@@ -31,9 +31,15 @@ func clash_box(_ppos: Vector2) -> Dictionary:
 	return {}
 
 
-## 에임 어시스트 임시 표적 ({pos, r}) — 요격할 수 있는 공격이 쓴다 (from = 플레이어 위치)
+## 에임 어시스트 임시 표적 ({pos, r, intercept}) — 요격할 수 있는 공격이 쓴다 (from = 플레이어 위치).
+## intercept = true 인 표적은 차지·조준 중 어시스트가 다른 표적보다 먼저 잡는다
 func assist_targets(_from: Vector2, _out: Array[Dictionary]) -> void:
 	pass
+
+
+## 패리 불가 공격이 플레이어에게 다가오는 지점 (화면 밖이면 HUD 가 보라 ⚠ + 화살표). 없으면 Vector2.INF
+func unparry_point(_ppos: Vector2) -> Vector2:
+	return Vector2.INF
 
 
 ## 근접공격을 예고하는 중인가 (HUD 경고 띠). 근접공격 모듈은 true 를 돌려 주고, 예고 그림은 melee_warn.gd 로 그린다

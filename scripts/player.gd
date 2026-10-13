@@ -788,6 +788,7 @@ func bounce_off(dir: Vector2, kind := "dash") -> void:
 
 ## 에임 어시스트: 사거리 안에서 조준선이 표적 가장자리 일정 각도(PC 24도, 터치 40도) 이내면 표적 중심으로 달라붙는다.
 ## 가장자리에서 멀수록 천천히 풀려(연속) 튀지 않는다. 가장 가까운 표적 하나만 대상.
+## v0.48: 요격할 수 있는 공격(intercept 표적)이 조준 범위 안에 있으면 부위·코어보다 먼저 잡는다
 func _assisted(a: Vector2, reach: float, extra_r: float) -> Vector2:
 	var cone := stats.assist_cone_touch if main.touch_ui != null else stats.assist_cone
 	var ang := a.angle()
@@ -806,6 +807,8 @@ func _assisted(a: Vector2, reach: float, extra_r: float) -> Vector2:
 		if err > cone:
 			continue
 		var score := maxf(err, 0.0) * 10.0 + absf(da)
+		if not t.get("intercept", false):
+			score += 100.0                       # 요격 표적이 하나라도 범위 안에 있으면 그쪽이 이긴다
 		if score < best_score:
 			best_score = score
 			best_da = da

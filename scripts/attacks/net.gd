@@ -4,9 +4,9 @@ extends "res://scripts/attacks/attack.gd"
 ## 단계: wind(다리가 벽을 짚고, 출발선이 점멸 + 진행 방향 화살표) → sweep(훑기) → 끝
 ## boss 에 필요한 것: bg_hold (배경 다리 끝 위치 덮어쓰기)
 
-const WIND := 1.2
-const SWEEP := 2.0
-const HALF := 16.0                   # 판정 반폭
+const WIND := 1.5
+const SWEEP := 3.4                   # v0.48: 2.0 → 3.4 (화면이 세로로 짧아 너무 빨리 들이닥쳤다)
+const HALF := 30.0                   # 판정 반폭 (v0.48: 16 → 30, 두껍고 압도적으로)
 const WALL := 1150.0
 const HIGH := -2950.0
 const LOW := -150.0
@@ -47,6 +47,13 @@ func step(_dt: float, _ppos: Vector2) -> void:
 				boss.finish_attack()
 
 
+## 다가오는 선의 플레이어 쪽 지점 (화면 밖이면 HUD 가 보라 ⚠ + 화살표). 이미 지나갔으면 없음
+func unparry_point(ppos: Vector2) -> Vector2:
+	if (ppos.y - y) * signf(y1 - y0) < -HALF:
+		return Vector2.INF
+	return Vector2(ppos.x, y)
+
+
 ## 이번 프레임에 선이 쓸고 지나간 높이 구간 안이면 맞는다 → 훑는 방향으로 밀려난다
 func beam_hit(p: Vector2, r: float) -> Vector2:
 	if phase != "sweep":
@@ -76,14 +83,21 @@ func draw() -> void:
 		return
 	if phase != "sweep":
 		return
-	# 아직 훑지 않은 쪽을 옅게, 선은 지그재그 전류
+	# 아직 훑지 않은 쪽을 옅게. 선은 넓은 번짐 + 두꺼운 띠 + 전류 세 가닥 + 튀는 불꽃 (압도적으로)
 	var rest_top := minf(y, y1)
-	c.draw_rect(Rect2(-WALL, rest_top, WALL * 2.0, absf(y1 - y)), Color(C_UNPARRY, 0.06))
-	c.draw_line(Vector2(-WALL, y), Vector2(WALL, y), Color(C_UNPARRY, 0.25), 60.0)
-	c.draw_line(Vector2(-WALL, y), Vector2(WALL, y), Color(C_UNPARRY, 0.75), HALF * 2.0)
-	var zz := PackedVector2Array()
-	for q in 47:
-		var x := -WALL + q * (WALL * 2.0 / 46.0)
-		zz.append(Vector2(x, y + randf_range(-14.0, 14.0)))
-	c.draw_polyline(zz, Color(C_UNPARRY_CORE, 0.95), 5.0)
-	c.draw_line(Vector2(-WALL, y + dir * 110.0), Vector2(WALL, y + dir * 110.0), Color(C_UNPARRY, 0.15), 3.0)   # 앞쪽 희미한 예고선
+	c.draw_rect(Rect2(-WALL, rest_top, WALL * 2.0, absf(y1 - y)), Color(C_UNPARRY, 0.07))
+	for g in 4:                                       # 진행 방향 앞쪽으로 번지는 빛
+		c.draw_line(Vector2(-WALL, y + dir * (40.0 + g * 45.0)), Vector2(WALL, y + dir * (40.0 + g * 45.0)), Color(C_UNPARRY, 0.12 - g * 0.025), 40.0)
+	c.draw_line(Vector2(-WALL, y), Vector2(WALL, y), Color(C_UNPARRY, 0.3), 170.0)
+	c.draw_line(Vector2(-WALL, y), Vector2(WALL, y), Color(C_UNPARRY, 0.85), HALF * 2.0)
+	for strand in 3:
+		var zz := PackedVector2Array()
+		for q in 47:
+			var x := -WALL + q * (WALL * 2.0 / 46.0)
+			zz.append(Vector2(x, y + randf_range(-HALF, HALF) * (0.5 + 0.25 * strand)))
+		c.draw_polyline(zz, Color(C_UNPARRY_CORE, 0.95 - strand * 0.25), 6.0 - strand * 1.5)
+	for q in 10:                                      # 튀는 불꽃
+		var sx := randf_range(-WALL, WALL)
+		var sv := Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)).normalized() * randf_range(30.0, 90.0)
+		c.draw_line(Vector2(sx, y), Vector2(sx, y) + sv, Color(C_UNPARRY_CORE, 0.8), 3.0)
+	c.draw_line(Vector2(-WALL, y + dir * 220.0), Vector2(WALL, y + dir * 220.0), Color(C_UNPARRY, 0.2), 4.0)   # 앞쪽 희미한 예고선

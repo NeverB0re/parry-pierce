@@ -119,6 +119,12 @@ func clash_box(ppos: Vector2) -> Dictionary:
 	return hb
 
 
+## 요격할 수 있는 동안 팔에서 플레이어에게 가장 가까운 지점을 어시스트 우선 표적으로
+func assist_targets(from: Vector2, out: Array[Dictionary]) -> void:
+	if phase == "set" or phase == "warn" or phase == "swing":
+		out.append({"pos": boss.arm_box(arm, from)["pos"], "r": 40.0, "intercept": true})
+
+
 func on_parried(hb: Dictionary) -> void:
 	if hb["id"] == "arm":
 		th_from = th

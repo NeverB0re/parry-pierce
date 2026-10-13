@@ -38,6 +38,19 @@ func step(_dt: float, _ppos: Vector2) -> void:
 		boss.finish_attack()
 
 
+## 플레이어 쪽으로 퍼져 오는 고리의 가장 가까운 지점 (퍼지기 전엔 심장부)
+func unparry_point(ppos: Vector2) -> Vector2:
+	var d := ppos - origin
+	var best := -1.0
+	for k in COUNT:
+		var r := _radius(k)
+		if r < d.length():
+			best = maxf(best, maxf(r, 0.0))
+	if best < 0.0:
+		return Vector2.INF                        # 고리가 모두 플레이어를 지나갔다
+	return origin + d.normalized() * best
+
+
 ## 고리에 닿으면 바깥쪽으로 밀려난다
 func beam_hit(p: Vector2, r: float) -> Vector2:
 	var rel := p - origin

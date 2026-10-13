@@ -374,7 +374,7 @@ func _tutorial_triggers() -> void:
 	var kd: String = boss.attack_kind()
 	if kd == "swing":
 		tutorial.request(["charge"])
-	elif kd == "slam" or kd == "sweep" or kd == "constrict" or kd == "vortex" or kd == "slam2":
+	elif kd == "hammer" or kd == "clap" or kd == "chase" or kd == "sweep" or kd == "constrict" or kd == "vortex":
 		tutorial.request(["charge", "tentacle"])
 	elif kd == "net":
 		tutorial.request(["unparry"])
@@ -547,6 +547,7 @@ func _clash(hb: Dictionary, p: Vector2) -> void:
 	var dmg: int = player.intercept_damage() if hb.has("part") else 0
 	player.pass_target = {}                      # 요격은 표적 원과 무관하다
 	player.bounce_off(dir, kind)                 # 먼저 튕긴다 (리버스 드라이브가 끝나며 풀어 주는 경직이 이번 요격의 경직을 풀지 않게)
+	hb["dir"] = dir                              # 촉수는 부딪힌 방향으로 크게 튕겨 나간다
 	boss.on_parried(hb)                          # 팔: 휩쓸던 반대쪽으로 밀려나 잠시 멈춘다 (관절 노출) / 프레스: 걸려서 도로 올라간다
 	var at := p.lerp(contact, 0.4)
 	if hb.has("part"):                           # 부위에 달린 공격(팔·촉수)이면 그 부위에 피해. 프레스는 끊기만 한다
@@ -568,6 +569,13 @@ func _clash(hb: Dictionary, p: Vector2) -> void:
 	fx.ring(at, Color(1.0, 0.55, 0.25), 180.0, 0.35, 7.0)
 	fx.sprite(at, 2, 380.0, 0.45)
 	fx.sprite(at, 1, 240.0, 0.4, false, Color.WHITE, 0.05)
+	if hb.has("tent"):                           # 촉수 요격: 더 과장되게 (부딪힌 방향으로 쏟아지는 강철 불꽃 + 큰 흔들림)
+		shake = maxf(shake, 32.0)
+		hitstop = maxf(hitstop, 0.24)
+		fx.burst(at, 40, Color(0.8, 0.84, 0.9), 1900.0, 0.55, 4.0, 900.0, dir, 0.55)
+		fx.burst(at, 26, Color(1.0, 0.75, 0.35), 1500.0, 0.45, 3.5, 0.0, dir, 0.8)
+		fx.rays_burst(at, 10, Color(1.0, 0.9, 0.6), 700.0, 0.35, 9.0)
+		sfx.play("stomp", 2.0)
 	if player.last_hit_strong:                   # 4배 버프가 실린 받아치기: 퍼펙트 패리 급
 		_perfect_impact(at, dir)
 

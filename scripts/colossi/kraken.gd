@@ -1,16 +1,18 @@
 extends "res://scripts/colossus_base.gd"
-## 콜로서스 ③ 크라켄 (차지 강습 + 요격 중심형). 천장에 매달린 거대한 두족류형 채굴함. 기계 촉수 8개 중 6개가 싸우고, 바깥 2개는 배경이다.
+## 콜로서스 ③ 크라켄 (차지 강습 + 요격 중심형). 천장에 매달린 거대한 기계 문어형 채굴함. 기계 촉수 8개 중 6개가 싸우고, 바깥 2개는 배경이다.
 ## 핵심: 촉수 공격(근접, 회피 불가)이 위치를 잡고 멈춘 순간을 차지 강습으로 요격하면, 그 촉수의 구동부에 바로 피해가 들어간다.
-## 페이즈: 1) 외부 시스템 = 촉수 6개의 구동부(체력 20). 구동부가 부서진 촉수는 축 늘어져 쉰다. 촉수를 잃을수록 남은 촉수가 빨라진다
+## 페이즈: 1) 외부 시스템 = 촉수 6개의 구동부(체력 20). 구동부가 부서진 촉수는 뿌리째 떨어져 나간다. 촉수를 잃을수록 남은 촉수가 빨라진다
 ##         2) 개방 — 외투막 한가운데가 좌우로 열린다
-##         3) 동력 코어 — 장갑에 싸인 코어. 끊긴 촉수 둘(REVIVED)이 붉게 재기동한다 (표적은 아님, 요격하면 공격만 끊김)
-## 공격: 내려찍기(한 개 / 시차를 둔 두 개) · 휩쓸기 · 조이기(촉수 2개 이상 잃은 뒤) · 먹물 포(부채 탄막, 가운데 주탄) · 방전 그물(패리 불가, 드물게)
-##       · 소용돌이(코어 페이즈 전용, 연속 내려찍기). 동시에 예고하는 촉수는 최대 2개.
-## 촉수 모양은 척추(마디 N 개)로 그린다. 쉬는 촉수는 크라켄이, 공격 중인 촉수는 그 공격 모듈(attacks/tentacle.gd)이 움직인다.
+##         3) 동력 코어 — 장갑에 싸인 코어. 떨어져 나간 촉수 둘(REVIVED)이 뿌리에서 다시 자라난다 (표적은 아님, 요격하면 공격만 끊김)
+## 공격: 몸통 내려치기 · 압착(촉수 둘) · 추적 감아치기 · 휩쓸기 · 조이기(촉수 2개 이상 잃은 뒤) · 먹물 포(부채 탄막, 가운데 주탄)
+##       · 방전 그물(패리 불가, 드물게) · 소용돌이(코어 페이즈 전용, 연속 내려치기). 동시에 예고하는 촉수는 최대 2개.
+## 촉수 모양은 척추(마디 N 개)로 그린다: 강철 마디판 + 관절 링 + 유압 피스톤 + 집게 끝. 쉬는 촉수는 크라켄이, 공격 중인 촉수는 그 공격 모듈(attacks/tentacle.gd)이 움직인다.
 ## 바닥 y=0, 위쪽이 음수. 몸 중심 x=0.
 
 const ArmoredCore := preload("res://scripts/armored_core.gd")
-const Slam := preload("res://scripts/attacks/slam.gd")
+const Hammer := preload("res://scripts/attacks/hammer.gd")
+const Clap := preload("res://scripts/attacks/clap.gd")
+const Chase := preload("res://scripts/attacks/chase.gd")
 const Lash := preload("res://scripts/attacks/lash.gd")
 const Constrict := preload("res://scripts/attacks/constrict.gd")
 const Vortex := preload("res://scripts/attacks/vortex.gd")
@@ -39,7 +41,8 @@ const ROOTS := [Vector2(-430, -2210), Vector2(430, -2210), Vector2(-260, -2170),
 const IDLE_TIPS := [Vector2(-900, -1000), Vector2(900, -1000), Vector2(-560, -760), Vector2(560, -760), Vector2(-210, -1080), Vector2(210, -1080)]
 const BG_ROOTS := [Vector2(-560, -2300), Vector2(560, -2300)]     # 배경 다리 (표적·판정 없음, 방전 그물만 건다)
 const BG_TIPS := [Vector2(-1080, -620), Vector2(1080, -620)]
-const REVIVED := [2, 3]                      # 코어 페이즈에 재기동하는 촉수
+const REVIVED := [2, 3]                      # 코어 페이즈에 다시 자라나는 촉수
+const REGROW := 1.6                          # 다시 자라나는 시간
 const W_ROOT := 100.0                        # 촉수 굵기 (뿌리 → 끝)
 const W_TIP := 40.0
 const PART_AT := 3                           # 구동부가 달린 척추 마디
@@ -51,14 +54,13 @@ const OPEN_TIME := 1.6
 const GAP := Vector2(0.7, 1.2)
 const GAP_CORE := Vector2(0.45, 0.85)
 const SPECIAL_EVERY := 4                     # 방전 그물(패리 불가)은 공격 이만큼마다 (드물게)
-const DOUBLE_DELAY := 0.55                   # 두 번째 내려찍기의 시차
 
 # ── 색 ─────────────────────────────────────────────────
 const C_BODY := Color(0.06, 0.08, 0.09)
 const C_BODY_DARK := Color(0.035, 0.05, 0.06)
 const C_RIM := Color(0.4, 0.53, 0.55)
-const C_SUCKER := Color(0.46, 0.42, 0.36)
-const C_LIMP := Color(0.045, 0.05, 0.055)
+const C_STEEL := Color(0.14, 0.17, 0.19)     # 촉수 마디판
+const C_PISTON := Color(0.62, 0.66, 0.68)
 const C_EYE := Color(1.0, 0.78, 0.42)
 const C_PARRY := Color(1.0, 0.88, 0.35)
 const C_GLOW := Color(1.0, 0.78, 0.42)
@@ -66,9 +68,12 @@ const C_GLOW := Color(1.0, 0.78, 0.42)
 var spines: Array[PackedVector2Array] = []
 var bg_spines: Array[PackedVector2Array] = []
 var busy: Array = [null, null, null, null, null, null]   # 촉수를 붙잡은 공격 모듈
+var grown: Array[float] = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]   # 촉수가 자란 정도 (0 = 떨어져 나가 뿌리만, 1 = 다 자람)
 var bg_hold: Array = []                      # 방전 그물이 배경 다리 끝을 붙잡은 위치 [왼, 오] (빈 배열 = 쉼)
+var hit_dir := Vector2.ZERO                  # 마지막으로 요격당한 방향 (부서진 촉수가 그쪽으로 날아간다)
+var hit_dir_t := -99.0
 var siphon_glow := 0.0
-var debris: Array[Dictionary] = []
+var debris: Array[Dictionary] = []           # 떨어져 나간 촉수 조각
 var last := ""
 var since_special := 0
 
@@ -90,6 +95,7 @@ func reset() -> void:
 	for i in 6:
 		spines.append(PackedVector2Array())
 		busy[i] = null
+		grown[i] = 1.0
 	for k in 2:
 		bg_spines.append(PackedVector2Array())
 	super()
@@ -98,6 +104,7 @@ func reset() -> void:
 	for k in 2:
 		bg_spines[k] = _bg_spine(k, BG_TIPS[k])
 	bg_hold = []
+	hit_dir_t = -99.0
 	siphon_glow = 0.0
 	debris.clear()
 	last = ""
@@ -123,13 +130,24 @@ func part_pos(i: int) -> Vector2:
 	return spines[i][PART_AT]
 
 
-## 구동부가 부서지면 촉수 끝 절반이 끊겨 떨어지고, 그 촉수를 쓰던 공격(보조 공격 포함)은 끊긴다
+## 구동부가 부서지면 촉수가 뿌리째 떨어져 나가 세 토막으로 빠르게 멀리 날아간다 (방금 요격당했다면 부딪힌 방향으로).
+## 그 촉수를 쓰던 공격(보조 공격 포함)은 끊긴다
 func _on_part_broken(i: int) -> void:
 	var sp := spines[i]
-	var a := sp[6]
-	var b := sp[N - 1]
-	var s := 1.0 if i % 2 == 1 else -1.0
-	debris.append({"pos": (a + b) * 0.5, "half": (b - a) * 0.5, "w": width_at(8), "vel": Vector2(s * 220.0, -260.0), "rot": 0.0, "rotv": s * 2.5, "rest": false})
+	var dir := hit_dir if t - hit_dir_t < 0.6 else Vector2(signf(ROOTS[i].x), -0.7).normalized()   # 요격이 아니면 바깥 위로
+	for c in 3:
+		var a := c * 4
+		var b := mini(a + 4, N - 1)
+		var cen := (sp[a] + sp[b]) * 0.5
+		var pts := PackedVector2Array()
+		var ws := PackedFloat32Array()
+		for q in range(a, b + 1):
+			pts.append(sp[q] - cen)
+			ws.append(width_at(q))
+		var v := dir.rotated(randf_range(-0.45, 0.45)) * randf_range(1000.0, 1300.0) * (1.0 + 0.3 * c) + Vector2(0, -520.0)
+		debris.append({"pos": cen, "pts": pts, "ws": ws, "vel": v, "rot": 0.0, "rotv": randf_range(6.0, 11.0) * (1.0 if randf() < 0.5 else -1.0), "splash": false})
+	grown[i] = 0.0
+	spines[i] = _idle_spine(i)
 	for m in lingering.duplicate():
 		if m.has_method("uses") and m.uses(i):
 			lingering.erase(m)
@@ -148,7 +166,7 @@ func tent_ready(i: int) -> bool:
 		return false
 	if phase == 1:
 		return part_alive(i)
-	return phase == 3 and REVIVED.has(i)
+	return phase == 3 and REVIVED.has(i) and grown[i] >= 1.0
 
 
 ## 촉수를 잃을수록(페이즈 1), 코어 페이즈일수록 예고가 짧아진다 (공격 모듈이 곱한다)
@@ -183,21 +201,18 @@ static func _bezier_spine(root: Vector2, tip: Vector2, bend: float, n: int) -> P
 	return sp
 
 
-## 쉬는 자세: 천천히 흔들리며 늘어져 있다. 끊긴 촉수는 짧게 축 늘어진다
+## 쉬는 자세: 천천히 흔들리며 늘어져 있다. 자란 정도(grown)만큼만 뿌리에서 뻗는다 (떨어져 나간 촉수는 뿌리에 모인다)
 func _idle_spine(i: int) -> PackedVector2Array:
 	var root: Vector2 = ROOTS[i]
 	var s := 1.0 if i % 2 == 1 else -1.0
-	if _limp(i):
-		var tip := root + Vector2(root.x * 0.2 + s * 40.0 * sin(t * 0.6 + i), 820.0)
-		return _bezier_spine(root, tip, 40.0 * s, N)
 	var tip: Vector2 = IDLE_TIPS[i] + Vector2(sin(t * 0.9 + i * 1.3) * 45.0, cos(t * 0.7 + i) * 30.0)
-	return _bezier_spine(root, tip, s * (90.0 + 70.0 * sin(t * 0.8 + i * 0.9)), N)
-
-
-func _limp(i: int) -> bool:
-	if phase == 1:
-		return not part_alive(i)
-	return not (phase == 3 and REVIVED.has(i))
+	var sp := _bezier_spine(root, tip, s * (90.0 + 70.0 * sin(t * 0.8 + i * 0.9)), N)
+	var g := grown[i]
+	if g < 1.0:
+		var e := g * g * (3.0 - 2.0 * g)
+		for q in N:
+			sp[q] = root + (sp[q] - root) * e
+	return sp
 
 
 func _bg_spine(k: int, tip: Vector2) -> PackedVector2Array:
@@ -215,6 +230,9 @@ func _step_effects(dt: float) -> void:
 			busy[i] = null
 		if busy[i] == null:
 			var to := _idle_spine(i)
+			if grown[i] < 1.0:                      # 떨어져 나갔거나 자라는 중: 자람에 맞춰 바로
+				spines[i] = to
+				continue
 			var sp := spines[i]
 			for q in N:
 				sp[q] = sp[q].lerp(to[q], ease_k)
@@ -237,6 +255,9 @@ func _step_effects(dt: float) -> void:
 func _step_phase(dt: float) -> void:
 	attack_gap = GAP_CORE if phase == 3 else GAP
 	siphon_glow = move_toward(siphon_glow, 0.0, dt * 2.0)
+	if phase == 3:                               # 코어 페이즈: 촉수 둘이 뿌리에서 다시 자라난다
+		for i in REVIVED:
+			grown[i] = minf(1.0, grown[i] + dt / REGROW)
 
 
 func die() -> void:
@@ -257,37 +278,28 @@ func _choose(ppos: Vector2) -> void:
 		return
 	var pool: Array[String] = ["ink"]
 	if not ready.is_empty():
-		pool.append_array(["slam", "sweep"])
+		pool.append_array(["hammer", "hammer", "chase", "sweep"])
 		if hard:
 			pool.append_array(["vortex", "vortex"])
-		elif ready.size() >= 2:
-			pool.append("slam2")
-		if ready.size() >= 2 and (hard or parts_left() <= 4):
-			pool.append_array(["constrict", "constrict"])
+		if ready.size() >= 2:
+			pool.append("clap")
+			if hard or parts_left() <= 4:
+				pool.append_array(["constrict", "constrict"])
 	while pool.size() > 1 and pool.has(last):
 		pool.erase(last)
 	match pool[randi() % pool.size()]:
-		"slam":
-			_grab_start("slam", Slam.new(_nearest(ready, ppos.x)))
-		"slam2":
-			var a := _nearest(ready, ppos.x)
-			ready.erase(a)
-			var b := _nearest(ready, ppos.x)
-			_grab_start("slam2", Slam.new(a))
-			var s2 = Slam.new(b, false, DOUBLE_DELAY)
-			start_side(s2)
-			s2.claim()
+		"hammer":
+			_grab_start("hammer", Hammer.new(_nearest(ready, ppos.x)))
+		"chase":
+			_grab_start("chase", Chase.new(_nearest(ready, ppos.x)))
 		"sweep":
 			_grab_start("sweep", Lash.new(_sweeper(ready, ppos)))
+		"clap":
+			var lr := _outer_pair(ready)
+			_grab_start("clap", Clap.new(lr[0], lr[1]))
 		"constrict":
-			var l := ready[0]
-			var r := ready[ready.size() - 1]
-			for i in ready:                          # 가장 왼쪽 = 왼쪽 반원, 가장 오른쪽 = 오른쪽 반원
-				if ROOTS[i].x < ROOTS[l].x:
-					l = i
-				if ROOTS[i].x > ROOTS[r].x:
-					r = i
-			_grab_start("constrict", Constrict.new(l, r))
+			var lr := _outer_pair(ready)
+			_grab_start("constrict", Constrict.new(lr[0], lr[1]))
 		"vortex":
 			_pick("vortex", Vortex.new(ready))
 		_:
@@ -302,6 +314,18 @@ func _pick(kind: String, a) -> void:
 func _grab_start(kind: String, a) -> void:
 	_pick(kind, a)
 	a.claim()
+
+
+## 가장 왼쪽 촉수(왼쪽 몫)와 가장 오른쪽 촉수(오른쪽 몫)
+static func _outer_pair(ts: Array[int]) -> Array[int]:
+	var l := ts[0]
+	var r := ts[ts.size() - 1]
+	for i in ts:
+		if ROOTS[i].x < ROOTS[l].x:
+			l = i
+		if ROOTS[i].x > ROOTS[r].x:
+			r = i
+	return [l, r]
 
 
 ## 플레이어 x 에 가장 가까운 촉수 (쉬는 자세의 끝 기준)
@@ -333,29 +357,29 @@ func glow_of(_c: int) -> float:
 	return siphon_glow
 
 
+## 떨어져 나간 촉수 토막: 빠르게 돌며 날아가다 벽에 튕기고, 융해 지대에 빠지면 물보라와 함께 사라진다
 func _step_debris(dt: float) -> void:
-	for d in debris:
-		if d["rest"]:
-			continue
+	for d in debris.duplicate():
 		var v: Vector2 = d["vel"]
 		v.y += 1500.0 * dt
-		d["vel"] = v
 		var p: Vector2 = d["pos"] + v * dt
-		var rot: float = float(d["rot"]) + float(d["rotv"]) * dt
-		var half: Vector2 = d["half"]
-		var reach := absf(half.rotated(rot).y) + float(d["w"]) * 0.5
-		if p.y + reach >= 0.0:
-			p.y = -reach
-			d["rest"] = true
-			emit(Ev.DEBRIS_LAND, Vector2(p.x, 0))
+		if absf(p.x) > 1150.0:
+			p.x = signf(p.x) * 1150.0
+			v.x = -v.x * 0.45
+		d["vel"] = v
 		d["pos"] = p
-		d["rot"] = rot
+		d["rot"] = float(d["rot"]) + float(d["rotv"]) * dt
+		if p.y > -20.0 and not d["splash"]:
+			d["splash"] = true
+			emit(Ev.DEBRIS_LAND, Vector2(p.x, 0))
+		if p.y > 400.0:
+			debris.erase(d)
 
 
 # ── 그리기 ─────────────────────────────────────────────
 func _draw() -> void:
 	for k in 2:
-		_draw_tentacle(bg_spines[k], C_BODY_DARK, false, false, 0.85)
+		_draw_mech(bg_spines[k], 0.85, C_BODY_DARK, false)
 	_draw_mantle()
 	_draw_door()
 	for i in 6:
@@ -369,34 +393,69 @@ func _draw() -> void:
 
 
 func _draw_arm(i: int) -> void:
+	var root: Vector2 = ROOTS[i]
+	if grown[i] <= 0.02:                                  # 떨어져 나간 자리: 뜯긴 소켓 + 끊긴 케이블 + 튀는 불꽃
+		draw_circle(root, 44.0, C_BODY_DARK)
+		draw_arc(root, 44.0, 0.0, TAU, 20, Color(C_RIM, 0.6), 4.0)
+		for c in 3:
+			var a := PI * 0.5 + (c - 1) * 0.5
+			draw_line(root, root + Vector2.from_angle(a + 0.2 * sin(t * 3.0 + c)) * 70.0, Color(0.1, 0.1, 0.1), 5.0)
+		draw_circle(root, 16.0, Color(C_HEART, 0.3 + 0.25 * float(int(t * 11.0 + i) % 3 == 0)))
+		return
 	var m = busy[i]
-	var striking: bool = m != null and m.has_method("hitboxes") and m.delay <= 0.0 and m._harmful()
+	var striking: bool = m != null and m.delay <= 0.0 and m._harmful()
+	var lit: bool = m != null and focus_glow > 0.0 and m.delay <= 0.0 and m._clashable()
 	var revived := phase >= 2 and REVIVED.has(i) and not dead
-	var col := C_LIMP if _limp(i) else C_BODY
-	_draw_tentacle(spines[i], col, striking, revived, 1.0)
-	if phase == 1 and not part_alive(i):                 # 끊긴 자리: 꺼져 가는 불씨
-		draw_circle(spines[i][PART_AT], 20.0, Color(C_HEART, 0.18 + 0.1 * sin(t * 4.0 + i)))
+	_draw_mech(spines[i], 1.0, C_STEEL, revived)
+	if striking or lit:                                  # 판정이 있는 공격 중 = 금색(패리할 수 있음) / 차지·조준 중 요격할 수 있으면 밝게
+		var c := Color(C_PARRY, 0.75) if striking else Color(1.0, 0.92, 0.6, 0.45 + 0.35 * sin(t * 12.0))
+		for k in range(m.hit_from, N - 1):
+			draw_line(spines[i][k], spines[i][k + 1], c, 5.0)
+	if grown[i] < 1.0:                                   # 자라는 중: 뿌리에서 불꽃
+		for c in 4:
+			draw_circle(root + Vector2.from_angle(t * 9.0 + c * 1.6) * 30.0, 4.0, Color(1.0, 0.8, 0.45, 0.9))
 
 
-## 촉수: 굵기가 줄어드는 마디들 + 한쪽 흡반 + 등줄기 테두리.
-## striking = 지금 판정이 있는 공격 중 → 금색 테두리 (패리할 수 있는 것). revived = 코어 페이즈에 재기동 → 붉은 이음매
-func _draw_tentacle(sp: PackedVector2Array, col: Color, striking: bool, revived: bool, wk: float) -> void:
+## 기계 촉수: 강철 마디판(사다리꼴) + 등줄기 + 유압 피스톤 + 관절 링·볼트 + 끝의 집게.
+## revived = 코어 페이즈에 다시 자라난 촉수 → 관절이 붉게 달아오른다
+func _draw_mech(sp: PackedVector2Array, ws: float, col: Color, revived: bool) -> void:
+	var rim := Color(C_RIM, 0.5)
 	for k in N - 1:
-		var w := width_at(k) * wk
-		draw_line(sp[k], sp[k + 1], col, w)
-		draw_circle(sp[k + 1], width_at(k + 1) * wk * 0.5, col)
-	draw_circle(sp[0], width_at(0) * wk * 0.5, col)
-	for k in range(1, N - 1):                            # 흡반과 등줄기
-		var d := (sp[k + 1] - sp[k - 1]).normalized()
+		var a := sp[k]
+		var b := sp[k + 1]
+		if a.distance_to(b) < 1.0:
+			continue
+		var d := (b - a).normalized()
 		var o := d.orthogonal()
-		var w := width_at(k) * wk * 0.5
-		draw_circle(sp[k] + o * w * 0.55, w * 0.28, Color(C_SUCKER, 0.55 if col != C_LIMP else 0.25))
-		draw_line(sp[k] - o * w * 0.7, sp[k + 1] - o * width_at(k + 1) * wk * 0.35, Color(C_RIM, 0.35), 3.0)
-		if revived and k % 2 == 0:
-			draw_line(sp[k] - o * w * 0.6, sp[k] + o * w * 0.6, Color(C_HEART, 0.45 + 0.25 * sin(t * 6.0 + k)), 4.0)
-	if striking:
-		for k in range(4, N - 1):
-			draw_line(sp[k], sp[k + 1], Color(C_PARRY, 0.7), 5.0)
+		var wa := width_at(k) * ws * 0.5
+		var wb := width_at(k + 1) * ws * 0.5 * 0.9
+		var plate := PackedVector2Array([a + o * wa, b + o * wb, b - o * wb, a - o * wa])
+		draw_colored_polygon(plate, col)
+		draw_line(a + o * wa, b + o * wb, rim, 2.5)
+		draw_line(a - o * wa, b - o * wb, Color(C_RIM, 0.25), 2.0)
+		draw_line(a.lerp(b, 0.15) - o * wa * 0.15, a.lerp(b, 0.85) - o * wb * 0.15, Color(C_BODY_DARK, 0.9), 5.0)   # 등줄기 홈
+		var pa := a + o * wa * 0.62                       # 유압 피스톤: 실린더 + 반짝이는 막대
+		var pm := a.lerp(b, 0.55) + o * (wa + wb) * 0.31
+		var pb := b + o * wb * 0.62
+		draw_line(pa, pm, Color(C_BODY_DARK, 1.0), 7.0)
+		draw_line(pm, pb, Color(C_PISTON, 0.55), 2.5)
+	for k in range(1, N):                                 # 관절 링 + 볼트
+		var r := width_at(k) * ws * 0.36
+		draw_circle(sp[k], r, C_BODY_DARK)
+		draw_arc(sp[k], r, 0.0, TAU, 14, Color(C_RIM, 0.55), 2.5)
+		var bc := Color(C_HEART, 0.55 + 0.3 * sin(t * 6.0 + k)) if revived else Color(C_RIM, 0.7)
+		draw_circle(sp[k], r * 0.3, bc)
+	draw_circle(sp[0], width_at(0) * ws * 0.55, C_BODY_DARK)
+	draw_arc(sp[0], width_at(0) * ws * 0.55, 0.0, TAU, 20, Color(C_RIM, 0.6), 4.0)
+	var tip := sp[N - 1]                                  # 집게: 바깥으로 벌어진 두 갈래
+	var td := (tip - sp[N - 2]).normalized() if tip.distance_to(sp[N - 2]) > 1.0 else Vector2.DOWN
+	var to := td.orthogonal()
+	var wt := width_at(N - 1) * ws * 0.5
+	for s in [-1.0, 1.0]:
+		var base: Vector2 = tip + to * wt * 0.5 * s
+		var prong := PackedVector2Array([base - to * 9.0 * s, base + to * 9.0 * s, tip + td * 62.0 * ws + to * (wt + 10.0) * s])
+		draw_colored_polygon(prong, col)
+		draw_polyline(PackedVector2Array([prong[1], prong[2], prong[0]]), rim, 2.0)
 
 
 ## 외투막 (몸통): 천장 너머까지 이어진 둥근 머리 + 양쪽 지느러미 + 눈 + 아래 분사구
@@ -502,11 +561,17 @@ func _draw_core() -> void:
 		draw_arc(hc, 290.0, 0.0, TAU, 48, Color(1.0, 0.85, 0.55, focus_glow * (0.6 if in_reach else 0.25)), 3.0)
 
 
+## 떨어져 나간 촉수 토막: 마디판 + 관절 + 끊긴 단면의 불씨
 func _draw_debris() -> void:
 	for d in debris:
-		var p: Vector2 = d["pos"]
-		var half: Vector2 = d["half"]
-		draw_set_transform(p, float(d["rot"]))
-		_cap(-half, half, float(d["w"]), C_LIMP)
-		draw_circle(-half, float(d["w"]) * 0.35, Color(C_HEART, 0.2))
+		draw_set_transform(d["pos"], float(d["rot"]))
+		var pts: PackedVector2Array = d["pts"]
+		var ws: PackedFloat32Array = d["ws"]
+		for q in pts.size() - 1:
+			var dd := (pts[q + 1] - pts[q]).normalized()
+			var o := dd.orthogonal()
+			draw_colored_polygon(PackedVector2Array([pts[q] + o * ws[q] * 0.5, pts[q + 1] + o * ws[q + 1] * 0.45, pts[q + 1] - o * ws[q + 1] * 0.45, pts[q] - o * ws[q] * 0.5]), C_STEEL)
+			draw_circle(pts[q + 1], ws[q + 1] * 0.36, C_BODY_DARK)
+		draw_circle(pts[0], ws[0] * 0.4, Color(C_HEART, 0.5))
+		draw_circle(pts[0], ws[0] * 0.2, Color(1.0, 0.85, 0.5, 0.8))
 	draw_set_transform(Vector2.ZERO, 0.0)

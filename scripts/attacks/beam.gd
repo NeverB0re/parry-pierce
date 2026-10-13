@@ -40,6 +40,10 @@ func step(_dt: float, _ppos: Vector2) -> void:
 				boss.finish_attack()
 
 
+func unparry_point(_ppos: Vector2) -> Vector2:
+	return origin
+
+
 ## 광선 끝점: origin 에서 쏜 광선이 벽·천장·바닥에 닿는 곳
 func end_at(a: float) -> Vector2:
 	var d := Vector2.from_angle(a)

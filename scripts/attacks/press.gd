@@ -76,7 +76,7 @@ func clash_box(ppos: Vector2) -> Dictionary:
 ## 요격할 수 있는 동안 에임 어시스트가 판의 플레이어 바로 위 지점을 잡는다 (차지 강습·리버스 드라이브 조준)
 func assist_targets(from: Vector2, out: Array[Dictionary]) -> void:
 	if phase == "warn" or phase == "drop" or phase == "hold":
-		out.append({"pos": Vector2(clampf(from.x, -HALF_W + 60.0, HALF_W - 60.0), bottom - 30.0), "r": 60.0})
+		out.append({"pos": Vector2(clampf(from.x, -HALF_W + 60.0, HALF_W - 60.0), bottom - 30.0), "r": 60.0, "intercept": true})
 
 
 func melee_warning() -> bool:

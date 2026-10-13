@@ -7,9 +7,14 @@ var out := ""
 # [이름, 공격, 찍을 프레임, 플레이어 위치, 카메라 위치, 줌]
 var plan := [
 	["idle", "", 30, Vector2(250, -1200), Vector2(0, -1600), 0.24],
-	["slam_warn", "slam", 75, Vector2(300, -1000), Vector2(0, -1500), 0.25],
-	["slam_hit", "slam", 104, Vector2(300, -1000), Vector2(0, -1500), 0.25],
-	["slam2", "slam2", 85, Vector2(-200, -1100), Vector2(0, -1500), 0.25],
+	["hammer_warn", "hammer", 80, Vector2(300, -1300), Vector2(0, -1500), 0.25],
+	["hammer_hit", "hammer", 116, Vector2(300, -1300), Vector2(0, -1500), 0.25],
+	["clap_warn", "clap", 85, Vector2(-200, -1300), Vector2(0, -1500), 0.25],
+	["clap_close", "clap", 112, Vector2(-200, -1300), Vector2(0, -1500), 0.25],
+	["chase_follow", "chase", 70, Vector2(300, -1300), Vector2(0, -1500), 0.25],
+	["chase_warn", "chase", 125, Vector2(300, -1300), Vector2(0, -1500), 0.25],
+	["recoil", "recoil", 20, Vector2(300, -1300), Vector2(0, -1500), 0.25],
+	["detach", "detach", 12, Vector2(300, -1300), Vector2(0, -1500), 0.25],
 	["sweep_warn", "sweep", 80, Vector2(700, -1300), Vector2(0, -1500), 0.25],
 	["sweep_hit", "sweep", 140, Vector2(700, -1300), Vector2(0, -1500), 0.25],
 	["constrict_warn", "constrict", 80, Vector2(0, -1300), Vector2(0, -1500), 0.3],
@@ -19,8 +24,9 @@ var plan := [
 	["ink", "ink", 75, Vector2(250, -1200), Vector2(0, -1700), 0.3],
 	["broken", "broken", 60, Vector2(250, -1200), Vector2(0, -1600), 0.24],
 	["core", "core", 60, Vector2(250, -1800), Vector2(0, -2100), 0.3],
+	["regrow", "regrow", 50, Vector2(250, -1300), Vector2(0, -1900), 0.3],
 	["vortex", "vortex", 80, Vector2(250, -1300), Vector2(0, -1600), 0.24],
-	["close", "slam", 75, Vector2(300, -1500), Vector2(150, -1800), 0.6],
+	["close", "idle", 30, Vector2(300, -1500), Vector2(-150, -1700), 0.6],
 ]
 var idx := 0
 var local := 0
@@ -58,21 +64,32 @@ func _process(_d: float) -> bool:
 		p.reset(pl[3], false)
 		var a = null
 		match pl[1]:
-			"slam": a = b.Slam.new(1)
+			"hammer": a = b.Hammer.new(1)
+			"clap": a = b.Clap.new(0, 1)
+			"chase": a = b.Chase.new(3)
+			"recoil", "detach":
+				a = b.Hammer.new(1)
+				b.start_attack(a)
+				a.claim()
+				for k in 75:
+					b.step(1.0 / 60.0, pl[3])
+				var hb = b.clash_box(pl[3])
+				hb["dir"] = Vector2(0.3, -1).normalized()
+				b.hit_dir = hb["dir"]
+				b.hit_dir_t = b.t
+				b.on_parried(hb)
+				if pl[1] == "detach":
+					b.damage_part(1, 99)
+				a = null
 			"sweep": a = b.Lash.new(1)
 			"constrict": a = b.Constrict.new(0, 1)
 			"net": a = b.Net.new(true)
 			"ink": a = b.Fan.new(-1, b.SIPHON, p.position)
-			"slam2":
-				a = b.Slam.new(4)
-				var s2 = b.Slam.new(5, false, 0.55)
-				b.start_side(s2)
-				s2.claim()
 			"broken":
 				b.damage_part(0, 99)
 				b.damage_part(3, 99)
 				b.damage_part(4, 12)
-			"core", "vortex":
+			"core", "vortex", "regrow":
 				for i in 6:
 					b.damage_part(i, 99)
 				b.phase = 3
@@ -80,7 +97,9 @@ func _process(_d: float) -> bool:
 				b.next_t = 999.0
 				if pl[1] == "core":
 					b.damage_core(60)
-				else:
+				elif pl[1] == "vortex":
+					b.grown[2] = 1.0
+					b.grown[3] = 1.0
 					a = b.Vortex.new([2, 3])
 		if a != null:
 			b.start_attack(a)
