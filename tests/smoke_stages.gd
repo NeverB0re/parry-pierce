@@ -21,6 +21,11 @@ func _process(_d: float) -> bool:
 		main.player.on_platform = false
 		p.position = Vector2(300, -1200 - (n % 400))
 		p.vel = Vector2.ZERO
+	if n == 100:                           # 과열 그리기 확인 (달아오른 기체·금 간 셀)
+		main.heat = 2
+		main.heat_t = 4.0
+	if n == 220:
+		main.heat = 0
 	if n == 5:
 		b.next_t = 0.5
 	if n == 60 and main.stage_idx == 1:       # 프레스 예고(근접 위험구간) 그리기 확인

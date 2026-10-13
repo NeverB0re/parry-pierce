@@ -632,6 +632,14 @@ func _graze(hb: Dictionary) -> void:
 		_die()
 
 
+## 과열 정도 0~1 (HUD 실드 셀의 금·기체의 달아오름). 한 번 맞으면 0.5, 두 번이면 1.0 이고 식어 가면서 연속으로 줄어든다
+func heat_level() -> float:
+	if heat <= 0:
+		return 0.0
+	var f := float(heat - 1) + clampf(heat_t / HEAT_COOL, 0.0, 1.0)
+	return clampf(f / float(HEAT_MAX - 1), 0.0, 1.0)
+
+
 func _heat_cool(dt: float) -> void:
 	if heat <= 0 or state != State.PLAY:
 		return

@@ -95,15 +95,7 @@ func _draw() -> void:
 
 	# 목숨: 플레이어와 같은 로켓. 잃은 목숨은 박살난 회색 잔해
 	for i in pl.stats.shield_cells:
-		_draw_life(Vector2(46 + i * 46, 50), i < main.lives)
-	# 과열 게이지: 잔탄에 맞으면 한 칸씩 오르고 가득 차면 실드 셀 1개가 깨진다 (안 맞으면 천천히 식는다)
-	var gx: float = 46.0 + pl.stats.shield_cells * 46.0 + 8.0
-	for i in main.HEAT_MAX:
-		var lit: bool = i < main.heat
-		var gr := Rect2(gx + i * 22.0, 44.0, 18.0, 12.0)
-		draw_rect(gr, Color(1.0, 0.55, 0.15, 0.95) if lit else Color(0.3, 0.3, 0.34, 0.5))
-		draw_rect(gr, Color(0.9, 0.9, 0.95, 0.5), false, 1.0)
-
+		_draw_life(Vector2(46 + i * 46, 50), i < main.lives, main.heat_level() if i == main.lives - 1 else 0.0)   # 다음에 깨질 셀이 달아오른다
 	if not boss.dead and boss.melee_warning():         # 근접공격 예고: 화면 위 ⚠ (글자 없이 위험구간·표지와 같은 진홍. 화면 밖 공격도 알린다)
 		var mb := 0.55 + 0.45 * sin(Time.get_ticks_msec() * 0.024)
 		var wc := Vector2(s.x * 0.5, 42.0)
@@ -184,19 +176,32 @@ func _edge_arrow(s: Vector2, sp: Vector2, col: Color) -> void:
 
 
 ## 목숨 아이콘: 플레이어 기체 스프라이트. 잃은 목숨은 어둡게 식은 회색 + 금 간 모양
-func _draw_life(o: Vector2, alive: bool) -> void:
+## 실드 셀 아이콘. heat(0~1): 잔탄 긁힘이 쌓이면 이 셀이 달아오르고 금이 간다 (깨질 셀)
+func _draw_life(o: Vector2, alive: bool, heat := 0.0) -> void:
 	var sz := Vector2(46, 46)
 	var r := Rect2(o - sz * 0.5, sz)
 	var tex := Sprites.ship("b", 0.0)
+	var cr: Array = [
+		[Vector2(-6, -18), Vector2(2, -4)], [Vector2(2, -4), Vector2(-4, 4)],
+		[Vector2(-4, 4), Vector2(6, 16)], [Vector2(2, -4), Vector2(12, 0)]]
 	if alive:
-		draw_texture_rect(tex, r, false)
+		if heat <= 0.0:
+			draw_texture_rect(tex, r, false)
+			return
+		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * (0.006 + 0.012 * heat))
+		draw_circle(o, 27.0, Color(1.0, 0.4, 0.1, (0.1 + 0.28 * heat) * (0.6 + 0.4 * pulse)))
+		draw_texture_rect(tex, r, false, Color(1.0, 1.0 - 0.12 * heat, 1.0 - 0.3 * heat))
+		var n := 2 if heat < 0.75 else 4                 # 처음엔 가는 금, 더 쌓이면 갈라진다
+		for k in n:
+			var a: Vector2 = o + cr[k][0]
+			var b: Vector2 = o + cr[k][1]
+			draw_line(a, b, Color(0.05, 0.03, 0.03, 0.9), 3.0)
+			draw_line(a, b, Color(1.0, 0.6, 0.2, 0.6 + 0.4 * pulse), 1.5)
 		return
 	draw_texture_rect(tex, r, false, Color(0.28, 0.29, 0.33, 0.8))
 	var ed := Color(0.05, 0.05, 0.07, 0.9)
-	draw_line(o + Vector2(-6, -18), o + Vector2(2, -4), ed, 2.0)
-	draw_line(o + Vector2(2, -4), o + Vector2(-4, 4), ed, 2.0)
-	draw_line(o + Vector2(-4, 4), o + Vector2(6, 16), ed, 2.0)
-	draw_line(o + Vector2(2, -4), o + Vector2(12, 0), ed, 2.0)
+	for k in 4:
+		draw_line(o + cr[k][0], o + cr[k][1], ed, 2.0)
 
 
 func _draw_vignette(s: Vector2) -> void:

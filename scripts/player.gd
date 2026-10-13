@@ -892,7 +892,26 @@ func _draw() -> void:
 
 	_ship_col = "r" if attack else "b"
 	_draw_flame(jitter)
-	_draw_rocket(jitter, facing, Color.WHITE)
+	# 잔탄 긁힘: 기체가 주황빛으로 달아오르고 불똥이 튄다 (쌓일수록 더, 식으면 서서히 사라진다)
+	var hl: float = main.heat_level()
+	if hl > 0.0:
+		var ht := Time.get_ticks_msec() * 0.001
+		var hp := 0.5 + 0.5 * sin(ht * (7.0 + 12.0 * hl))
+		draw_circle(Vector2.ZERO, 30.0 + 4.0 * hp, Color(1.0, 0.4, 0.1, (0.07 + 0.2 * hl) * (0.7 + 0.3 * hp)))
+		for j in 1 + int(5.0 * hl):
+			var ph := fmod(ht * (1.6 + j * 0.6) + j * 0.37, 1.0)
+			var sp := Vector2(sin(j * 2.3 + ht * 3.0) * 14.0, -8.0 - 46.0 * ph)
+			draw_circle(sp, 2.2 * (1.0 - ph) + 0.8, Color(1.0, 0.55 + 0.35 * (1.0 - ph), 0.2, 0.9 * (1.0 - ph)))
+	_draw_rocket(jitter, facing, Color(1.0, 1.0 - 0.12 * hl, 1.0 - 0.3 * hl))
+	if hl > 0.3:                                 # 달아오른 선체의 금 (HUD 셀의 금과 같은 모양)
+		var hq := 0.5 + 0.5 * sin(Time.get_ticks_msec() * (0.006 + 0.012 * hl))
+		var cr := [[Vector2(-6, -26), Vector2(2, -9)], [Vector2(2, -9), Vector2(-5, 4)], [Vector2(-5, 4), Vector2(5, 20)], [Vector2(2, -9), Vector2(11, -5)]]
+		var rot := facing + PI * 0.5
+		for k in (2 if hl < 0.75 else 4):
+			var ca: Vector2 = jitter + (cr[k][0] as Vector2).rotated(rot)
+			var cb: Vector2 = jitter + (cr[k][1] as Vector2).rotated(rot)
+			draw_line(ca, cb, Color(0.1, 0.04, 0.02, 0.8), 3.0)
+			draw_line(ca, cb, Color(1.0, 0.62, 0.22, 0.6 + 0.4 * hq), 1.6)
 
 	# 무적 실드: 무적인 동안은 언제나 푸른 벌집 실드 하나로 보여 준다 (돌진·공격 돌진·발사·적중 후 튕김·피격 후·퍼펙트 회피 후).
 	# 끝나기 직전엔 깜빡인다. 기체 위에 그려 가려지지 않게, 기체보다 넓게

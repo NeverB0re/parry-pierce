@@ -31,6 +31,7 @@ func _process(_d: float) -> bool:
 	_v037_test()
 	_v038_test()
 	_v039_test()
+	_v042_test()
 	_telemetry_test()
 	print("FAILS ", fails)
 	quit(fails)
@@ -1318,3 +1319,21 @@ func _v039_test() -> void:
 	_check("bullet attacks are not melee warnings", not b.melee_warning())
 	b.atk = null
 	main.start_stage(0)
+
+
+## v0.42: 과열 정도(heat_level)는 맞을수록 오르고 식어 가면서 연속으로 줄어든다 (HUD 셀의 금·기체 달아오름 용)
+func _v042_test() -> void:
+	main.heat = 0
+	_check("no heat: level 0", main.heat_level() == 0.0)
+	main.heat = 1
+	main.heat_t = main.HEAT_COOL
+	_check("one hit: 0.5 (%.2f)" % main.heat_level(), absf(main.heat_level() - 0.5) < 0.01)
+	main.heat = 2
+	main.heat_t = main.HEAT_COOL
+	_check("two hits: 1.0 (%.2f)" % main.heat_level(), absf(main.heat_level() - 1.0) < 0.01)
+	main.heat_t = 0.0
+	_check("fully cooled second notch = one hit's level (%.2f)" % main.heat_level(), absf(main.heat_level() - 0.5) < 0.01)
+	main.heat = 1
+	main.heat_t = 0.0
+	_check("about to be cold: 0 (%.2f)" % main.heat_level(), main.heat_level() < 0.01)
+	main.heat = 0
