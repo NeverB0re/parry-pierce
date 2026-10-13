@@ -1337,3 +1337,24 @@ func _v042_test() -> void:
 	main.heat_t = 0.0
 	_check("about to be cold: 0 (%.2f)" % main.heat_level(), main.heat_level() < 0.01)
 	main.heat = 0
+
+	# 다른 공격(주탄·융해 지대)으로 셀을 잃으면 쌓인 과열은 사라진다
+	main.start_stage(1)
+	var b = main.boss
+	var p = main.player
+	b.next_t = 99.0
+	p.reset(Vector2(-700, -1500), false)
+	p.invuln = 0.0
+	main.heat = 2
+	main.heat_t = main.HEAT_COOL
+	b.shots.spawn(p.position + Vector2(5, 0), Vector2.ZERO, 5.0)
+	var lv: int = main.lives
+	_step(1)
+	_check("cell lost to a main bolt clears the heat (lives %d->%d, heat %d)" % [lv, main.lives, main.heat], main.lives == lv - 1 and main.heat == 0)
+	main.start_stage(1)
+	main.heat = 2
+	main.heat_t = main.HEAT_COOL
+	lv = main.lives
+	main.on_lava(Vector2(0, 0))
+	_check("cell lost to lava clears the heat (lives %d->%d, heat %d)" % [lv, main.lives, main.heat], main.lives == lv - 1 and main.heat == 0)
+	main.start_stage(0)

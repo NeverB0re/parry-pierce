@@ -580,6 +580,7 @@ func hurt_player(push: Vector2, cause := "attack", damage := true) -> void:
 	sfx.play("hurt")
 	if damage:
 		lives -= 1
+		heat = 0                                   # 셀이 다른 이유로 깨지면 쌓인 과열은 다음 셀로 넘어가지 않는다
 		if lives <= 0:
 			player.frozen = true
 			fx.burst(p, 40, Color(0.9, 0.2, 0.15), 900.0, 0.8, 5.0)
@@ -907,6 +908,7 @@ func on_lava(pos: Vector2) -> void:
 	player.frozen = true
 	player.visible = false
 	lives -= 1
+	heat = 0
 	shake = 20.0
 	hitstop = 0.1
 	sfx.play("stomp", 2.0)
