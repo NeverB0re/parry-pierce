@@ -32,6 +32,7 @@ func _process(_d: float) -> bool:
 	_v038_test()
 	_v039_test()
 	_v042_test()
+	_v044_test()
 	_telemetry_test()
 	print("FAILS ", fails)
 	quit(fails)
@@ -1357,4 +1358,33 @@ func _v042_test() -> void:
 	lv = main.lives
 	main.on_lava(Vector2(0, 0))
 	_check("cell lost to lava clears the heat (lives %d->%d, heat %d)" % [lv, main.lives, main.heat], main.lives == lv - 1 and main.heat == 0)
+	main.start_stage(0)
+
+
+## v0.44: 적중 직후 잠깐 시작한 일반 돌진은 표적과 충돌하지 않는다, 차지 자동 발사 0.9초, 차지 쿨다운 1.7초
+func _v044_test() -> void:
+	main.start_stage(0)
+	var b = main.boss
+	var p = main.player
+	_check("charge auto-fire 0.9s, charge cooldown 1.7s", p.CHARGE_AUTO == 0.9 and absf(p.stats.charge_cooldown - 1.7) < 0.001)
+	var pp: Vector2 = b.part_pos(0)
+	_air(pp + Vector2(-160, 0))
+	_dash_dir("charge", Vector2.RIGHT)
+	_step(6)
+	var hp1: int = b.part_hp[0]
+	_check("charge hit: cooldown refunded, pass-through window open (hp %d, cd %.2f, pass %.2f)" % [hp1, p.dash_cd, p.strike_pass_t], hp1 == b.PART_HP - 3 and p.dash_cd <= 0.0 and p.strike_pass_t > 0.0)
+	main.hitstop = 0.0
+	p.position = pp + Vector2(-30, 0)                  # 아직 표적 안쪽 (부위 반지름 안)
+	p.vel = Vector2.ZERO
+	_dash_dir("dash", Vector2.RIGHT)
+	_step(6)
+	_check("dash right after the hit passes through the target (hp %d, pass %s, still dashing %s)" % [b.part_hp[0], p.dash_pass, p.dash_t > 0.0], b.part_hp[0] == hp1 and p.dash_pass and p.dash_kind == "dash" and p.dash_t > 0.0)
+	_step(int(0.6 / DT))
+	_check("window closes (%.2f)" % p.strike_pass_t, p.strike_pass_t <= 0.0)
+	p.position = pp + Vector2(-90, 0)
+	p.vel = Vector2.ZERO
+	p.dash_cd = 0.0
+	_dash_dir("dash", Vector2.RIGHT)
+	_step(6)
+	_check("later dashes hit as usual (hp %d)" % b.part_hp[0], b.part_hp[0] == hp1 - 1)
 	main.start_stage(0)

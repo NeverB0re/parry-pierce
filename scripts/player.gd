@@ -19,7 +19,7 @@ const DASH_SPEED := 2000.0       # 돌진: 무적 + 표적에 닿으면 피해 1
 const DASH_KEEP := 0.5           # 돌진이 끝난 뒤 남기는 속도 비율 (위쪽 관성은 남기지 않는다)
 const DASH_DAMAGE := 1
 const CHARGE_HOVER := 0.15       # 이 시간 이상 누르면 차지 자세(공중 정지)로 들어간다
-const CHARGE_AUTO := 1.3         # 차지 완료 후 이 시간이 지나면 자동 발사
+const CHARGE_AUTO := 0.9         # 차지 완료 후 이 시간이 지나면 자동 발사 (v0.44: 1.3 → 0.9)
 const CHARGE_SPEED := 3600.0     # 차지 돌진: 빠르게 꽂힌다. 사거리 약 790px
 const CHARGE_DASH_TIME := 0.22
 const CHARGE_GRACE := 0.5        # 차지 돌진이 빗나가 끝난 직후 무적
@@ -48,6 +48,7 @@ const PRESS_PIN_SPEED := 2300.0  # 프레스(천장 근접공격)를 패리하�
 const PRESS_PIN_TIME := 1.0
 const STUN_INVULN := 0.4         # 스턴이 끝난 뒤 추가 무적
 const DASH_PARRY_GRACE := 0.12   # 돌진패리: 일반 돌진이 끝난 직후에도 이만큼은 돌진 중으로 친다
+const STRIKE_PASS := 0.4          # 적중 직후 이 시간 안에 시작한 일반 돌진은 표적과 충돌하지 않는다 (적 안에서 빠져나오는 돌진이 멈추지 않게)
 const SMALL_GUARD := 0.25        # 일반 돌진이 끝난 직후 이 시간 동안 잔탄에 맞지 않는다 (옅은 실드)
 const HURT_PUSH := 500.0
 const HURT_POP := 380.0          # 맞으면 살짝 솟구친다
@@ -111,6 +112,8 @@ var bounce_rise := 0.0           # 직격 튕김의 처음 솟구치는 속도 (
 var parry_hit := false           # 이번 패리 판정에서 무언가를 막았다 → 판정이 끝나도 패리 쿨다운 없음
 var shield_t := 0.0              # 돌진/직격 후 무적
 var small_guard := 0.0           # 일반 돌진이 끝난 직후: 잔탄만 맞지 않는 시간
+var strike_pass_t := 0.0         # 적중 직후 남은 시간: 이때 시작한 일반 돌진은 표적을 통과한다
+var dash_pass := false           # 지금 돌진이 표적을 통과하는 중
 var dash_parry_t := 0.0          # 일반 돌진이 끝난 뒤 돌진패리가 아직 인정되는 시간
 var shield_max := 1.0
 var stun := 0.0
@@ -143,6 +146,8 @@ func reset(pos: Vector2, platform := false) -> void:
 	parry_hit = false
 	charge_cd = 0.0
 	small_guard = 0.0
+	strike_pass_t = 0.0
+	dash_pass = false
 	dash_parry_t = 0.0
 	evade_window = 0.0
 	evade_rewarded = false
@@ -261,6 +266,7 @@ func cancel_charge() -> void:
 func _dash(kind: String) -> void:
 	dash_kind = kind
 	pending_kind = ""
+	dash_pass = kind == "dash" and strike_pass_t > 0.0
 	var spd := DASH_SPEED
 	dash_total = stats.dash_time
 	if kind == "charge":
@@ -472,6 +478,7 @@ func step(dt: float) -> void:
 	dash_cd = maxf(0.0, dash_cd - dt)
 	charge_cd = maxf(0.0, charge_cd - dt)
 	small_guard = maxf(0.0, small_guard - dt)
+	strike_pass_t = maxf(0.0, strike_pass_t - dt)
 	evade_window = maxf(0.0, evade_window - dt)
 	parry_cd = maxf(0.0, parry_cd - dt)
 	invuln = maxf(0.0, invuln - dt)
@@ -597,7 +604,7 @@ func _move(dt: float) -> void:
 		if (dash_kind == "charge" or dash_kind == "power") and dash_t > 0.0 and main.try_clash(position):
 			return
 		# 표적(부위·코어)은 돌진 중에만 충돌한다. 그 밖에는 통과하며 접촉 피해도 없다 (피해는 적의 공격으로만)
-		if is_attacking():
+		if is_attacking() and not dash_pass:
 			var hit: Dictionary = boss.strike_hit(position, RADIUS + (POWER_RADIUS if dash_kind == "power" else 0.0))
 			if not hit.is_empty():
 				_on_strike(hit)
@@ -635,6 +642,7 @@ func _end_dash() -> void:
 	dash_kind = ""
 	perfect_dash = false
 	power_boost = false
+	dash_pass = false
 	if was_power:
 		main.on_power_dash_end()
 
@@ -700,6 +708,7 @@ func bounce_off(dir: Vector2, kind := "dash") -> void:
 	bouncing = true
 	shield_t = STRIKE_SHIELD                     # 튕겨나는 동안 무적 (통제를 되찾으면 끝)
 	shield_max = STRIKE_SHIELD
+	strike_pass_t = STRIKE_PASS
 	parry_cd = 0.0                               # 튕겨나오는 즉시 패리 가능
 	if kind != "dash":
 		dash_cd = 0.0
