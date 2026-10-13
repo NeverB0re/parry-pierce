@@ -64,6 +64,7 @@
 
 ## 개발용
 - **테스트**: `GODOT=<Godot 콘솔 실행 파일> tests/run.sh` — 규칙 테스트 + 그리기 스모크를 헤드리스로 전부 실행 (창이 뜨지 않음). 화면 캡처 스크립트는 `tests/capture/`.
+- **동작 궤적**: `run.sh` 마지막에 시드·입력을 고정한 4200 프레임 궤적을 `tests/golden/trace.txt` 와 비교한다. 리팩터는 "같음"이어야 하고, 수치·규칙을 일부러 바꿨다면 `tests/run.sh --update-trace` 로 기준을 갱신한다.
 - **디버그 키**: F1 오버레이(상태·수치·프레임) · F2 무적 · F3 적 공격 정지 · F4 코어 페이즈로 건너뛰기 · F5 게임 속도 0.5배 · F6 튜토리얼 기록 초기화
 - **플레이 기록**: 한 판마다 `user://telemetry/run_*.json` (Windows: `%APPDATA%/Godot/app_userdata/Parry Pierce (prototype)/telemetry`). ESC 메뉴 → "플레이 기록 폴더 열기". 패리·퍼펙트 회피 횟수, 공격별 피해, 피격 원인, 페이즈 시각이 남는다. 이 파일을 보내 주면 수치 조정에 쓴다.
 
@@ -71,8 +72,14 @@
 | 파일 | 내용 |
 |---|---|
 | `scripts/main.gd` | 루프, 입력, 패리/피격 판정, 카메라, 히트스톱·흔들림·플래시 |
-| `scripts/player.gd` | 이동/돌진/차지/패리/직격 반동. **튜닝값은 파일 맨 위 상수** |
-| `scripts/boss.gd` | 거인: 외부 시스템·페이즈, 동력 코어(장갑), 손상 단계 그림, 공격 패턴. 튜닝값은 맨 위 상수 |
+| `scripts/player.gd` | 이동/돌진/차지/패리/직격 반동. 튜닝값은 파일 맨 위 상수 |
+| `scripts/player_stats.gd`, `data/player_stats.tres` | 업그레이드가 바꿀 수 있는 플레이어 수치 (쿨다운·피해·동조·패리 판정·실드 셀 등) |
+| `scripts/colossus_base.gd` | 모든 콜로서스 공통 틀: 공격 일정, 탄, 장갑 파편, 판정 상자, 이벤트, 죽음 |
+| `scripts/colossi/observer.gd` | 콜로서스 ① 관측자: 몸·외부 시스템·페이즈·공격 고르기·그림. 튜닝값은 맨 위 상수 |
+| `scripts/attacks/*.gd` | 공격 모듈 (예고 → 판정 → 회복): 분출 `erupt`, 팔 휘두르기 `swing`, 레이저 `beam`, 조준 연사 `volley`, 흩뿌리기 `burst` |
+| `scripts/armored_core.gd` | 장갑 + 동력 코어 (불규칙한 강철 판, 손상 단계, 한 발 더 규칙) |
+| `scripts/projectiles.gd` | 탄 시스템 (배열 묶음으로 한꺼번에 움직이고 그림) |
+| `scripts/ev.gd` | 콜로서스 → main 이벤트 상수 |
 | `scripts/hud.gd`, `pause_menu.gd` | 실드 셀(기체 아이콘), 표적 방향 화살표 / ESC 메뉴 |
 | `scripts/background.gd`, `ground.gd` | 실크송풍 패럴랙스 배경, 바닥/벽/풀 |
 | `scripts/fx.gd`, `sfx.gd` | 파티클, 합성 효과음 |

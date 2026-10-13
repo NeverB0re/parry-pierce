@@ -3,6 +3,8 @@ extends Node2D
 ## 시뮬레이션은 main.gd 가 step() 으로 직접 호출한다(히트스톱/슬로모션 제어 때문).
 
 const Sprites := preload("res://scripts/sprites.gd")
+const PlayerStats := preload("res://scripts/player_stats.gd")
+const BASE_STATS := preload("res://data/player_stats.tres")
 
 # ── 튜닝값 ─────────────────────────────────────────────
 const RADIUS := 12.0
@@ -16,51 +18,31 @@ const PLATFORM_SPEED := 260.0
 const DASH_SPEED := 2000.0       # 돌진: 무적 + 표적에 닿으면 피해 1. 사거리 약 560px. 자원 없이 쿨다운만
 const DASH_TIME := 0.28
 const DASH_KEEP := 0.5           # 돌진이 끝난 뒤 남기는 속도 비율 (위쪽 관성은 남기지 않는다)
-const DASH_COOLDOWN := 0.7       # 돌진 시작부터 다음 돌진까지 (차지 돌진도 같은 쿨다운)
-const DASH_BUFFER := 0.2         # 쿨다운이 이만큼 남았을 때 뗀 짧은 입력은 기억했다가 바로 돌진
 const DASH_DAMAGE := 1
-const CHARGE_TIME := 0.6         # 좌클릭을 이만큼 누르면 차지 완료 → 떼면 차지 돌진 (덜 모으고 떼면 일반 돌진)
 const CHARGE_HOVER := 0.15       # 이 시간 이상 누르면 차지 자세(공중 정지)로 들어간다
 const CHARGE_AUTO := 1.3         # 차지 완료 후 이 시간이 지나면 자동 발사
 const CHARGE_SPEED := 3600.0     # 차지 돌진: 빠르게 꽂힌다. 사거리 약 790px
 const CHARGE_DASH_TIME := 0.22
-const CHARGE_DAMAGE := 3
-const CLASH_DAMAGE := 8          # 휩쓰는 팔에 차지 돌진으로 부딪힘(받아치기) → 그 팔 관절에 즉시
 const CHARGE_GRACE := 0.5        # 차지 돌진이 빗나가 끝난 직후 무적
-const PERFECT_EVADE_WINDOW := 0.12  # 돌진 시작 후 이 시간 안에 공격이 스치면 퍼펙트 회피
 const PERFECT_EVADE_GRAZE := 16.0   # 퍼펙트 회피로 인정하는 근접 여유 (몸 반지름에 더함)
 const PERFECT_EVADE_INVULN := 0.8   # 퍼펙트 회피 성공 시 추가 무적 (회피 직후 다른 곳에 맞는 일 방지)
-const EVADE_BUFF_MULT := 2          # 퍼펙트 회피 버프: 다음 차지 공격 피해 배율 (차지 시간도 절반)
-const EVADE_BUFF_MULT_STRONG := 4   # 패리 불가 공격(레이저)을 퍼펙트 회피하면 4배
-const SYNC_TIME := 4.0              # 동조(퍼펙트 회피 버프) 지속 시간. 다시 얻으면 갱신. 월드 시간 기준(슬로우 중엔 느리게 줄어듦)
-const PARRY_BUFFER := 0.15          # 패리 쿨다운 중 누른 입력을 이만큼 기억
 const PARRY_PUSH := 1100.0          # 휩쓰는 팔을 그냥 패리하면: 피해 없이 반대쪽으로 튕겨나기만 한다
 const PARRY_PUSH_SHIELD := 0.5
 const PERFECT_WINDOW := 0.07     # 패리 누른 뒤 이 시간 안에 막으면 PERFECT
 const PARRY_MIN := 0.12          # 짧게 눌러도 이 시간만큼은 패리 유지
-const PARRY_HOLD_MAX := 0.2      # 꾹 누르고 있을 때 패리 판정 최대 유지 시간
 const PARRY_COOLDOWN := 0.55     # 끝까지 버틴 뒤 재입력 대기 (남발 방지)
 const PARRY_RELEASE_CD := 0.25   # 중간에 뗐을 때 재입력 대기
 const PARRY_REACH := 30.0        # 패리 판정은 몸보다 이만큼 넓다
-const AIM_TIME := 1.4            # 패리 성공 후 방향을 정하는 슬로우 시간(실시간 초) = 발사 유예
-const AIM_TIME_PERFECT := 1.9
 const PARRY_DASH_SPEED := 3600.0 # 패리 돌진: 주력 공격. 월드가 느려져도 플레이어는 실시간
 const PARRY_DASH_SPEED_PERFECT := 4000.0
 const PARRY_DASH_TIME := 0.22
-const POWER_DAMAGE := 12
-const POWER_DAMAGE_PERFECT := 16
 const POWER_RADIUS := 8.0        # 패리 돌진은 타격 범위도 넓다
-const POWER_GRACE := 0.7
 # 직격 후: v0.6 방식 — 위로 솟구치고, 들어온 반대쪽으로 약간 밀리며, 마우스 좌우로 조종한다
-const BOUNCE_UP := 900.0         # 솟구치는 속도 (v0.6은 1050 → 높이 약 25% 감소). 차지 ×1.1, 패리 돌진 ×1.25
 const BOUNCE_SIDE := 250.0       # 들어온 방향의 반대쪽으로 밀리는 가로 속도
 const BOUNCE_STEER := 750.0      # 튕길 때 마우스 좌우 방향으로 더하는 가로 속도 (좌우 조종)
-const ASSIST_CONE := 0.42            # 에임 어시스트: 표적 가장자리에서 이 각도(약 24도) 안이면 표적 중심으로 달라붙는다
-const ASSIST_CONE_TOUCH := 0.70      # 터치(스틱은 민감하므로 더 넓게, 약 40도)
 const ASSIST_SLACK := 60.0           # 사거리 여유
 const BOUNCE_THRUST := 2.0       # 튕겨나는 동안 좌우 추진 배율
 const STRIKE_SHIELD := 0.9       # 직격 후 튕겨나는 동안 무적 시간
-const STUN_TIME := 0.9           # 피격(공격/표적 접촉) → 조작 불가
 const STUN_INVULN := 0.4         # 스턴이 끝난 뒤 추가 무적
 const HURT_PUSH := 500.0
 const HURT_POP := 380.0          # 맞으면 살짝 솟구친다
@@ -82,6 +64,7 @@ const C_ATTACK := Color(1.0, 0.55, 0.2)
 
 var main: Node
 var boss: Node
+var stats: PlayerStats = BASE_STATS.duplicate()   # 업그레이드가 바꿀 수 있는 수치 (scripts/player_stats.gd). 기본값의 복사본
 
 var vel := Vector2.ZERO
 var on_platform := false
@@ -180,7 +163,7 @@ func is_attacking() -> bool:
 
 ## 차지 완료에 필요한 시간 (퍼펙트 회피 버프가 있으면 절반)
 func charge_need() -> float:
-	return CHARGE_TIME * (0.5 if buffed else 1.0)
+	return stats.charge_time * (0.5 if buffed else 1.0)
 
 
 func is_charged() -> bool:
@@ -227,7 +210,7 @@ func release_dash() -> void:
 func _fire(kind: String) -> void:
 	if can_dash():
 		_dash(kind)
-	elif kind == "charge" or (dash_cd <= DASH_BUFFER and dash_t <= 0.0):
+	elif kind == "charge" or (dash_cd <= stats.dash_buffer and dash_t <= 0.0):
 		pending_kind = kind
 
 
@@ -246,8 +229,8 @@ func _dash(kind: String) -> void:
 		spd = CHARGE_SPEED
 		dash_total = CHARGE_DASH_TIME
 	dash_t = dash_total
-	dash_cd = DASH_COOLDOWN
-	evade_window = PERFECT_EVADE_WINDOW if kind == "dash" else 0.0
+	dash_cd = stats.dash_cooldown
+	evade_window = stats.perfect_evade_window if kind == "dash" else 0.0
 	evade_rewarded = false
 	vel = aim * spd
 	bouncing = false
@@ -269,7 +252,7 @@ func parry_press() -> void:
 	if frozen or aim_phase or parry_active or stun > 0.0:
 		return
 	if parry_cd > 0.0:
-		parry_queue = PARRY_BUFFER                  # 쿨다운이 곧 끝나면 그때 발동
+		parry_queue = stats.parry_buffer            # 쿨다운이 곧 끝나면 그때 발동
 		return
 	parry_active = true
 	parry_t = 0.0
@@ -296,7 +279,7 @@ func on_parry_success(perfect: bool) -> void:
 	vel = Vector2.ZERO
 	aim_phase = true
 	aim_perfect = perfect
-	aim_left = AIM_TIME_PERFECT if perfect else AIM_TIME
+	aim_left = stats.aim_time_perfect if perfect else stats.aim_time
 	parry_flash = 1.0
 
 
@@ -325,7 +308,7 @@ func launch_parry_dash() -> void:
 	perfect_dash = aim_perfect
 	dash_total = PARRY_DASH_TIME
 	dash_t = PARRY_DASH_TIME
-	dash_cd = DASH_COOLDOWN
+	dash_cd = stats.dash_cooldown
 	vel = aim * (PARRY_DASH_SPEED_PERFECT if aim_perfect else PARRY_DASH_SPEED)
 	parry_cd = PARRY_RELEASE_CD
 	main.on_parry_launch(position, aim)
@@ -344,7 +327,7 @@ func try_evade_reward(strong := false) -> void:
 	evade_rewarded = true
 	buffed = true
 	buff_strong = buff_strong or strong            # 이미 강한 버프가 있으면 약한 회피로 내려가지 않는다
-	buff_t = SYNC_TIME                             # 다시 얻으면 지속 시간 갱신
+	buff_t = stats.sync_time                       # 다시 얻으면 지속 시간 갱신
 	invuln = maxf(invuln, PERFECT_EVADE_INVULN * (1.5 if strong else 1.0))   # 성공 직후 다른 공격에 맞지 않도록 무적 연장
 	dash_cd = dash_t                               # 이 돌진이 끝나는 즉시 다시 돌진할 수 있다
 	main.on_perfect_evade(position, strong)
@@ -358,8 +341,8 @@ func on_hurt(push: Vector2) -> void:
 	evade_window = 0.0
 	var sx := signf(push.x) if absf(push.x) > 0.05 else (1.0 if randf() < 0.5 else -1.0)
 	vel = Vector2(sx * HURT_PUSH, -HURT_POP)
-	stun = STUN_TIME
-	invuln = STUN_TIME + STUN_INVULN
+	stun = stats.stun_time
+	invuln = stats.stun_time + STUN_INVULN
 	dash_t = 0.0
 	dash_kind = ""
 	perfect_dash = false
@@ -425,7 +408,7 @@ func step(dt: float) -> void:
 			parry_t = 0.0
 	if parry_active:
 		parry_t += dt
-		if parry_t > PARRY_HOLD_MAX:
+		if parry_t > stats.parry_hold_max:
 			parry_active = false
 			parry_cd = PARRY_COOLDOWN
 		elif not parry_held and parry_t >= PARRY_MIN:
@@ -442,7 +425,7 @@ func step(dt: float) -> void:
 		dash_t -= dt
 		if dash_t <= 0.0:
 			vel *= DASH_KEEP
-			var grace := POWER_GRACE if dash_kind == "power" else (CHARGE_GRACE if dash_kind == "charge" else 0.0)
+			var grace := stats.power_grace if dash_kind == "power" else (CHARGE_GRACE if dash_kind == "charge" else 0.0)
 			if grace > 0.0:                   # 무적 여유는 패리 돌진/차지 돌진만
 				shield_max = grace
 				shield_t = grace
@@ -550,15 +533,15 @@ func _end_dash() -> void:
 func _strike_damage() -> int:
 	match dash_kind:
 		"power":
-			return POWER_DAMAGE_PERFECT if perfect_dash else POWER_DAMAGE
+			return stats.power_damage_perfect if perfect_dash else stats.power_damage
 		"charge":
-			return CHARGE_DAMAGE * _buff_mult()
+			return stats.charge_damage * _buff_mult()
 	return DASH_DAMAGE
 
 
 func _buff_mult() -> int:
 	if buffed:
-		return EVADE_BUFF_MULT_STRONG if buff_strong else EVADE_BUFF_MULT
+		return stats.evade_buff_mult_strong if buff_strong else stats.evade_buff_mult
 	return 1
 
 
@@ -579,7 +562,7 @@ func _on_strike(hit: Dictionary) -> void:
 ## 받아치기: 휩쓰는 팔에 차지 돌진이 부딪힘 → 피해량 반환 (버프가 있으면 2배, 소모)
 ## 요격에는 강한 버프(4배)가 걸리지 않는다. 동조가 있으면 일반 배율(2배)만 적용하고 소모한다
 func clash_damage() -> int:
-	var dmg := CLASH_DAMAGE * (EVADE_BUFF_MULT if buffed else 1)
+	var dmg := stats.clash_damage * (stats.evade_buff_mult if buffed else 1)
 	last_hit_strong = false
 	_clear_buff()
 	return dmg
@@ -605,13 +588,13 @@ func bounce_off(dir: Vector2, kind := "dash") -> void:
 	var steer := 0.0
 	if m.length() > AIM_DEADZONE:
 		steer = m.normalized().x
-	vel = Vector2(-dir.x * BOUNCE_SIDE + steer * BOUNCE_STEER, -BOUNCE_UP * k)
+	vel = Vector2(-dir.x * BOUNCE_SIDE + steer * BOUNCE_STEER, -stats.bounce_up * k)
 
 
 ## 에임 어시스트: 사거리 안에서 조준선이 표적 가장자리 일정 각도(PC 24도, 터치 40도) 이내면 표적 중심으로 달라붙는다.
 ## 가장자리에서 멀수록 천천히 풀려(연속) 튀지 않는다. 가장 가까운 표적 하나만 대상.
 func _assisted(a: Vector2, reach: float, extra_r: float) -> Vector2:
-	var cone := ASSIST_CONE_TOUCH if main.touch_ui != null else ASSIST_CONE
+	var cone := stats.assist_cone_touch if main.touch_ui != null else stats.assist_cone
 	var ang := a.angle()
 	var best_score := INF
 	var best_da := 0.0
@@ -789,7 +772,7 @@ func _draw() -> void:
 
 	# 조준
 	if aim_phase:
-		var total := AIM_TIME_PERFECT if aim_perfect else AIM_TIME
+		var total := stats.aim_time_perfect if aim_perfect else stats.aim_time
 		var c := Color(0.75, 0.92, 1.0, 0.95)
 		draw_arc(Vector2.ZERO, 38.0, 0.0, TAU, 32, Color(c, 0.5), 2.0)
 		draw_arc(Vector2.ZERO, 46.0, -PI * 0.5, -PI * 0.5 + TAU * clampf(aim_left / total, 0.0, 1.0), 40, c, 4.0)
@@ -813,7 +796,7 @@ func _draw() -> void:
 	if dash_cd > 0.0 and dash_t <= 0.0:
 		var ca := 1.0 if charging or pending_kind != "" else 0.7   # 누르고 기다리는 중이면 또렷하게
 		draw_arc(Vector2.ZERO, 36.0, 0.0, TAU, 40, Color(C_EVADE, 0.15), 2.5)
-		draw_arc(Vector2.ZERO, 36.0, -PI * 0.5, -PI * 0.5 + TAU * (1.0 - dash_cd / DASH_COOLDOWN), 40, Color(C_EVADE, ca), 2.5)
+		draw_arc(Vector2.ZERO, 36.0, -PI * 0.5, -PI * 0.5 + TAU * (1.0 - dash_cd / stats.dash_cooldown), 40, Color(C_EVADE, ca), 2.5)
 
 	# 패리 자세
 	if parry_active:

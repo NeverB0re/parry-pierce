@@ -34,6 +34,6 @@ func _process(_d: float) -> bool:
 			main._core_destroyed(b.HEART_POS)
 	main._physics_process(1.0 / 60.0)
 	if n >= 1100:
-		print("stages ok frames=", n, " phase=", b.phase, " core_stage=", b.core_stage, " dead=", b.dead, " shards=", b.shards.size(), " boss_draws=", draws)
+		print("stages ok frames=", n, " phase=", b.phase, " core_stage=", b.core.stage, " dead=", b.dead, " shards=", b.shards.size(), " boss_draws=", draws)
 		quit()
 	return false

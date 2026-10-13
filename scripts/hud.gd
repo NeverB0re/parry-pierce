@@ -94,11 +94,11 @@ func _draw() -> void:
 		draw_polygon(PackedVector2Array([Vector2(0, s.y * 0.45), Vector2(s.x, s.y * 0.45), s, Vector2(0, s.y)]), PackedColorArray([hz, hz, hc, hc]))
 
 	# 목숨: 플레이어와 같은 로켓. 잃은 목숨은 박살난 회색 잔해
-	for i in main.LIVES:
+	for i in pl.stats.shield_cells:
 		_draw_life(Vector2(46 + i * 46, 50), i < main.lives)
 
 	_draw_target_marker(s, boss)
-	if not boss.dead and boss.atk.get("kind", "") == "beam" and s.x >= 300.0:   # 레이저 중 머리가 화면 밖이면 방향 표시
+	if not boss.dead and boss.attack_kind() == "beam" and s.x >= 300.0:   # 레이저 중 머리가 화면 밖이면 방향 표시
 		_edge_arrow(s, (main.get_viewport().get_canvas_transform() * boss.HEAD_POS) / ui_k, Color(0.85, 0.2, 0.55))
 
 	# 상태 정보
@@ -113,7 +113,7 @@ func _draw() -> void:
 
 	# 패리 성공 후 방향 지정(슬로우)
 	if pl.aim_phase:
-		var total: float = Player.AIM_TIME_PERFECT if pl.aim_perfect else Player.AIM_TIME
+		var total: float = pl.stats.aim_time_perfect if pl.aim_perfect else pl.stats.aim_time
 		var frac := clampf(pl.aim_left / total, 0.0, 1.0)
 		draw_rect(Rect2(Vector2.ZERO, s), Color(0.3, 0.5, 0.95, 0.14))
 		var bw := 320.0

@@ -36,7 +36,7 @@ func _setup(i: int) -> void:
 	main.cam.position = p.position
 	if i == 1 or i == 4:
 		for k in 80:
-			b.bolts.append({"pos": Vector2(randf_range(-900, 900), randf_range(-2600, -800)), "vel": Vector2.from_angle(randf() * TAU) * 1.0, "life": 999.0, "age": 1.0})
+			b.shots.spawn(Vector2(randf_range(-900, 900), randf_range(-2600, -800)), Vector2.from_angle(randf() * TAU) * 1.0, 999.0, 1.0)
 	if i == 2 or i == 3:
 		for k in 4:
 			b.damage_part(k, 99)

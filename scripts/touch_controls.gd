@@ -128,7 +128,7 @@ func _draw() -> void:
 		var fr := clampf(pl.charge_t / pl.charge_need(), 0.0, 1.0)
 		draw_arc(pc, BTN_PARRY_R * 0.78, -PI * 0.5, -PI * 0.5 + TAU * fr, 40, Color(1.0, 0.6, 0.2, 0.95), 6.0)
 	if pl.dash_cd > 0.0:
-		draw_arc(pc, BTN_PARRY_R + 9.0, -PI * 0.5, -PI * 0.5 + TAU * (1.0 - pl.dash_cd / pl.DASH_COOLDOWN), 48, Color(0.7, 0.92, 1.0, 0.9), 5.0)
+		draw_arc(pc, BTN_PARRY_R + 9.0, -PI * 0.5, -PI * 0.5 + TAU * (1.0 - pl.dash_cd / pl.stats.dash_cooldown), 48, Color(0.7, 0.92, 1.0, 0.9), 5.0)
 	# 회피(작은 버튼): 청백 화살표
 	var dc := dash_center()
 	var da := 0.5 if parry_down else 0.28

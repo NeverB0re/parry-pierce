@@ -2,7 +2,8 @@ extends Node2D
 ## 프로토타입 메인: 루프, 입력, 패리/피격 판정, 카메라, 피드백(히트스톱/흔들림/플래시/사운드).
 
 const Player := preload("res://scripts/player.gd")
-const Boss := preload("res://scripts/boss.gd")
+const Boss := preload("res://scripts/colossi/observer.gd")
+const Ev := preload("res://scripts/ev.gd")
 const Fx := preload("res://scripts/fx.gd")
 const Ground := preload("res://scripts/ground.gd")
 const Background := preload("res://scripts/background.gd")
@@ -22,7 +23,6 @@ const AIM_ZOOM := 0.82             # 방향 지정 중엔 물러나 표적을 �
 const CHARGE_ZOOM := 0.85            # 차징 중에만 물러난다
 const AIM_SLOW := 0.08             # 방향 지정 중 월드 시간 배율
 const DASH_SLOW := 0.5             # 패리 돌진 중 월드 시간 배율 (적중·종료 즉시 원래 속도). 플레이어는 항상 실시간
-const LIVES := 3                   # 피격 −1, 용암 −1
 const RESPAWN_DELAY := 1.3         # 용암에 빠진 뒤 재출격까지
 const RESPAWN_INVULN := 1.5
 const PLAT_SINK_TIME := 1.0        # 발사 후 발판이 가라앉는 시간
@@ -48,7 +48,7 @@ var hitstop := 0.0
 var slowmo := 0.0
 var shake := 0.0
 var run_time := 0.0
-var lives := LIVES
+var lives := 0                     # 남은 실드 셀 (최대는 player.stats.shield_cells)
 var dead_t := 0.0
 var respawn_t := 0.0
 var plat_on := true                # 발판 위에 설 수 있는가
@@ -151,7 +151,7 @@ func reset_run() -> void:
 	fx.clear()
 	state = State.PLAY
 	run_time = 0.0
-	lives = LIVES
+	lives = player.stats.shield_cells
 	hitstop = 0.0
 	slowmo = 0.0
 	_raise_platform(true)
@@ -283,7 +283,7 @@ func _physics_body(delta: float) -> void:
 func _tutorial_triggers() -> void:
 	if not tutorial.enabled:
 		return
-	var kd: String = boss.atk.get("kind", "")
+	var kd: String = boss.attack_kind()
 	if kd == "swing":
 		tutorial.request(["charge"])
 	elif kd == "beam":
@@ -291,7 +291,7 @@ func _tutorial_triggers() -> void:
 
 
 func _tele_extra() -> Dictionary:
-	return {"phase": boss.phase, "part_hp": boss.part_hp.duplicate(), "armor_hp": boss.armor_hp}
+	return {"phase": boss.phase, "part_hp": boss.part_hp.duplicate(), "armor_hp": boss.core.armor_hp}
 
 
 func _exit_tree() -> void:
@@ -376,7 +376,7 @@ func _check_attacks() -> void:
 			return
 		if not player.is_immune() and boss.overlaps(hb, p, Player.RADIUS):
 			var cause: String = hb["id"]
-			if cause == "bolt" and Dictionary(hb["bolt"]).has("lava"):
+			if cause == "bolt" and hb["lava"]:
 				cause = "lava_glob"
 			hurt_player(hb["push"], cause)
 			boss.on_hit_player(hb)
@@ -413,7 +413,6 @@ func _perfect_impact(at: Vector2, dir: Vector2) -> void:
 
 
 func _clash(hb: Dictionary, p: Vector2) -> void:
-	var a: int = boss.atk["arm"]
 	var contact: Vector2 = hb["pos"]
 	var dir: Vector2 = player.vel.normalized()
 	var dmg: int = player.clash_damage()
@@ -421,7 +420,7 @@ func _clash(hb: Dictionary, p: Vector2) -> void:
 	boss.on_parried(hb)                          # 휩쓸던 반대쪽으로 밀려나 잠시 멈춘다 (관절 노출)
 	player.bounce_off(dir, "charge")
 	var at := p.lerp(contact, 0.4)
-	boss.damage_part(2 + a, dmg)
+	boss.damage_part(int(hb["part"]), dmg)
 	_buzz(80)
 	hitstop = maxf(hitstop, 0.2)
 	shake = maxf(shake, 24.0)
@@ -503,29 +502,29 @@ func _drain_boss_events() -> void:
 	for ev in boss.events:
 		var pos: Vector2 = ev["pos"]
 		match ev["type"]:
-			"stomp":                            # 발 구르기 → 용암이 튄다
+			Ev.STOMP:                            # 발 구르기 → 용암이 튄다
 				shake = maxf(shake, 14.0)
 				sfx.play("stomp", 2.0)
 				fx.burst(pos, 30, Color(1.0, 0.45, 0.15, 0.9), 700.0, 0.7, 5.0, 1200.0, Vector2.UP, PI * 0.4)
 				fx.ring(pos, Color(1.0, 0.5, 0.2, 0.6), 360.0, 0.35, 6.0)
-			"beam":                             # 패리 불가 레이저 발사
+			Ev.BEAM:                             # 패리 불가 레이저 발사
 				shake = maxf(shake, 16.0)
 				sfx.play("dash", 6.0, 0.0)
 				sfx.play("break", -4.0, 0.0)
 				hud.flash(0.12, Color(0.6, 0.1, 0.4))
-			"erupt":
+			Ev.ERUPT:
 				sfx.play("bolt", -6.0)
 				shake = maxf(shake, 5.0)
-			"swing":
+			Ev.SWING:
 				shake = maxf(shake, 10.0)
 				sfx.play("dash", 4.0, 0.0)
 				sfx.play("stomp", -4.0)
 				fx.ring(pos, Color(0.9, 0.5, 0.4, 0.7), 260.0, 0.3, 6.0)
-			"bolt":
+			Ev.BOLT:
 				sfx.play("bolt", -4.0)
-			"bolt_pop":
+			Ev.BOLT_POP:
 				fx.burst(pos, 8, Color(1.0, 0.78, 0.42), 300.0, 0.3)
-			"part_break":                       # 부위 파괴: 크게 터지고 떨어져 나간다
+			Ev.PART_BREAK:                       # 부위 파괴: 크게 터지고 떨어져 나간다
 				tele.mark("part_break", run_time)
 				hitstop = 0.16
 				shake = 22.0
@@ -538,12 +537,12 @@ func _drain_boss_events() -> void:
 				fx.sprite(pos, 1, 420.0, 0.55)
 				fx.sprite(pos, 2, 300.0, 0.5, false, Color.WHITE, 0.08)
 				hud.flash(0.12, Color(1.0, 0.8, 0.6))
-			"part_stage":                       # 부위 손상 단계 상승: 불꽃·파편이 튄다
+			Ev.PART_STAGE:                       # 부위 손상 단계 상승: 불꽃·파편이 튄다
 				shake = maxf(shake, 10.0)
 				sfx.play("break", -4.0)
 				fx.burst(pos, 22, Color(1.0, 0.7, 0.35), 800.0, 0.5, 3.0)
 				fx.burst(pos, 10, Color(0.55, 0.58, 0.64), 500.0, 0.8, 5.0, 1200.0)
-			"core_stage":                       # 코어 껍질이 한 단계 더 부서진다
+			Ev.CORE_STAGE:                       # 코어 껍질이 한 단계 더 부서진다
 				hitstop = maxf(hitstop, 0.12)
 				shake = maxf(shake, 18.0)
 				sfx.play("break", 2.0)
@@ -552,7 +551,7 @@ func _drain_boss_events() -> void:
 				fx.burst(pos, 14, Color(1.0, 0.6, 0.3), 800.0, 0.45, 3.0)
 				fx.ring(pos, Color(1.0, 0.65, 0.35), 200.0, 0.4, 6.0)
 				hud.flash(0.1, Color(1.0, 0.75, 0.5))
-			"armor_break":                      # 껍질이 완전히 부서짐: 코어가 드러난다 (한 발 더 필요)
+			Ev.ARMOR_BREAK:                      # 껍질이 완전히 부서짐: 코어가 드러난다 (한 발 더 필요)
 				tele.mark("armor_break", run_time)
 				hitstop = maxf(hitstop, 0.25)
 				shake = maxf(shake, 30.0)
@@ -566,11 +565,11 @@ func _drain_boss_events() -> void:
 				fx.ring(pos, Color(1.0, 0.75, 0.45), 520.0, 0.6, 10.0)
 				fx.sprite(pos, 1, 520.0, 0.6)
 				fx.sprite(pos, 2, 380.0, 0.55, false, Color.WHITE, 0.1)
-			"debris_land":
+			Ev.DEBRIS_LAND:
 				shake = maxf(shake, 10.0)
 				sfx.play("land", 2.0)
 				fx.burst(pos, 20, Color(0.55, 0.57, 0.6, 0.8), 500.0, 0.6, 5.0, 900.0, Vector2.UP, PI * 0.45)
-			"core_open":                        # 모든 부위 파괴 → 가슴이 열린다
+			Ev.CORE_OPEN:                        # 모든 부위 파괴 → 가슴이 열린다
 				tele.mark("core_open", run_time)
 				hitstop = 0.25
 				shake = 26.0
@@ -579,7 +578,7 @@ func _drain_boss_events() -> void:
 				fx.rays_burst(pos, 20, Color(1.0, 0.55, 0.3), 700.0, 0.8, 8.0)
 				fx.ring(pos, Color(1.0, 0.6, 0.35), 500.0, 0.7, 10.0)
 				hud.flash(0.2, Color(1.0, 0.6, 0.4))
-			"core_ready":
+			Ev.CORE_READY:
 				shake = maxf(shake, 12.0)
 				sfx.play("perfect", 0.0, 0.0)
 				fx.ring(pos, Color(1.0, 0.45, 0.25), 320.0, 0.5, 8.0)
@@ -709,12 +708,9 @@ func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, kind := "d
 		fx.ring(contact, Color(0.75, 0.96, 1.0), 240.0, 0.35, 8.0)
 		fx.rays_burst(contact, 10, Color(0.8, 0.97, 1.0), 420.0, 0.35, 6.0)
 		fx.burst(contact, 22, Color(0.8, 0.97, 1.0), 1100.0, 0.5, 3.5, 0.0, -dir, 1.0)
-	if hit["kind"] == "core":
-		if boss.damage_core(dmg):
-			_core_destroyed(contact)
-			return
-	else:
-		boss.damage_part(int(hit["idx"]), dmg)
+	if boss.damage(hit, dmg):                  # 동력 코어가 부서짐 = 승리
+		_core_destroyed(contact)
+		return
 	match kind:
 		"power":
 			hitstop = maxf(hitstop, 0.18)

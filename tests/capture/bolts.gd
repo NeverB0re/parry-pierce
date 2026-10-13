@@ -22,10 +22,8 @@ func _process(_d: float) -> bool:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		p.reset(Vector2(-300, -1600), false)
 		for k in 14:
-			var bolt := {"pos": p.position + Vector2(-260 + k * 40, -120 + (k % 3) * 70), "vel": Vector2.from_angle(0.3 * k) * 200.0, "life": 99.0, "age": 1.0}
-			if k % 4 == 0:
-				bolt["lava"] = true
-			b.bolts.append(bolt)
+			b.shots.spawn(p.position + Vector2(-260 + k * 40, -120 + (k % 3) * 70), Vector2.from_angle(0.3 * k) * 200.0, 99.0, 1.0, 0.0,
+				b.shots.Kind.LAVA if k % 4 == 0 else b.shots.Kind.BOLT)
 	if n > 3:
 		p.invuln = 99.0
 		p.position = Vector2(-300, -1600)
