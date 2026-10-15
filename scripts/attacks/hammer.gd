@@ -92,6 +92,11 @@ func _pose() -> PackedVector2Array:
 	return sp
 
 
+func _track(ppos: Vector2) -> void:
+	if is_nan(pin_x):
+		_aim(ppos)
+
+
 func _harmful() -> bool:
 	return phase == "strike"
 
@@ -113,10 +118,10 @@ func draw() -> void:
 	if delay > 0.0 or not (phase == "prep" or phase == "set" or phase == "warn"):
 		return
 	var c: CanvasItem = boss
-	var level := 0 if phase == "prep" else (1 if phase == "set" else 2)
+	var level := _warn_level(0 if phase == "prep" else (1 if phase == "set" else 2))
 	var x0 := cx - HALF_LEN - HALF
 	var x1 := cx + HALF_LEN + HALF
 	var area := PackedVector2Array([Vector2(x0, y_top - HALF), Vector2(x1, y_top - HALF), Vector2(x1, y_stop + HALF), Vector2(x0, y_stop + HALF)])
 	MeleeWarn.zone(c, area, level, boss.t)
 	for sx in [-0.6, 0.6]:
-		MeleeWarn.tag(c, Vector2(cx + sx * HALF_LEN, y_top + 120.0), level, boss.t)
+		MeleeWarn.tag(c, Vector2(cx + sx * HALF_LEN, y_top + 120.0), level, boss.t, order)

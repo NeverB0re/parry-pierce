@@ -28,6 +28,8 @@ var attack_gap := Vector2(1.0, 1.8)  # 공격 사이 쉬는 시간 (범위)
 var hold_attacks := false            # true 인 동안(플레이어가 발판 위) 새 공격을 시작하지 않는다
 var bolt_speedup := 0.1              # 외부 시스템 하나 부술 때마다 탄 속도 +10%
 var bolt_speedup_core := 0.15        # 최종 페이즈 추가 가속
+var level := 0                       # 스테이지 순번 (0부터). 뒤 스테이지일수록 같은 패턴도 조금씩 어려워진다
+const LEVEL_SPEEDUP := 0.06          # 스테이지 하나마다 탄 속도 +6%
 var core_assist_r := 200.0           # 에임 어시스트가 보는 코어 반지름
 var part_hp: Array[int] = []
 var part_flash: Array[float] = []
@@ -243,7 +245,7 @@ func _spawn_shard(pos: Vector2, size: float, v: Vector2) -> void:
 
 ## 탄 속도 배율: 외부 시스템을 부술수록, 최종 페이즈일수록 빨라진다
 func bolt_mult() -> float:
-	return 1.0 + bolt_speedup * (part_count() - parts_left()) + (bolt_speedup_core if phase == 3 else 0.0)
+	return (1.0 + bolt_speedup * (part_count() - parts_left()) + (bolt_speedup_core if phase == 3 else 0.0)) * (1.0 + LEVEL_SPEEDUP * level)
 
 
 ## HUD 화살표가 가리킬 다음 표적 (반사된 탄도 이곳을 향한다)

@@ -17,6 +17,10 @@ var hit_from := 4                     # 판정이 시작되는 척추 마디
 var delay := 0.0                      # 시작 전 대기 (두 번째 촉수는 시차를 두고 예고한다)
 var fixed_half := -1.0                # 판정 반폭을 예고 범위에 맞춰 고정 (-1 = 촉수 굵기를 따른다)
 var pace := 1.0                       # 박자 배율 (연타 패턴은 빠르게 < 1)
+var order := -1                       # 연타 순번 (0 = 첫 타, -1 = 연타 아님). 예고 표지 아래 점으로 보인다
+var after = null                      # 연타: 앞 타 모듈. 앞 타가 내려치거나(판정) 요격·끊길 때까지 "set" 에서 기다린다 (예고는 윤곽만)
+var after_gap := 0.0                  # 앞 타가 풀린 뒤 이만큼 더 기다린다
+var fired_t := -1.0                   # 판정이 처음 나오거나 요격당한 시각 (boss.t)
 var lead := true                      # 아직 첫 타 전 (첫 판정이 나오거나 요격당하면 false). 연타의 두 번째부터는 false 로 시작
 var _recoil_from: Array = []          # 움츠러들기 시작한 척추들
 var _recoil_to: Array = []
@@ -46,6 +50,8 @@ func _tempo() -> float:
 func step(dt: float, ppos: Vector2) -> void:
 	if lead and _harmful():
 		lead = false
+	if fired_t < 0.0 and _harmful():
+		fired_t = boss.t
 	if delay > 0.0:
 		delay -= dt
 		t = 0.0
@@ -76,7 +82,31 @@ func step(dt: float, ppos: Vector2) -> void:
 		"end":
 			boss.finish_attack()
 		_:
+			if phase == "set" and queued():         # 연타 대기: 위치를 잡은 채(계속 겨누며) 앞 타를 기다린다
+				t = 0.0
+				_track(ppos)
 			_act(dt, ppos)
+
+
+## 연타에서 앞 타를 기다리는 중인가
+func queued() -> bool:
+	if after == null:
+		return false
+	if after.fired_t < 0.0:
+		if boss.lingering.has(after) and after.phase != "end":
+			return true
+		after.fired_t = boss.t                     # 앞 타가 끊겼다 = 지금 풀린 것으로
+	return boss.t < after.fired_t + after_gap
+
+
+## 예고 단계: 대기 중이면 윤곽만 (겹쳐도 다음에 올 타가 또렷하게)
+func _warn_level(level: int) -> int:
+	return 0 if queued() else level
+
+
+## 연타 대기 중 계속 겨누기 (하위 모듈)
+func _track(_ppos: Vector2) -> void:
+	pass
 
 
 func is_staggered(i: int) -> bool:
@@ -129,6 +159,8 @@ func on_parried(hb: Dictionary) -> void:
 	if phase == "recoil" or phase == "stagger" or phase == "end":
 		return
 	lead = false
+	if fired_t < 0.0:
+		fired_t = boss.t
 	var dir: Vector2 = hb.get("dir", Vector2.UP)
 	if dir.length() < 0.1:
 		dir = Vector2.UP

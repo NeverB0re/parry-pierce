@@ -104,6 +104,11 @@ func _sector() -> PackedVector2Array:
 	return pts
 
 
+func _track(ppos: Vector2) -> void:
+	aim_at(ppos)
+	_area = _sector()
+
+
 func _harmful() -> bool:
 	return phase == "swing"
 
@@ -126,8 +131,8 @@ func draw() -> void:
 	if not (phase == "prep" or phase == "set" or phase == "warn"):
 		return
 	var c: CanvasItem = boss
-	var level := 0 if phase == "prep" else (1 if phase == "set" else 2)
+	var level := _warn_level(0 if phase == "prep" else (1 if phase == "set" else 2))
 	var area := _area if not _area.is_empty() else _sector()
 	MeleeWarn.zone(c, area, level, boss.t)
 	var root: Vector2 = boss.ROOTS[tents[0]]
-	MeleeWarn.tag(c, root + Vector2.from_angle((th0 + th1) * 0.5) * REACH * 0.6, level, boss.t)
+	MeleeWarn.tag(c, root + Vector2.from_angle((th0 + th1) * 0.5) * REACH * 0.6, level, boss.t, order)

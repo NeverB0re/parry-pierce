@@ -28,8 +28,8 @@ static func zone(ci: CanvasItem, poly: PackedVector2Array, level: int, now: floa
 			ci.draw_polyline(outline, Color(C_HOT, 0.5 + 0.3 * blink), 2.5)
 
 
-## ⚠ 표지 (pos = 삼각형 중심). 글자 없음
-static func tag(ci: CanvasItem, pos: Vector2, level: int, now: float) -> void:
+## ⚠ 표지 (pos = 삼각형 중심). 글자 없음. order >= 0 (연타 순번)이면 아래에 점을 order + 1 개 찍는다
+static func tag(ci: CanvasItem, pos: Vector2, level: int, now: float, order := -1) -> void:
 	var a := 1.0 if level < 2 else 0.55 + 0.45 * sin(now * 24.0)
 	var s := 44.0 if level >= 1 else 30.0
 	var tri := PackedVector2Array([pos + Vector2(0, -s), pos + Vector2(-s * 0.95, s * 0.62), pos + Vector2(s * 0.95, s * 0.62)])
@@ -39,6 +39,10 @@ static func tag(ci: CanvasItem, pos: Vector2, level: int, now: float) -> void:
 	ci.draw_polyline(ol, Color(1, 1, 1, 0.75 * a), 3.0)
 	ci.draw_rect(Rect2(pos.x - 4.0, pos.y - s * 0.42, 8.0, s * 0.62), Color(1, 1, 1, a))
 	ci.draw_circle(pos + Vector2(0, s * 0.4), 5.0, Color(1, 1, 1, a))
+	for k in order + 1:
+		var q := pos + Vector2((k - order * 0.5) * 26.0, s * 0.62 + 24.0)
+		ci.draw_circle(q, 10.0, Color(C, 0.8 * a))
+		ci.draw_circle(q, 6.0, Color(1, 1, 1, a))
 
 
 ## 위험 줄무늬: 45도 빗금이 다각형 안쪽만 천천히 흘러간다 (speed: 0 보통, 1 빠르게)

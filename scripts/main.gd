@@ -235,6 +235,7 @@ func start_stage(i: int) -> void:
 		add_child(boss)
 		move_child(boss, at)
 		player.boss = boss
+	boss.level = i
 	_apply_loadout()
 	reset_run()
 	hud.queue_redraw()                       # FTL 섬광 중(일시정지)에도 배너·실드 셀 표시를 새로

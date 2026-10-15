@@ -132,6 +132,7 @@ var shield_t := 0.0              # 돌진/직격 후 무적
 var small_guard := 0.0           # 일반 돌진이 끝난 직후: 잔탄만 맞지 않는 시간
 var strike_pass_t := 0.0         # 적중 직후 남은 시간: 이때 시작한 일반 돌진은 맞힌 표적의 원 안쪽을 통과한다
 var pass_target := {}            # 방금 맞힌 표적 {kind, idx}
+var intercept_lock := false     # 이번 돌진 경로에 요격할 수 있는 공격이 있다: 닿을 때까지 표적(방어막·코어·부위)은 통과한다 (요격 최우선)
 var dash_pass := false           # 지금 돌진이 그 표적의 원 안쪽을 빠져나오는 중 (원을 벗어나면 꺼진다)
 var dash_parry_t := 0.0          # 일반 돌진이 끝난 뒤 돌진패리가 아직 인정되는 시간
 var shield_max := 1.0
@@ -307,6 +308,7 @@ func _dash(kind: String) -> void:
 	evade_window = stats.perfect_evade_window if kind == "dash" else 0.0
 	evade_rewarded = false
 	vel = aim * spd
+	intercept_lock = kind == "charge" and _intercept_on_path(spd * dash_total)
 	bouncing = false
 	if bounce_rise > 0.0:                    # 직격 튕김 중 돌진: 튕김 무적은 여기서 끝 (돌진 자체가 무적)
 		bounce_rise = 0.0
@@ -414,6 +416,17 @@ func parry_dash_reach() -> float:
 	return spd * PARRY_DASH_TIME * (DASH_PARRY_RANGE if aim_boost else 1.0)
 
 
+## 돌진 경로(지금 위치 → 조준 방향 reach)에 요격할 수 있는 공격 판정이 걸려 있는가
+func _intercept_on_path(reach: float) -> bool:
+	var n := int(ceil(reach / 40.0))
+	for k in n + 1:
+		var q := position + aim * (reach * k / maxf(1.0, n))
+		var hb: Dictionary = boss.clash_box(q)
+		if not hb.is_empty() and boss.overlaps(hb, q, RADIUS + 30.0):
+			return true
+	return false
+
+
 ## 방향 지정 종료 → 마우스 방향으로 패리 돌진(공격 판정, 강한 데미지)
 func launch_parry_dash() -> void:
 	if not aim_phase:
@@ -428,6 +441,7 @@ func launch_parry_dash() -> void:
 	dash_cd = stats.dash_cooldown
 	vel = aim * (PARRY_DASH_SPEED_PERFECT if aim_perfect else PARRY_DASH_SPEED)
 	parry_cd = PARRY_RELEASE_CD
+	intercept_lock = _intercept_on_path(vel.length() * dash_total)
 	main.on_parry_launch(position, aim)
 
 
@@ -640,7 +654,7 @@ func _move(dt: float) -> void:
 		if (dash_kind == "charge" or dash_kind == "power") and dash_t > 0.0 and main.try_clash(position):
 			return
 		# 표적(부위·코어)은 돌진 중에만 충돌한다. 그 밖에는 통과하며 접촉 피해도 없다 (피해는 적의 공격으로만)
-		if is_attacking():
+		if is_attacking() and not intercept_lock:
 			var hit: Dictionary = boss.strike_hit(position, RADIUS + (POWER_RADIUS if dash_kind == "power" else 0.0))
 			if dash_pass and (hit.is_empty() or str(hit.get("kind", "")) != str(pass_target.get("kind", "")) or int(hit.get("idx", -1)) != int(pass_target.get("idx", -1))):
 				dash_pass = false                  # 방금 맞힌 표적의 원을 벗어났다 (또는 다른 표적): 이제부터 정상 충돌 (뒤돌아 다시 때릴 수 있다)
@@ -681,6 +695,7 @@ func _end_dash() -> void:
 	perfect_dash = false
 	power_boost = false
 	dash_pass = false
+	intercept_lock = false
 	if was_power:
 		main.on_power_dash_end()
 

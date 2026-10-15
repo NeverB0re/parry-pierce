@@ -3,9 +3,11 @@ extends "res://scripts/colossus_base.gd"
 ## 표적은 외투막 한가운데의 외눈(동력 코어) 하나뿐. 촉수에는 노릴 곳이 없다 (돌진은 쉬는 촉수를 그냥 통과한다).
 ## 핵심: 촉수 공격(근접, 회피 불가)이 위치를 잡고 멈춘 순간을 차지 강습으로 요격하면, 그 촉수(구동부, 2번 요격이면 끊어짐)와 코어에 함께 피해가 들어간다.
 ## 페이즈: 1) 방어막 — 코어가 방어막에 싸여 있다. 돌진·차지 강습은 튕겨 나오고(피해 없음), 리버스 드라이브와 반사탄은 뚫고 코어에 피해.
-##            코어에 쌓인 피해는 균열·깜빡임·연기로 보인다(체력바 없음). 방어막 동안 코어는 SHIELD_FLOOR 아래로는 깎이지 않는다
-##         2) 촉수 6개가 모두 떨어져 나가면 방어막이 저절로 산산조각 난다
-##         3) 동력 코어 — 직접 노릴 수 있다. 떨어져 나간 촉수 둘(REVIVED)이 다시 자라나고, 요격하면 코어에 바로 피해
+##            코어에 쌓인 피해는 균열·깜빡임·연기로 보인다(체력바 없음). 코어가 SHIELD_FLOOR 까지 깎이면 방어막이 산산조각 난다
+##         2) 방어막이 깨지는 연출 (촉수 6개를 한꺼번에 다 끊어도 깨진다)
+##         3) 동력 코어 — 직접 노릴 수 있다
+## 촉수 = 부가 목표: 근접공격을 요격하면 그 촉수가 곧바로 박살나고(코어에 피해 + CUT_BONUS) 그 촉수의 패턴·발사점이 사라진다.
+##   REGROW_DELAY 뒤 천천히 다시 자란다 (다른 패턴이 한두 번 지나갈 무렵)
 ## v0.50+: 탄막이 중심 (탄막 6 : 근접 4, 쉬는 시간 짧게). 촉수 끝·배경 다리·분사구가 모두 발사점 (barrage.gd). 근접 중에도 가끔 한 발씩 날아온다.
 ## 몸은 DROP 만큼 낮게 걸려 있다 (코어 작게, 튕겨 올라가도 천장에 붙지 않게).
 ## 공격: 몸통 내려치기 · 압착(촉수 둘) · 추적 감아치기 · 휩쓸기 · 조이기(촉수 2개 이상 잃은 뒤) · 먹물 포(부채 탄막, 가운데 주탄)
@@ -29,8 +31,8 @@ const Barrage := preload("res://scripts/attacks/barrage.gd")
 # ── 구조 ───────────────────────────────────────────────
 const DROP := 640.0                          # 몸을 천장에서 이만큼 내려 걸었다 (튕겨 올라가도 천장에 붙지 않게)
 const CORE_POS := Vector2(0, -2520.0 + DROP)          # 외눈 = 동력 코어 중심 (외투막 한가운데)
-const ARMOR_HP := 180                        # 코어 체력 (장갑판 없이 균열로 보인다). 다 깎이면 한 발 더 맞아야 부서진다 (armored_core.gd)
-const SHIELD_FLOOR := 60                     # 방어막 동안 코어는 이 아래로 깎이지 않는다 (마지막 페이즈에 할 일을 남긴다)
+const ARMOR_HP := 360                        # 코어 체력 (장갑판 없이 균열로 보인다). 다 깎이면 한 발 더 맞아야 부서진다 (armored_core.gd)
+const SHIELD_FLOOR := 150                    # 코어가 여기까지 깎이면 방어막이 깨진다 (방어막 단계 ≈ 60%, 노출 단계 ≈ 40%)
 const SHIELD_R := 205.0                      # 방어막 반지름
 const SHIELD_SHATTER := 1.6                  # 방어막이 깨지는 연출 시간 (페이즈 2)
 const CORE_R := 46.0
@@ -45,12 +47,13 @@ const ROOTS := [Vector2(-430, -2210.0 + DROP), Vector2(430, -2210.0 + DROP), Vec
 const IDLE_TIPS := [Vector2(-900, -620), Vector2(900, -620), Vector2(-560, -400), Vector2(560, -400), Vector2(-210, -560), Vector2(210, -560)]
 const BG_ROOTS := [Vector2(-560, -2300.0 + DROP), Vector2(560, -2300.0 + DROP)]     # 배경 다리 (표적·판정 없음, 방전 그물만 건다)
 const BG_TIPS := [Vector2(-1080, -520), Vector2(1080, -520)]
-const REVIVED := [2, 3]                      # 코어 페이즈에 다시 자라나는 촉수
+const REGROW_DELAY := 8.0                    # 끊긴 촉수가 다시 자라기 시작할 때까지
 const REGROW := 1.6                          # 다시 자라나는 시간
+const CUT_BONUS := 14                        # 촉수를 끊으면 코어에 더해지는 피해
 const W_ROOT := 100.0                        # 촉수 굵기 (뿌리 → 끝)
 const W_TIP := 40.0
 const PART_AT := 3                           # 구동부가 달린 척추 마디
-const PART_HP := 16                         # 요격 2번이면 끊어진다
+const PART_HP := 16                          # (요격 한 번이면 끊어진다. 손상 단계 표시용)
 const PART_R := 52.0
 const ZAP_TIME := 0.4                        # 요격 피해가 촉수 뿌리에서 코어로 흐르는 전류 줄기
 
@@ -60,7 +63,10 @@ const GAP_CORE := Vector2(0.3, 0.55)
 const GAP_FIRE := Vector2(0.25, 0.5)         # 탄막 뒤 (멍때릴 틈을 주지 않는다)
 const RANGED_KINDS := ["ink", "spray", "fan", "spiral", "tips", "ring", "cross"]
 const RANGED_SHARE := 0.62                   # 탄막 : 근접 = 6 : 4 (근접은 시그니처 패턴 위주)
-const AMBIENT_EVERY := 1.15                  # 근접 중·쉬는 중에도 가끔 한 발씩 날아온다
+const DUO_CHANCE := [0.0, 0.15, 0.3]         # 스테이지별: 작은 탄막 두 개를 겹쳐 쏠 확률 (근접과는 절대 겹치지 않는다)
+const DUOS := [["ring", "tips"], ["cross", "tips"], ["ink", "tips"]]
+const CLEAR_R := 900.0                       # 근접 패턴은 플레이어 이 거리 안에 날아오는 탄이 없을 때만 시작한다
+const CLEAR_WAIT := 2.5                      # 그래도 이 시간이 지나면 시작한다 (탄이 오래 남아 있을 때)
 const SPECIAL_EVERY := 4                     # 방전 그물(패리 불가)은 공격 이만큼마다 (드물게)
 const COMBO_HITS := 3                        # 연타 타수
 const MARCH_X := [-640.0, 0.0, 640.0]        # 행진: 이 자리를 한쪽 끝부터 차례로 내려친다
@@ -78,13 +84,15 @@ var spines: Array[PackedVector2Array] = []
 var bg_spines: Array[PackedVector2Array] = []
 var busy: Array = [null, null, null, null, null, null]   # 촉수를 붙잡은 공격 모듈
 var grown: Array[float] = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]   # 촉수가 자란 정도 (0 = 떨어져 나가 뿌리만, 1 = 다 자람)
+var regrow_t: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]   # 다시 자라기 시작할 때까지 남은 시간
 var bg_hold: Array = []                      # 방전 그물이 배경 다리 끝을 붙잡은 위치 [왼, 오] (빈 배열 = 쉼)
 var hit_dir := Vector2.ZERO                  # 마지막으로 요격당한 방향 (부서진 촉수가 그쪽으로 날아간다)
 var hit_dir_t := -99.0
 var siphon_glow := 0.0
 var debris: Array[Dictionary] = []           # 떨어져 나간 촉수 조각
 var last := ""
-var ambient_t := 1.5
+var want := ""                               # 탄이 걷히길 기다리는 근접 패턴
+var want_t := 0.0
 var emit_glow: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]   # 발사점 발광 (0~5 촉수 끝, 6·7 배경 다리)
 var _ppos := Vector2(0, -400)
 var since_special := 0
@@ -129,6 +137,7 @@ func reset() -> void:
 		spines.append(PackedVector2Array())
 		busy[i] = null
 		grown[i] = 1.0
+		regrow_t[i] = 0.0
 	for k in 2:
 		bg_spines.append(PackedVector2Array())
 	super()
@@ -141,7 +150,7 @@ func reset() -> void:
 	siphon_glow = 0.0
 	debris.clear()
 	last = ""
-	ambient_t = 1.5
+	want = ""
 	for k in 8:
 		emit_glow[k] = 0.0
 	since_special = 0
@@ -193,27 +202,57 @@ func _feed_core(dmg: int) -> void:
 		core.damage(d)
 	else:
 		core.flash = 1.0
+	if phase == 1 and core.armor_hp <= SHIELD_FLOOR:
+		_shatter()
 
 
-## 촉수 요격 피해 (main.gd _clash): 촉수 구동부 + 코어. 뿌리에서 코어로 전류 줄기가 흐른다
+## 방어막이 산산조각 난다 → 페이즈 2(연출) → 3(코어 노출)
+func _shatter() -> void:
+	phase = 2
+	open_t = 0.0
+	atk = null
+	lingering.clear()
+	next_t = open_time + 1.0
+	emit(Ev.CORE_OPEN, core.center)
+	shield_flash = 1.0
+	for k in 14:
+		var a := k * TAU / 14.0 + randf_range(-0.1, 0.1)
+		var at := CORE_POS + Vector2.from_angle(a) * SHIELD_R
+		_spawn_shard(at, randf_range(18.0, 30.0), Vector2.from_angle(a) * randf_range(500.0, 900.0) + Vector2(0, -300))
+
+
+## 촉수 요격 (main.gd _clash, 방어막 단계): 촉수가 곧바로 박살나고 코어에 피해 + CUT_BONUS. 뿌리에서 코어로 전류 줄기가 흐른다
 func damage_part(i: int, dmg: int) -> bool:
-	if phase == 1 and part_alive(i):
-		_feed_core(dmg)
-		zaps.append({"from": i, "t": 0.0})
-	var broke := super(i, dmg)
-	if broke and phase == 2:                         # 마지막 촉수 → 방어막이 산산조각
-		shield_flash = 1.0
-		for k in 14:
-			var a := k * TAU / 14.0 + randf_range(-0.1, 0.1)
-			var at := CORE_POS + Vector2.from_angle(a) * SHIELD_R
-			_spawn_shard(at, randf_range(18.0, 30.0), Vector2.from_angle(a) * randf_range(500.0, 900.0) + Vector2(0, -300))
-	return broke
-
-
-## 코어 페이즈: 다시 자란 촉수를 요격 → 코어에 바로 피해. 부서지면 true (승리)
-func intercept_core(i: int, dmg: int) -> bool:
+	if not part_alive(i):
+		return false
+	var pos := part_pos(i)
+	_cut(i)
 	zaps.append({"from": i, "t": 0.0})
-	return damage_core(dmg)
+	emit(Ev.PART_BREAK, pos)
+	_feed_core(dmg + CUT_BONUS)
+	if phase == 1 and parts_left() == 0:              # 한꺼번에 다 끊으면 방어막도 깨진다
+		_shatter()
+	return true
+
+
+## 코어 단계: 촉수를 요격 → 촉수가 박살나고 코어에 바로 피해. 부서지면 true (승리)
+func intercept_core(i: int, dmg: int) -> bool:
+	if part_alive(i):
+		var pos := part_pos(i)
+		_cut(i)
+		emit(Ev.PART_BREAK, pos)
+	zaps.append({"from": i, "t": 0.0})
+	return damage_core(dmg + CUT_BONUS)
+
+
+## 촉수를 끊는다: 조각이 날아가고, 그 촉수를 쓰던 공격은 끊기고, REGROW_DELAY 뒤 다시 자란다
+func _cut(i: int) -> void:
+	part_flash[i] = 1.0
+	_on_part_broken(i)
+	part_hp[i] = 0
+	regrow_t[i] = REGROW_DELAY
+	if atk != null and atk.part == i:
+		finish_attack()
 
 
 # ── 외부 시스템 ────────────────────────────────────────
@@ -267,18 +306,17 @@ func _part_highlight(i: int) -> bool:
 
 ## 이 촉수로 지금 공격할 수 있는가
 func tent_ready(i: int) -> bool:
-	if busy[i] != null:
-		return false
-	if phase == 1:
-		return part_alive(i)
-	return phase == 3 and REVIVED.has(i) and grown[i] >= 1.0
+	return busy[i] == null and phase != 2 and part_alive(i) and grown[i] >= 1.0
 
 
-## 촉수를 잃을수록(페이즈 1), 코어 페이즈일수록 예고가 짧아진다 (공격 모듈이 곱한다)
+## 코어가 상할수록 예고가 짧아진다 (공격 모듈이 곱한다). 촉수를 끊는 건 손해가 아니다
 func tempo() -> float:
-	if phase == 3:
-		return 0.78
-	return maxf(0.7, 1.0 - 0.06 * (6 - parts_left()))
+	return 1.0 - 0.22 * core.frac()
+
+
+## 탄 속도: 코어가 상할수록 빨라진다 (촉수 수와는 무관) × 스테이지 난이도
+func bolt_mult() -> float:
+	return (1.0 + 0.3 * core.frac()) * (1.0 + LEVEL_SPEEDUP * level)
 
 
 # ── 척추 ───────────────────────────────────────────────
@@ -372,35 +410,22 @@ func _on_attack_finished() -> void:
 func _step_phase(dt: float) -> void:
 	for k in 8:
 		emit_glow[k] = move_toward(emit_glow[k], 0.0, dt * 2.5)
-	_ambient(dt)
 	shield_flash = maxf(0.0, shield_flash - dt * 3.0)
 	for z in zaps.duplicate():
 		z["t"] = float(z["t"]) + dt
 		if z["t"] >= ZAP_TIME:
 			zaps.erase(z)
 	siphon_glow = move_toward(siphon_glow, 0.0, dt * 2.0)
-	if phase == 3:                               # 코어 페이즈: 촉수 둘이 뿌리에서 다시 자라난다
-		for i in REVIVED:
-			grown[i] = minf(1.0, grown[i] + dt / REGROW)
-
-
-## 근접 공격 중·쉬는 중에도 가끔 한 발씩 (플레이어가 가만히 있지 못하게). 탄막 중에는 쏘지 않는다
-func _ambient(dt: float) -> void:
-	if dead or hold_attacks or phase == 2:
-		return
-	if atk != null and (RANGED_KINDS.has(atk.kind) or atk.kind == "net"):
-		return
-	ambient_t -= dt
-	if ambient_t > 0.0:
-		return
-	ambient_t = AMBIENT_EVERY * randf_range(0.8, 1.2)
-	var em := emitters()
-	var e: Array = em[randi() % em.size()]
-	var o: Vector2 = e[1]
-	var d := (_ppos - o).normalized().rotated(randf_range(-0.12, 0.12))
-	shots.spawn(o, d * 270.0 * bolt_mult(), 9.0, 0.0, 0.0, Projectiles.Kind.SMALL)
-	emit_glow_set(int(e[0]), 1.0)
-	emit(Ev.BOLT, o)
+	for i in 6:                                  # 끊긴 촉수: 잠시 뒤 뿌리에서 천천히 다시 자란다
+		if part_alive(i) or dead:
+			continue
+		if regrow_t[i] > 0.0:
+			regrow_t[i] -= dt
+			continue
+		grown[i] = minf(1.0, grown[i] + dt / REGROW)
+		if grown[i] >= 1.0:
+			part_hp[i] = PART_HP
+			part_stage[i] = 0
 
 
 ## 탄을 쏠 수 있는 발사점 [[번호, 위치], ...]: 분사구(-1) · 놀고 있는 촉수 끝(0~5) · 배경 다리 끝(6·7)
@@ -438,34 +463,74 @@ func die() -> void:
 
 
 func _choose(ppos: Vector2) -> void:
-	since_special += 1
 	var hard := phase == 3
 	var ready: Array[int] = []
 	for i in 6:
 		if tent_ready(i):
 			ready.append(i)
+	if want != "":                                           # 근접 패턴이 탄이 걷히길 기다리는 중
+		want_t += 0.2
+		if not _shots_clear(ppos) and want_t < CLEAR_WAIT:
+			next_t = 0.2
+			return
+		var w := want
+		want = ""
+		if w == "net" or _melee_ok(w, ready):
+			_start(w, ready, ppos, hard)
+			return
+	since_special += 1
+	var kind := ""
 	if since_special >= SPECIAL_EVERY and randf() < 0.55:    # 드물게: 방전 그물 (패리 불가)
 		since_special = 0
-		_pick("net", Net.new(randf() < 0.5))
+		kind = "net"
+	else:
+		var fire: Array[String] = ["ink", "spray", "tips", "ring", "cross"]
+		var melee: Array[String] = []
+		for m in ["hammer", "chase", "sweep", "clap", "vortex", "march", "flurry", "vortex", "flurry", "constrict", "constrict", "constrict"]:
+			if _melee_ok(m, ready):
+				melee.append(m)
+		if hard:
+			melee.append_array(["vortex", "flurry"] if ready.size() >= 2 else [])
+		var pool: Array[String] = fire
+		if not melee.is_empty() and randf() > RANGED_SHARE:
+			pool = melee
+		pool = pool.duplicate()
+		while pool.size() > 1 and pool.has(last):
+			pool.erase(last)
+		kind = pool[randi() % pool.size()]
+	if not RANGED_KINDS.has(kind) and not _shots_clear(ppos):   # 근접·그물: 날아오는 탄이 걷힐 때까지 기다린다 (요격하려면 멈춰야 하므로)
+		want = kind
+		want_t = 0.0
+		next_t = 0.2
 		return
-	var fire: Array[String] = ["ink", "spray", "tips", "ring", "cross"]
-	var melee: Array[String] = []
-	if not ready.is_empty():
-		melee.append_array(["hammer", "chase", "sweep"])
-		if ready.size() >= 2:
-			melee.append_array(["clap", "vortex", "march", "flurry", "vortex", "flurry"])
-			if hard:
-				melee.append_array(["vortex", "flurry"])
-			if hard or parts_left() <= 4:
-				melee.append_array(["constrict", "constrict", "constrict"])
-	var pool: Array[String] = fire
-	if not melee.is_empty() and randf() > RANGED_SHARE:
-		pool = melee
-	pool = pool.duplicate()
-	while pool.size() > 1 and pool.has(last):
-		pool.erase(last)
-	var kind: String = pool[randi() % pool.size()]
+	_start(kind, ready, ppos, hard)
+
+
+## 이 근접 패턴을 지금 쓸 수 있는가
+func _melee_ok(m: String, ready: Array[int]) -> bool:
+	match m:
+		"hammer", "chase", "sweep":
+			return not ready.is_empty()
+		"constrict":
+			return ready.size() >= 2 and (phase == 3 or core.frac() > 0.15)
+	return ready.size() >= 2
+
+
+## 플레이어 가까이(CLEAR_R) 날아오는 적 탄이 없는가
+func _shots_clear(ppos: Vector2) -> bool:
+	for k in shots.size():
+		if shots.mine[k] == 1:
+			continue
+		var d: Vector2 = ppos - shots.pos[k]
+		if d.length() < CLEAR_R and d.dot(shots.vel[k]) > 0.0:
+			return false
+	return true
+
+
+func _start(kind: String, ready: Array[int], ppos: Vector2, hard: bool) -> void:
 	match kind:
+		"net":
+			_pick("net", Net.new(randf() < 0.5))
 		"hammer":
 			_grab_start("hammer", Hammer.new(_nearest(ready, ppos.x)))
 		"chase":
@@ -480,30 +545,52 @@ func _choose(ppos: Vector2) -> void:
 			_grab_start("constrict", Constrict.new(lr[0], lr[1]))
 		"vortex", "march", "flurry":
 			_pick(kind, _combo(kind, ready, ppos))
-		"spray":
-			_pick("spray", Spiral.new(-1, SIPHON, ppos, hard))
-		"tips", "ring", "cross":
-			_pick(kind, Barrage.new(kind, emitters(), ppos, hard))
 		_:
-			_pick("ink", Fan.new(-1, SIPHON, ppos, hard))
+			if randf() < DUO_CHANCE[mini(level, DUO_CHANCE.size() - 1)]:   # 작은 탄막 둘을 함께
+				var duo: Array = DUOS[randi() % DUOS.size()]
+				_pick(duo[0], _fire(duo[0], ppos, hard, true))
+				start_side(_fire(duo[1], ppos, hard, true))
+				return
+			_pick(kind, _fire(kind, ppos, hard, false))
 
 
-## 연타: 촉수를 번갈아 COMBO_HITS 번. 그때 쓸 수 없는 촉수면 같은 무리의 다른 촉수, 그것도 없으면 그 타는 건너뛴다
-##  vortex 소용돌이 = 빠른 내려치기가 매번 플레이어를 겨눈다 / march 행진 = 정해진 자리를 플레이어에게서 먼 쪽부터 차례로 내려친다
+## 탄막 모듈. light = 두 개를 겹쳐 쏠 때의 작은 판
+func _fire(kind: String, ppos: Vector2, hard: bool, light: bool):
+	match kind:
+		"spray":
+			return Spiral.new(-1, SIPHON, ppos, hard)
+		"ink":
+			var f = Fan.new(-1, SIPHON, ppos, hard and not light)
+			if light:
+				f.wave_n = 2
+			return f
+	return Barrage.new(kind, emitters(), ppos, hard, light)
+
+
+## 연타: 서로 다른 촉수 최대 COMBO_HITS 개가 처음부터 함께 올라와 예고하고 차례로 친다 (좌우 번갈아)
+##  vortex 소용돌이 = 빠른 내려치기가 차례가 올 때까지 플레이어를 겨눈다 / march 행진 = 정해진 자리를 플레이어에게서 먼 쪽부터
 ##  flurry 난타 = 좌우 촉수가 번갈아 휩쓴다
 func _combo(kind: String, ready: Array[int], ppos: Vector2) -> Combo:
-	var lr := _outer_pair(ready)
+	var ls: Array[int] = []
+	var rs: Array[int] = []
+	for i in ready:
+		(ls if ROOTS[i].x < 0.0 else rs).append(i)
+	var order: Array[int] = []
+	var side := 0 if ppos.x >= 0.0 else 1                    # 플레이어 반대쪽 촉수부터
+	while order.size() < COMBO_HITS and not (ls.is_empty() and rs.is_empty()):
+		var src := ls if side == 0 else rs
+		if src.is_empty():
+			src = rs if side == 0 else ls
+		order.append(src.pop_front())
+		side = 1 - side
 	var xs: Array = MARCH_X.duplicate()
 	if ppos.x < 0.0:                                         # 먼 쪽부터 다가온다
 		xs.reverse()
 	var makers := []
-	for k in COMBO_HITS:
-		var want: int = lr[k % 2]
+	for k in order.size():
+		var i: int = order[k]
 		var x: float = xs[k]
 		makers.append(func():
-			var i := _free_tent(want, lr)
-			if i < 0:
-				return null
 			match kind:
 				"march":
 					return Hammer.new(i, true, 0.0, x)
@@ -512,16 +599,7 @@ func _combo(kind: String, ready: Array[int], ppos: Vector2) -> Combo:
 					a.pace = 0.7
 					return a
 			return Hammer.new(i, true))
-	return Combo.new(kind, makers, 0.95 if kind == "flurry" else 0.8)
-
-
-func _free_tent(want: int, alts: Array[int]) -> int:
-	if tent_ready(want):
-		return want
-	for i in alts:
-		if tent_ready(i):
-			return i
-	return -1
+	return Combo.new(kind, makers, 0.2 if kind == "flurry" else 0.1)
 
 
 func _pick(kind: String, a) -> void:
@@ -638,7 +716,7 @@ func _draw_arm(i: int) -> void:
 	var m = busy[i]
 	var striking: bool = m != null and m.delay <= 0.0 and m._harmful()
 	var lit: bool = m != null and focus_glow > 0.0 and m.delay <= 0.0 and m._clashable()
-	var revived := phase >= 2 and REVIVED.has(i) and not dead
+	var revived := phase >= 2 and not dead
 	if phase == 1 and part_stage[i] >= 2:                 # 한 번 요격당한 촉수: 뿌리 관절에서 불꽃이 튄다 (다음 요격이면 끊어진다)
 		if int(t * 8.0 + i) % 3 == 0:
 			draw_circle(spines[i][PART_AT] + Vector2(sin(t * 23.0 + i) * 18.0, cos(t * 19.0) * 18.0), 3.0, Color(1.0, 0.85, 0.5))

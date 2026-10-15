@@ -30,6 +30,8 @@ var plan := [
 	["shatter", "shatter", 14, Vector2(250, -1300), Vector2(0, -2100), 0.3],
 	["march", "march", 150, Vector2(-300, -1300), Vector2(0, -1600), 0.24],
 	["flurry", "flurry", 150, Vector2(300, -1300), Vector2(0, -1600), 0.24],
+	["march_q", "march", 70, Vector2(-300, -900), Vector2(0, -1100), 0.5],
+	["flurry_q", "flurry", 70, Vector2(300, -900), Vector2(0, -1100), 0.5],
 	["new_idle", "", 30, Vector2(250, -700), Vector2(0, -1100), 0.5],
 	["tips", "tips", 70, Vector2(250, -700), Vector2(0, -1100), 0.5],
 	["tips_fire", "tips", 100, Vector2(250, -700), Vector2(0, -1100), 0.5],
@@ -61,6 +63,15 @@ func _process(_d: float) -> bool:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	if n < 4:
 		return false
+	if idx >= plan.size():
+		quit()
+		return false
+	var only := ""
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--only="):
+			only = a.trim_prefix("--only=")
+	while only != "" and idx < plan.size() and not (plan[idx][0] as String).begins_with(only):
+		idx += 1
 	if idx >= plan.size():
 		quit()
 		return false
