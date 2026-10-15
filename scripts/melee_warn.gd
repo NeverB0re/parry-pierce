@@ -45,6 +45,38 @@ static func tag(ci: CanvasItem, pos: Vector2, level: int, now: float, order := -
 		ci.draw_circle(q, 6.0, Color(1, 1, 1, a))
 
 
+## 휘두르는 방향 화살표: center 를 축으로 반지름 r 의 호를 a0 → a1 로 따라가는 굵은 화살 (끝에 화살촉).
+## 빛이 a0 에서 a1 쪽으로 흘러 방향이 한눈에 보인다
+static func arc_arrow(ci: CanvasItem, center: Vector2, r: float, a0: float, a1: float, level: int, now: float) -> void:
+	var n := 20
+	var pts := PackedVector2Array()
+	for q in n + 1:
+		pts.append(center + Vector2.from_angle(lerpf(a0, a1, q / float(n))) * r)
+	var a := 0.55 if level == 0 else 0.9
+	ci.draw_polyline(pts, Color(0.05, 0.02, 0.02, 0.5 * a), 22.0)
+	ci.draw_polyline(pts, Color(C, 0.75 * a), 13.0)
+	var flow := fposmod(now * 1.6, 1.0)                     # 흐르는 빛
+	for k in 3:
+		var f := fposmod(flow + k / 3.0, 1.0)
+		var p := center + Vector2.from_angle(lerpf(a0, a1, f)) * r
+		ci.draw_circle(p, 9.0, Color(C_HOT, a * (1.0 - f * 0.5)))
+	var tip := pts[n]
+	var dir := (pts[n] - pts[n - 1]).normalized()
+	var side := dir.orthogonal()
+	var head := PackedVector2Array([tip + dir * 62.0, tip + side * 40.0, tip - side * 40.0])
+	ci.draw_colored_polygon(head, Color(C, 0.9 * a))
+	var ol := head.duplicate()
+	ol.append(head[0])
+	ci.draw_polyline(ol, Color(1, 1, 1, 0.8 * a), 3.0)
+
+
+## 공격하는 촉수·팔 강조: 척추를 따라 진홍 테두리 (어느 몸통이 치는지 보인다)
+static func limb(ci: CanvasItem, spine: PackedVector2Array, level: int, now: float) -> void:
+	var blink := 1.0 if level < 2 else 0.6 + 0.4 * sin(now * 24.0)
+	ci.draw_polyline(spine, Color(C, 0.55 * blink), 14.0)
+	ci.draw_polyline(spine, Color(C_HOT, 0.5 * blink), 3.0)
+
+
 ## 위험 줄무늬: 45도 빗금이 다각형 안쪽만 천천히 흘러간다 (speed: 0 보통, 1 빠르게)
 static func _hatch(ci: CanvasItem, poly: PackedVector2Array, color: Color, now: float, speed: float) -> void:
 	var lo := poly[0]

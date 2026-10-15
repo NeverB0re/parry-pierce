@@ -45,7 +45,8 @@ func _act(dt: float, ppos: Vector2) -> void:
 			boss.spines[tents[0]] = _pose(th, 0.75)
 			if t >= FOLLOW * tm:
 				var phi := (ppos - pivot).angle()
-				var s := 1.0 if randf() < 0.5 else -1.0
+				var root_side := signf(boss.ROOTS[tents[0]].x)   # 항상 바깥쪽에서 안쪽(몸 가운데 쪽)으로 감아친다
+				var s := 1.0 if Vector2.from_angle(phi).orthogonal().x * root_side < 0.0 else -1.0
 				th0 = phi - s * SPAN * 0.5
 				th1 = phi + s * SPAN * 0.5
 				_area = _sector()
@@ -123,4 +124,6 @@ func draw() -> void:
 		return
 	var level := 1 if phase == "set" else 2
 	MeleeWarn.zone(c, _area, level, boss.t)
+	MeleeWarn.limb(c, boss.spines[tents[0]], level, boss.t)
+	MeleeWarn.arc_arrow(c, pivot, REACH * 0.7, th0 + (th1 - th0) * 0.08, th1, level, boss.t)
 	MeleeWarn.tag(c, pivot + Vector2.from_angle((th0 + th1) * 0.5) * REACH * 0.55, level, boss.t)

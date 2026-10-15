@@ -242,8 +242,11 @@ static func _glow_idx(c: int) -> int:
 
 # ── 그리기 ─────────────────────────────────────────────
 func _draw() -> void:
+	_draw_searchlight()
+	_draw_smoke()
 	_draw_spire()
 	_draw_hull()
+	_draw_running_lights()
 	_draw_doors()
 	_draw_batteries()
 	_draw_silos()
@@ -254,6 +257,41 @@ func _draw() -> void:
 	for a in active_attacks():
 		a.draw()
 	shots.draw(self)
+
+
+## ── 대기 모션 (그림만, 판정·발사점은 그대로) ──
+## 첨탑 탐조등: 옅은 빛줄기가 경기장을 천천히 훑다가 플레이어 쪽으로 조금 끌린다
+func _draw_searchlight() -> void:
+	if dead:
+		return
+	var o := SPIRE_TOP + Vector2(0, 40)
+	var to_p := (look_at - o).angle()
+	var a := lerp_angle(PI * 0.5 + sin(t * 0.35) * 1.1, to_p, 0.35)
+	var pts := PackedVector2Array([o, o + Vector2.from_angle(a - 0.09) * 2600.0, o + Vector2.from_angle(a + 0.09) * 2600.0])
+	draw_colored_polygon(pts, Color(1.0, 0.92, 0.7, 0.035))
+	draw_line(o, o + Vector2.from_angle(a) * 2600.0, Color(1.0, 0.92, 0.7, 0.05), 6.0)
+
+
+## 배기 연기: 상부 장갑 양쪽 굴뚝에서 피어오른다
+func _draw_smoke() -> void:
+	if dead:
+		return
+	for s in [-1.0, 1.0]:
+		var o := Vector2(s * 300.0, -2270.0)
+		for k in 6:
+			var life := fmod(t * 0.3 + k / 6.0 + (0.33 if s > 0.0 else 0.0), 1.0)
+			var p := o + Vector2(s * life * 120.0 + sin(t * 1.5 + k * 1.7) * 18.0, -life * 380.0)
+			draw_circle(p, 22.0 + life * 60.0, Color(0.22, 0.2, 0.2, 0.3 * (1.0 - life)))
+
+
+## 선체 표시등: 주황 불빛이 가장자리를 따라 줄지어 흐른다
+func _draw_running_lights() -> void:
+	if dead:
+		return
+	for k in 12:
+		var x := -660.0 + k * 120.0
+		var on := 0.5 + 0.5 * sin(t * 4.0 - k * 0.7)
+		draw_circle(Vector2(x, -1085.0), 5.0, Color(1.0, 0.55, 0.2, 0.25 + 0.65 * on))
 
 
 func _draw_base() -> void:
@@ -329,6 +367,8 @@ func _draw_batteries() -> void:
 		var d := (tip - b).normalized()
 		var n := d.orthogonal()
 		if part_alive(i):
+			var breathe := d * sin(t * 1.6 + i * 1.9) * 7.0 if glow[i] <= 0.0 else Vector2.ZERO   # 포신이 숨 쉬듯 들락거린다 (그림만)
+			b += breathe
 			for k in [-1.0, 1.0]:                       # 쌍열 포신
 				_cap(b + n * 26.0 * k, tip + n * 26.0 * k, 34.0, C_HULL_DARK)
 				draw_line(b + n * 26.0 * k, tip + n * 26.0 * k, Color(C_RIM, 0.35), 3.0)

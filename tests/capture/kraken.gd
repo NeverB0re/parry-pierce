@@ -12,10 +12,10 @@ var plan := [
 	["clap_warn", "clap", 85, Vector2(-200, -1300), Vector2(0, -1500), 0.25],
 	["clap_close", "clap", 112, Vector2(-200, -1300), Vector2(0, -1500), 0.25],
 	["chase_follow", "chase", 70, Vector2(300, -1300), Vector2(0, -1500), 0.25],
-	["chase_warn", "chase", 125, Vector2(300, -1300), Vector2(0, -1500), 0.25],
+	["chase_warn", "chase", 125, Vector2(300, -800), Vector2(0, -1100), 0.42],
 	["recoil", "recoil", 20, Vector2(300, -1300), Vector2(0, -1500), 0.25],
 	["detach", "detach", 12, Vector2(300, -1300), Vector2(0, -1500), 0.25],
-	["sweep_warn", "sweep", 80, Vector2(700, -1300), Vector2(0, -1500), 0.25],
+	["sweep_warn", "sweep", 80, Vector2(700, -700), Vector2(0, -1100), 0.42],
 	["sweep_hit", "sweep", 140, Vector2(700, -1300), Vector2(0, -1500), 0.25],
 	["constrict_warn", "constrict", 80, Vector2(0, -1300), Vector2(0, -1500), 0.3],
 	["constrict_sq", "constrict", 150, Vector2(0, -1300), Vector2(0, -1500), 0.3],
@@ -32,7 +32,7 @@ var plan := [
 	["flurry", "flurry", 150, Vector2(300, -1300), Vector2(0, -1600), 0.24],
 	["march_q", "march", 70, Vector2(-300, -900), Vector2(0, -1100), 0.5],
 	["flurry_q", "flurry", 70, Vector2(300, -900), Vector2(0, -1100), 0.5],
-	["new_idle", "", 30, Vector2(250, -700), Vector2(0, -1100), 0.5],
+	["new_idle", "", 30, Vector2(250, -700), Vector2(0, -1500), 0.42],
 	["tips", "tips", 70, Vector2(250, -700), Vector2(0, -1100), 0.5],
 	["tips_fire", "tips", 100, Vector2(250, -700), Vector2(0, -1100), 0.5],
 	["ring", "ring", 120, Vector2(250, -700), Vector2(0, -1100), 0.5],
@@ -102,7 +102,7 @@ func _process(_d: float) -> bool:
 				if pl[1] == "detach":
 					b.damage_part(1, 99)
 				a = null
-			"sweep": a = b.Lash.new(1)
+			"sweep": a = b.Lash.new(5)
 			"zap":
 				b.damage_part(1, 8)
 				b.damage_part(4, 16)

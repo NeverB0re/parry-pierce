@@ -20,8 +20,8 @@ const DASH_KEEP := 0.5           # 돌진이 끝난 뒤 남기는 속도 비율 
 const DASH_DAMAGE := 1
 const CHARGE_HOVER := 0.15       # 이 시간 이상 누르면 차지 자세(공중 정지)로 들어간다
 const CHARGE_AUTO := 0.9         # 차지 완료 후 이 시간이 지나면 자동 발사 (v0.44: 1.3 → 0.9)
-const CHARGE_SPEED := 3600.0     # 차지 돌진: 빠르게 꽂힌다. 사거리 약 790px
-const CHARGE_DASH_TIME := 0.22
+const CHARGE_SPEED := 3600.0     # 차지 돌진: 빠르게 꽂힌다. 사거리 약 950px (요격 고정이면 무제한)
+const CHARGE_DASH_TIME := 0.265
 const CHARGE_GRACE := 0.5        # 차지 돌진이 빗나가 끝난 직후 무적
 const PERFECT_EVADE_GRAZE := 16.0   # 퍼펙트 회피로 인정하는 근접 여유 (몸 반지름에 더함)
 const PERFECT_EVADE_INVULN := 0.8   # 퍼펙트 회피 성공 시 추가 무적 (회피 직후 다른 곳에 맞는 일 방지)
@@ -34,7 +34,9 @@ const PARRY_RELEASE_CD := 0.25   # 중간에 뗐을 때 재입력 대기
 const PARRY_DASH_SPEED := 3600.0 # 패리 돌진: 주력 공격. 월드가 느려져도 플레이어는 실시간
 const PARRY_DASH_SPEED_PERFECT := 4000.0
 const PARRY_DASH_TIME := 0.22
-const DASH_PARRY_RANGE := 1.35  # 돌진패리 뒤 리버스 드라이브의 사거리 배율
+const DASH_PARRY_RANGE := 1.35  # (사거리 무제한 이후 쓰지 않음)
+const UNLIMITED_REACH := 3200.0  # 리버스 드라이브·요격: 사거리 무제한 (표적·벽·천장·바닥에 닿을 때까지). 조준선·어시스트는 이 거리까지 본다
+const UNLIMITED_MAX_T := 1.2     # 그래도 이 시간이 지나면 끝난다 (안전장치)
 const REFLECT_RADIUS := 70.0     # 반사 범위 (기체보다 넓게)
 const POWER_RADIUS := 8.0        # 패리 돌진은 타격 범위도 넓다
 # 직격 후: v0.6 방식 — 위로 솟구치고, 들어온 반대쪽으로 약간 밀리며, 마우스 좌우로 조종한다
@@ -42,7 +44,9 @@ const BOUNCE_SIDE := 250.0       # 들어온 방향의 반대쪽으로 밀리는
 const BOUNCE_STEER := 750.0      # 튕길 때 마우스 좌우 방향으로 더하는 가로 속도 (좌우 조종)
 const ASSIST_SLACK := 60.0           # 사거리 여유
 const BOUNCE_THRUST := 2.0       # 튕겨나는 동안 좌우 추진 배율
-const STRIKE_SHIELD := 0.9       # 직격 후 튕겨나는 동안 무적 (최대). 튕김이 끝나 기체 통제를 되찾으면 바로 끝난다
+const STRIKE_SHIELD := 0.6       # 강한 직격(차지 강습·리버스 드라이브·요격) 후 튕겨나는 동안 무적 (최대). 통제를 되찾으면 바로 끝난다.
+                                 # 일반 돌진 적중은 무적 없이 튕기기만 한다 (잔탄만 막는 옅은 실드 SMALL_GUARD_HIT) — 일반 공격 연타로 무적을 도배하지 못하게
+const SMALL_GUARD_HIT := 0.3
 const BOUNCE_END := 0.25         # 솟구치는 속도가 처음의 이 비율 아래로 떨어지면 튕김 끝 = 통제 회복 (v0.37: 0.4 → 0.25, 무적이 조금 더 길다)
 const PRESS_PIN_SPEED := 2300.0  # 프레스(천장 근접공격)를 패리하면 이 속도로 아래로 내리꽂힌다
 const PRESS_PIN_TIME := 1.0
@@ -132,6 +136,7 @@ var shield_t := 0.0              # 돌진/직격 후 무적
 var small_guard := 0.0           # 일반 돌진이 끝난 직후: 잔탄만 맞지 않는 시간
 var strike_pass_t := 0.0         # 적중 직후 남은 시간: 이때 시작한 일반 돌진은 맞힌 표적의 원 안쪽을 통과한다
 var pass_target := {}            # 방금 맞힌 표적 {kind, idx}
+var dash_age := 0.0
 var intercept_lock := false     # 이번 돌진 경로에 요격할 수 있는 공격이 있다: 닿을 때까지 표적(방어막·코어·부위)은 통과한다 (요격 최우선)
 var dash_pass := false           # 지금 돌진이 그 표적의 원 안쪽을 빠져나오는 중 (원을 벗어나면 꺼진다)
 var dash_parry_t := 0.0          # 일반 돌진이 끝난 뒤 돌진패리가 아직 인정되는 시간
@@ -308,7 +313,8 @@ func _dash(kind: String) -> void:
 	evade_window = stats.perfect_evade_window if kind == "dash" else 0.0
 	evade_rewarded = false
 	vel = aim * spd
-	intercept_lock = kind == "charge" and _intercept_on_path(spd * dash_total)
+	intercept_lock = kind == "charge" and _intercept_on_path(UNLIMITED_REACH)
+	dash_age = 0.0
 	bouncing = false
 	if bounce_rise > 0.0:                    # 직격 튕김 중 돌진: 튕김 무적은 여기서 끝 (돌진 자체가 무적)
 		bounce_rise = 0.0
@@ -413,7 +419,12 @@ func on_parry_push(away: Vector2) -> void:
 ## 지금 조준 중인 리버스 드라이브의 사거리 (돌진패리면 DASH_PARRY_RANGE 배)
 func parry_dash_reach() -> float:
 	var spd := PARRY_DASH_SPEED_PERFECT if aim_perfect else PARRY_DASH_SPEED
-	return spd * PARRY_DASH_TIME * (DASH_PARRY_RANGE if aim_boost else 1.0)
+	return UNLIMITED_REACH
+
+
+## 사거리 무제한 돌진인가 (리버스 드라이브, 요격 고정된 차지 강습)
+func _unlimited() -> bool:
+	return dash_kind == "power" or (dash_kind == "charge" and intercept_lock)
 
 
 ## 돌진 경로(지금 위치 → 조준 방향 reach)에 요격할 수 있는 공격 판정이 걸려 있는가
@@ -441,7 +452,8 @@ func launch_parry_dash() -> void:
 	dash_cd = stats.dash_cooldown
 	vel = aim * (PARRY_DASH_SPEED_PERFECT if aim_perfect else PARRY_DASH_SPEED)
 	parry_cd = PARRY_RELEASE_CD
-	intercept_lock = _intercept_on_path(vel.length() * dash_total)
+	intercept_lock = _intercept_on_path(UNLIMITED_REACH)
+	dash_age = 0.0
 	main.on_parry_launch(position, aim)
 
 
@@ -584,7 +596,12 @@ func step(dt: float) -> void:
 			want = signf(m.x) * PLATFORM_SPEED
 		vel.x = move_toward(vel.x, want, 2000.0 * dt)
 	elif dash_t > 0.0:
-		dash_t -= dt
+		dash_age += dt
+		if _unlimited():                       # 리버스 드라이브·요격 고정: 닿거나 경기장 끝에 갈 때까지 계속
+			if dash_t < 0.001 or (position.y >= -RADIUS and vel.y > 0.0) or dash_age >= UNLIMITED_MAX_T:   # 벽·천장에 닿으면 _move 가 dash_t 를 거의 0으로
+				dash_t = 0.0
+		else:
+			dash_t -= dt
 		if dash_t <= 0.0:
 			vel *= DASH_KEEP
 			if dash_kind == "dash":
@@ -662,7 +679,9 @@ func _move(dt: float) -> void:
 				_on_strike(hit)
 				if frozen:
 					return
-		# 벽/천장
+		# 벽/천장 (사거리 무제한 돌진은 여기서 끝난다)
+		if dash_t > 0.0 and _unlimited() and ((position.x < WALL_L + RADIUS and vel.x < 0.0) or (position.x > WALL_R - RADIUS and vel.x > 0.0) or (position.y < CEILING + RADIUS and vel.y < 0.0)):
+			dash_t = minf(dash_t, 0.0001)
 		if position.x < WALL_L + RADIUS:
 			position.x = WALL_L + RADIUS
 			vel.x = absf(vel.x) * 0.5
@@ -804,8 +823,12 @@ func bounce_off(dir: Vector2, kind := "dash") -> void:
 	dash_t = 0.0
 	_end_dash()
 	bouncing = true
-	shield_t = STRIKE_SHIELD                     # 튕겨나는 동안 무적 (통제를 되찾으면 끝)
-	shield_max = STRIKE_SHIELD
+	if kind == "dash":                           # 일반 돌진 적중: 무적 없음, 잔탄만 잠깐 막는다
+		shield_t = 0.0
+		small_guard = maxf(small_guard, SMALL_GUARD_HIT)
+	else:
+		shield_t = STRIKE_SHIELD                 # 튕겨나는 동안 무적 (통제를 되찾으면 끝)
+		shield_max = STRIKE_SHIELD
 	strike_pass_t = STRIKE_PASS
 	parry_cd = 0.0                               # 튕겨나오는 즉시 패리 가능
 	if kind != "dash":
@@ -835,7 +858,8 @@ func _assisted(a: Vector2, reach: float, extra_r: float) -> Vector2:
 		var d: Vector2 = t["pos"] - position
 		var dist := d.length()
 		var r: float = float(t["r"]) + RADIUS + extra_r
-		if dist < 1.0 or dist - r > reach + ASSIST_SLACK:
+		var rr := UNLIMITED_REACH if t.get("intercept", false) else reach    # 요격은 사거리 무제한
+		if dist < 1.0 or dist - r > rr + ASSIST_SLACK:
 			continue
 		var da := wrapf(d.angle() - ang, -PI, PI)
 		var err := absf(da) - asin(minf(1.0, r / dist))

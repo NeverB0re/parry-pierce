@@ -91,7 +91,7 @@ func _run() -> void:
 	main.touch_ui = FakeStick.new()
 
 	_check("numbers (cd %.2f, dmg %d/%d/%d/%d, part %d, core %d)" % [p.stats.dash_cooldown, p.DASH_DAMAGE, p.stats.charge_damage, p.stats.power_damage, p.stats.clash_damage, b.PART_HP, b.core.CORE_HP],
-		absf(p.stats.dash_cooldown - 1.15) < 0.001 and p.DASH_DAMAGE == 1 and p.stats.charge_damage == 3 and p.stats.power_damage == 12 and p.stats.power_damage_perfect == 16 and p.stats.clash_damage == 8 and b.PART_HP == 30 and b.ARMOR_HP == 160 and b.core.CORE_HP == 1)
+		absf(p.stats.dash_cooldown - 0.9) < 0.001 and p.DASH_DAMAGE == 1 and p.stats.charge_damage == 3 and p.stats.power_damage == 12 and p.stats.power_damage_perfect == 16 and p.stats.clash_damage == 8 and b.PART_HP == 30 and b.ARMOR_HP == 160 and b.core.CORE_HP == 1)
 
 	# ── 돌진: 짧게 = 돌진, 쿨다운 ──
 	_air(Vector2(-900, -1500))
@@ -653,12 +653,16 @@ func _v034_test() -> void:
 	_air(pp + Vector2(-140, 0))
 	_dash_dir("dash", Vector2.RIGHT)
 	_step(6)
-	_check("strike bounce gives a shield (%.2f)" % p.shield_t, p.shield_t > 0.0 and p.bouncing)
+	_check("plain dash strike: bounce without invulnerability, only a small-bullet guard (shield %.2f, guard %.2f)" % [p.shield_t, p.small_guard], p.shield_t <= 0.0 and p.small_guard > 0.0 and p.bouncing)
+	_air(pp + Vector2(-140, 0))
+	_dash_dir("charge", Vector2.RIGHT)
+	_step(6)
+	_check("charge strike bounce gives a shield (%.2f)" % p.shield_t, p.shield_t > 0.0 and p.bouncing)
 	var frames := 0
 	while p.shield_t > 0.0 and frames < 120:
 		_step(1)
 		frames += 1
-	_check("bounce shield ends when control returns (%.2fs, before dash cooldown %.2f)" % [frames * DT, p.stats.dash_cooldown], frames * DT < p.stats.dash_cooldown - 0.28 and frames * DT >= 0.7 and not p.bouncing)
+	_check("strike shield is short (%.2fs <= %.2f)" % [frames * DT, p.STRIKE_SHIELD], frames * DT <= p.STRIKE_SHIELD + 0.1 and frames * DT >= 0.3)
 
 	# 잔탄 흡수 → 판정이 끝나도 쿨다운 없음
 	main.start_stage(1)
@@ -1234,7 +1238,7 @@ func _v038_test() -> void:
 	_step(1)
 	_check("parry while dashing is PERFECT even though pressed long ago (aim %s, perfect %s, left %.2f)" % [p.aim_phase, p.aim_perfect, p.aim_left], p.aim_phase and p.aim_perfect)
 	var normal_reach: float = p.PARRY_DASH_SPEED_PERFECT * p.PARRY_DASH_TIME
-	_check("dash-parry extends the reverse drive range (reach %.0f vs %.0f)" % [p.parry_dash_reach(), normal_reach], p.aim_boost and absf(p.parry_dash_reach() - normal_reach * p.DASH_PARRY_RANGE) < 1.0)
+	_check("reverse drive range is unlimited (reach %.0f vs old %.0f)" % [p.parry_dash_reach(), normal_reach], p.aim_boost and p.parry_dash_reach() >= p.UNLIMITED_REACH)
 	p.aim = Vector2.RIGHT
 	p.launch_parry_dash()
 	_check("boosted reverse drive lasts longer (dash %.2fs, boost %s)" % [p.dash_t, p.power_boost], p.power_boost and absf(p.dash_t - p.PARRY_DASH_TIME * p.DASH_PARRY_RANGE) < 0.001)
@@ -1254,7 +1258,7 @@ func _v038_test() -> void:
 	_check("not dashing: no dash-parry", not p.is_dash_parry())
 	b.shots.spawn(p.position + Vector2(25, 0), Vector2.ZERO, 5.0)
 	_step(1)
-	_check("same late parry without a dash is normal (no extra range)", p.aim_phase and not p.aim_perfect and not p.aim_boost and absf(p.parry_dash_reach() - p.PARRY_DASH_SPEED * p.PARRY_DASH_TIME) < 1.0)
+	_check("same late parry without a dash is normal (not perfect, no boost)", p.aim_phase and not p.aim_perfect and not p.aim_boost)
 	p.parry_release()
 	p.aim_phase = false
 	# 차지 강습·리버스 드라이브 중에는 해당 없음 (일반 돌진만)
@@ -1369,7 +1373,7 @@ func _v044_test() -> void:
 	main.start_stage(0)
 	var b = main.boss
 	var p = main.player
-	_check("charge auto-fire 0.9s, charge cooldown back to 1.5s", p.CHARGE_AUTO == 0.9 and absf(p.stats.charge_cooldown - 1.5) < 0.001)
+	_check("charge auto-fire 0.9s, charge cooldown 1.2s", p.CHARGE_AUTO == 0.9 and absf(p.stats.charge_cooldown - 1.2) < 0.001)
 	var pp: Vector2 = b.part_pos(0)
 	_air(pp + Vector2(-160, 0))
 	_dash_dir("charge", Vector2.RIGHT)
@@ -1533,11 +1537,12 @@ func _kraken_shield_test() -> void:
 			bright = maxi(bright, n)
 			if b.atk == null:
 				break
-		var ordered: bool = c.kids.size() == b.COMBO_HITS
+		var want_n: int = 2 if kind == "flurry" else b.COMBO_HITS     # 난타는 아래 두 촉수만
+		var ordered: bool = c.kids.size() == want_n
 		for j in range(1, c.kids.size()):
 			if c.kids[j].fired_t <= c.kids[j - 1].fired_t:
 				ordered = false
-		_check("%s combo: %d tentacles raised together, one bright warning at a time (%d), strikes in order, ends" % [kind, raised, bright], b.atk == null and raised == b.COMBO_HITS and bright == 1 and ordered)
+		_check("%s combo: %d tentacles raised together, one bright warning at a time (%d), strikes in order, ends" % [kind, raised, bright], b.atk == null and raised == want_n and bright == 1 and ordered)
 
 	# 차지 완료 순간 짧은 슬로우
 	main.reset_run()
@@ -2057,6 +2062,14 @@ func _title_test() -> void:
 	_check("fresh title: Start / Continue / How to Play / Quit (%s)" % str(texts), texts.size() == 4 and texts[0] == "시작")
 	var cb: Button = t.root.find_children("*", "Button", true, false)[1]
 	_check("Continue is disabled without progress", cb.disabled)
+	t.can_resume = true                                       # ESC 메뉴에서 왔을 때: 이어하기(멈춘 판으로) + 스테이지 선택이 따로
+	t._build()
+	var rt := []
+	for bb in t.root.find_children("*", "Button", true, false):
+		rt.append(bb.text)
+	_check("from the pause menu: Continue (resume) and Stage Select are separate (%s)" % str(rt), rt.size() == 5 and rt[1] == "이어하기" and rt[2] == "스테이지 선택 (항로도)")
+	t.can_resume = false
+	t._build()
 	t._on_flag("en")
 	var en_texts := []
 	for b in t.root.find_children("*", "Button", true, false):

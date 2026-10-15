@@ -154,13 +154,10 @@ func draw() -> void:
 	MeleeWarn.zone(c, area, level, boss.t)                 # 모든 근접공격이 같은 예고 모양(빗금 위험구간 + ⚠)을 쓴다
 	var mid := (th0 + th1) * 0.5
 	MeleeWarn.tag(c, sh + Vector2(s * cos(mid), sin(mid)) * boss.SWING_L * 0.55, level, boss.t)
-	if phase != "prep":
-		for f in [0.3, 0.5, 0.7]:                # 휩쓰는 방향을 가리키는 화살표
-			var th2: float = lerpf(th0, th1, f)
-			var radial := Vector2(s * cos(th2), sin(th2))
-			var tangent := Vector2(-s * sin(th2), cos(th2))
-			var at: Vector2 = sh + radial * boss.SWING_L * 0.8
-			c.draw_colored_polygon(PackedVector2Array([at + tangent * 40.0, at - tangent * 12.0 + radial * 26.0, at - tangent * 12.0 - radial * 26.0]), Color(MeleeWarn.C_HOT, 0.7))
+	MeleeWarn.limb(c, PackedVector2Array([sh, boss.elbow_of(arm), boss.fists[arm]]), level, boss.t)   # 어느 팔이 치는지
+	var a0: float = th0 if s > 0.0 else PI - th0            # 휩쓰는 방향: 호를 따라 흐르는 큰 화살표 (팔 각도 → 화면 각도)
+	var a1: float = th1 if s > 0.0 else PI - th1
+	MeleeWarn.arc_arrow(c, sh, boss.SWING_L * 0.8, lerpf(a0, a1, 0.08), a1, level, boss.t)
 
 
 ## 같은 각도면 계산을 재사용한다 (예고 중 매 프레임 다각형 합치기를 하지 않게)

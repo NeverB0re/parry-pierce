@@ -313,6 +313,7 @@ func _step_debris(dt: float) -> void:
 
 # ── 그리기 ─────────────────────────────────────────────
 func _draw() -> void:
+	_draw_vents()
 	_draw_cloak()
 	_draw_legs()
 	_draw_torso()
@@ -456,6 +457,8 @@ func _draw_arms() -> void:
 		_cap(sh, el, 150.0, C_BODY)
 		if part_alive(2 + a):
 			var f := fists[a]
+			if _swing_of(a) == null and not dead:   # 대기 모션: 주먹을 쥐었다 폈다 하듯 들썩인다 (그림만, 판정은 그대로)
+				f += Vector2(sin(t * 1.3 + a * 2.1) * 16.0, cos(t * 1.1 + a * 1.3) * 22.0)
 			_cap(el, f, 125.0, C_BODY)
 			draw_circle(el, 70.0, C_BODY_DARK)
 			draw_arc(el, 70.0, 0.0, TAU, 20, Color(C_RIM, 0.6), 4.0)
@@ -514,7 +517,25 @@ func _draw_debris() -> void:
 	draw_set_transform(Vector2.ZERO, 0.0)
 
 
+## 어깨 배기구에서 주기적으로 증기가 뿜어져 오른다 (대기 모션)
+func _draw_vents() -> void:
+	if dead:
+		return
+	for s in [-1.0, 1.0]:
+		var o := Vector2(s * 330.0, -2370.0)
+		for k in 5:
+			var life := fmod(t * 0.45 + k * 0.2 + (0.5 if s > 0.0 else 0.0), 1.0)
+			var p := o + Vector2(s * (20.0 + life * 70.0) + sin(t * 2.0 + k) * 12.0, -life * 260.0)
+			draw_circle(p, 18.0 + life * 46.0, Color(0.55, 0.58, 0.62, 0.22 * (1.0 - life)))
+
+
+## 머리: 플레이어 쪽으로 천천히 고개를 돌리고(살짝 기울임) 숨 쉬듯 까딱인다 (그림만)
 func _draw_head() -> void:
+	var tilt := 0.0
+	if not dead:
+		tilt = clampf((look_at.x - 0.0) / 1200.0, -1.0, 1.0) * 0.07 + sin(t * 0.6) * 0.02
+	var neck := Vector2(0, -2380)
+	draw_set_transform_matrix(Transform2D(tilt, neck + Vector2(0, sin(t * 1.2) * 4.0)) * Transform2D(0.0, -neck))
 	for s in [-1.0, 1.0]:
 		_cap(Vector2(s * 120, -2740), Vector2(s * 230, -2900), 40.0, C_BONE)
 		_cap(Vector2(s * 230, -2900), Vector2(s * 380, -3000), 26.0, C_BONE)
@@ -534,7 +555,8 @@ func _draw_head() -> void:
 		glow = maxf(0.0, 0.55 - death_t * 0.4)
 	for e in EYES:
 		draw_circle(e, 32.0 + eye_glow * 32.0, Color(C_EYE, 0.16 * glow))
-		draw_circle(e, 10.0 + eye_glow * 6.0, Color(C_EYE, glow))
+		draw_circle(e + (look_at - e).limit_length(1.0) * 7.0, 10.0 + eye_glow * 6.0, Color(C_EYE, glow))   # 눈동자가 플레이어를 좇는다
 		if beam_glow > 0.0:                          # 레이저: 보랏빛으로 달아오른다
 			draw_circle(e, 30.0 + beam_glow * 40.0, Color(C_UNPARRY, 0.35 * beam_glow))
 			draw_circle(e, 8.0 + beam_glow * 10.0, Color(C_UNPARRY_CORE, beam_glow))
+	draw_set_transform(Vector2.ZERO)

@@ -41,6 +41,7 @@ var events: Array[Dictionary] = []   # main.gd 가 매 프레임 꺼내 처리 (
 var strike_glow := false             # 플레이어가 공격 돌진 중 = 타격점이 드러난다
 var focus_glow := 0.0                # 방향 지정·차지 중: 노릴 수 있는 표적 강조 (0~1)
 var focus_from := Vector2.ZERO       # 강조 기준 위치(플레이어)
+var look_at := Vector2(0, -1200)       # 플레이어 위치 (그림 전용: 대기 모션이 바라본다. 판정에는 쓰지 않는다)
 var focus_reach := 0.0               # 이 거리 안의 표적은 더 밝게
 
 
@@ -126,6 +127,7 @@ func active_attacks() -> Array:
 # ── 진행 ───────────────────────────────────────────────
 func step(dt: float, ppos: Vector2) -> void:
 	t += dt
+	look_at = look_at.lerp(ppos, 1.0 - exp(-2.0 * dt))
 	if core != null:
 		core.step(dt)
 	_step_shards(dt)

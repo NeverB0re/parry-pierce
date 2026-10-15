@@ -5,10 +5,10 @@ extends Resource
 
 @export_group("돌진·차지")
 @export var dash_time := 0.28              ## 일반 돌진 시간 (속도 2000 → 사거리 약 560px)
-@export var dash_cooldown := 1.15           ## 돌진 시작부터 다음 돌진까지 (차지 강습도 이 쿨다운을 쓴다)
+@export var dash_cooldown := 0.9           ## 돌진 시작부터 다음 돌진까지 (차지 강습도 이 쿨다운을 쓴다)
 @export var dash_buffer := 0.2              ## 쿨다운이 이만큼 남았을 때 뗀 짧은 입력은 기억했다가 바로 돌진
 @export var charge_time := 0.6              ## 좌클릭을 이만큼 누르면 차지 완료 → 떼면 차지 강습 (덜 모으고 떼면 일반 돌진)
-@export var charge_cooldown := 1.5          ## 차지 강습을 쏜 뒤 다음 차지가 완료되기까지 최소 시간 (돌진 쿨다운과 별개). 그동안은 차지가 모이지 않는다
+@export var charge_cooldown := 1.2          ## 차지 강습을 쏜 뒤 다음 차지가 완료되기까지 최소 시간 (돌진 쿨다운과 별개). 그동안은 차지가 모이지 않는다
 
 @export_group("피해")
 @export var charge_damage := 3

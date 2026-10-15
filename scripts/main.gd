@@ -36,7 +36,7 @@ const RESPAWN_INVULN := 1.5
 const PLAT_SINK_TIME := 1.0        # 발사 후 발판이 가라앉는 시간
 const PLAT_RISE_TIME := 0.6
 const HEAT_MAX := 3                # 잔탄에 이만큼 맞으면 실드 셀 1개가 깨진다 (과열 게이지)
-const HEAT_COOL := 5.0             # 이 시간 동안 잔탄에 안 맞으면 게이지가 한 칸 식는다
+const HEAT_COOL := 4.0             # 이 시간 동안 잔탄에 안 맞으면 게이지가 한 칸 식는다
 const GRAZE_INVULN := 0.35         # 잔탄에 맞은 직후 무적
 const GRAZE_BREAK_INVULN := 0.8    # 게이지가 차서 셀이 깨진 직후 무적
 
@@ -170,12 +170,13 @@ func _ready() -> void:
 	title.ui_scale = menu.ui_scale
 	add_child(title)
 	menu.title = title
-	menu.title_requested.connect(_open_title)
+	menu.title_requested.connect(func() -> void: _open_title(state == State.PLAY))
 	title.start_requested.connect(_on_title_start)
 	title.continue_requested.connect(_on_title_continue)
+	title.resume_requested.connect(menu.resume)
 	title.quit_requested.connect(func() -> void: get_tree().quit())
 	title.visibility_changed.connect(func() -> void: hud.visible = not title.visible)
-	world.back_requested.connect(_open_title)
+	world.back_requested.connect(func() -> void: _open_title(title.can_resume))
 	tele = Telemetry.new()
 	tele.enabled = DisplayServer.get_name() != "headless" and OS.get_cmdline_user_args().has("--telemetry")   # 플레이어에게는 기록을 남기지 않는다 (개발용 옵션)
 	debug = Debug.new()
@@ -251,17 +252,23 @@ func open_world(from_title := false) -> void:
 	world.open()
 
 
-## 메인 화면. 진행 중이던 판은 처음 상태(발판 위, 보스 대기)로 돌려 두고 뒤에서 흔들리게 둔다
-func _open_title() -> void:
+## 메인 화면. keep(ESC 메뉴에서 옴) = 판을 멈춘 채 두고 "이어하기"로 돌아갈 수 있다.
+## 아니면 진행 중이던 판은 처음 상태(발판 위, 보스 대기)로 돌려 두고 뒤에서 흔들리게 둔다
+func _open_title(keep := false) -> void:
 	if ftl.is_playing():
 		return
 	world.close()
-	get_tree().paused = false
-	reset_run()
+	title.can_resume = keep
+	if keep:
+		get_tree().paused = true
+	else:
+		get_tree().paused = false
+		reset_run()
 	title.open()
 
 
 func _on_title_start() -> void:
+	get_tree().paused = false
 	profile.reset()
 	profile.save()
 	_on_jump()

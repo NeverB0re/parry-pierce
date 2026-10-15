@@ -17,6 +17,7 @@ const ANG_MAX := PI + 0.3
 var th0 := 0.0
 var th1 := 0.0
 var th := 0.0
+var arrow_r := REACH * 0.5            # 방향 화살표 반지름 = 겨눌 때 플레이어까지 거리 (화살표가 플레이어 곁을 지난다)
 var _from := PackedVector2Array()
 var _area := PackedVector2Array()
 
@@ -31,6 +32,7 @@ func _init(tent: int) -> void:
 func aim_at(ppos: Vector2) -> void:
 	var root: Vector2 = boss.ROOTS[tents[0]]
 	var phi := (ppos - root).angle()
+	arrow_r = clampf(root.distance_to(ppos), REACH * 0.3, REACH * 0.85)
 	if phi < -PI * 0.5:                    # 왼쪽 위는 π 쪽으로 이어 붙인다
 		phi += TAU
 	phi = clampf(phi, ANG_MIN + SPAN * 0.5, ANG_MAX - SPAN * 0.5)
@@ -135,4 +137,6 @@ func draw() -> void:
 	var area := _area if not _area.is_empty() else _sector()
 	MeleeWarn.zone(c, area, level, boss.t)
 	var root: Vector2 = boss.ROOTS[tents[0]]
+	MeleeWarn.limb(c, boss.spines[tents[0]], level, boss.t)
+	MeleeWarn.arc_arrow(c, root, arrow_r, th0 + (th1 - th0) * 0.08, th1, level, boss.t)
 	MeleeWarn.tag(c, root + Vector2.from_angle((th0 + th1) * 0.5) * REACH * 0.6, level, boss.t, order)

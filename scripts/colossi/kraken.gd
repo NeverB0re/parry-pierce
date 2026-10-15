@@ -44,7 +44,11 @@ const SIPHON := Vector2(0, -2120.0 + DROP)            # 먹물 포 (외투막 �
 const N := 12                                # 척추 마디 수
 # 촉수 0~5 (짝수 = 왼쪽, 홀수 = 오른쪽): 뿌리와 쉬는 자세의 끝
 const ROOTS := [Vector2(-430, -2210.0 + DROP), Vector2(430, -2210.0 + DROP), Vector2(-260, -2170.0 + DROP), Vector2(260, -2170.0 + DROP), Vector2(-90, -2150.0 + DROP), Vector2(90, -2150.0 + DROP)]
-const IDLE_TIPS := [Vector2(-900, -620), Vector2(900, -620), Vector2(-560, -400), Vector2(560, -400), Vector2(-210, -560), Vector2(210, -560)]
+# 쉬는 자세: 0·1 = 머리 옆으로 치켜들고 위협 (끝이 플레이어 쪽으로 꺾임), 2·3 = 중간 높이로 옆으로 펼침, 4·5 = 아래로 늘어뜨림
+const IDLE_TIPS := [Vector2(-780, -2250), Vector2(780, -2250), Vector2(-1060, -1200), Vector2(1060, -1200), Vector2(-330, -620), Vector2(330, -620)]
+const IDLE_C1 := [Vector2(-330, 120), Vector2(330, 120), Vector2(-320, 60), Vector2(320, 60), Vector2(-60, 300), Vector2(60, 300)]     # 뿌리 기준 첫 조절점
+const IDLE_C2 := [Vector2(-260, 380), Vector2(260, 380), Vector2(150, -180), Vector2(-150, -180), Vector2(120, -260), Vector2(-120, -260)]  # 끝 기준 둘째 조절점
+const IDLE_SWAY := [Vector2(70, 60), Vector2(70, 60), Vector2(50, 90), Vector2(50, 90), Vector2(70, 40), Vector2(70, 40)]          # 끝이 흔들리는 폭
 const BG_ROOTS := [Vector2(-560, -2300.0 + DROP), Vector2(560, -2300.0 + DROP)]     # 배경 다리 (표적·판정 없음, 방전 그물만 건다)
 const BG_TIPS := [Vector2(-1080, -520), Vector2(1080, -520)]
 const REGROW_DELAY := 8.0                    # 끊긴 촉수가 다시 자라기 시작할 때까지
@@ -69,6 +73,7 @@ const CLEAR_R := 900.0                       # 근접 패턴은 플레이어 이
 const CLEAR_WAIT := 2.5                      # 그래도 이 시간이 지나면 시작한다 (탄이 오래 남아 있을 때)
 const SPECIAL_EVERY := 4                     # 방전 그물(패리 불가)은 공격 이만큼마다 (드물게)
 const COMBO_HITS := 3                        # 연타 타수
+const SWEEPERS := [4, 5]                     # 휩쓸기·난타는 아래로 늘어진 두 촉수만, 항상 바깥 → 안쪽으로 (방향을 가늠하기 쉽게)
 const MARCH_X := [-640.0, 0.0, 640.0]        # 행진: 이 자리를 한쪽 끝부터 차례로 내려친다
 
 # ── 색 ─────────────────────────────────────────────────
@@ -344,12 +349,22 @@ static func _bezier_spine(root: Vector2, tip: Vector2, bend: float, n: int) -> P
 	return sp
 
 
-## 쉬는 자세: 천천히 흔들리며 늘어져 있다. 자란 정도(grown)만큼만 뿌리에서 뻗는다 (떨어져 나간 촉수는 뿌리에 모인다)
+## 쉬는 자세 (IDLE_*): 끝이 천천히 원을 그리며 흔들리고, 조절점이 시차를 두고 따라가 몸통에 물결이 흐른다.
+## 치켜든 촉수(0·1)는 가끔 움찔하며 뒤로 젖혔다 돌아온다 (위협). 자란 정도(grown)만큼만 뿌리에서 뻗는다 (떨어져 나간 촉수는 뿌리에 모인다)
 func _idle_spine(i: int) -> PackedVector2Array:
 	var root: Vector2 = ROOTS[i]
-	var s := 1.0 if i % 2 == 1 else -1.0
-	var tip: Vector2 = IDLE_TIPS[i] + Vector2(sin(t * 0.9 + i * 1.3) * 45.0, cos(t * 0.7 + i) * 30.0)
-	var sp := _bezier_spine(root, tip, s * (90.0 + 70.0 * sin(t * 0.8 + i * 0.9)), N)
+	var ph := t + i * 1.7
+	var sw: Vector2 = IDLE_SWAY[i]
+	var tip: Vector2 = IDLE_TIPS[i] + Vector2(sin(ph * 0.9) * sw.x, cos(ph * 0.7) * sw.y)
+	if i < 2:                                            # 위협: 주기적으로 뒤로 젖혔다가 앞으로 튕기듯 돌아온다
+		var cyc := fmod(ph * 0.35, 1.0)
+		var rear := smoothstep(0.0, 0.25, cyc) * (1.0 - smoothstep(0.25, 0.4, cyc))
+		tip += Vector2(signf(root.x) * 90.0, -70.0) * rear
+	var c1: Vector2 = root + IDLE_C1[i] + Vector2(sin(ph * 0.9 - 1.2), cos(ph * 0.7 - 1.2)) * sw * 0.5
+	var c2: Vector2 = tip + IDLE_C2[i] + Vector2(sin(ph * 0.9 - 0.6), cos(ph * 0.7 - 0.6)) * sw * 0.8
+	var sp := PackedVector2Array()
+	for q in N:
+		sp.append(root.bezier_interpolate(c1, c2, tip, float(q) / (N - 1)))
 	var g := grown[i]
 	if g < 1.0:
 		var e := g * g * (3.0 - 2.0 * g)
@@ -509,7 +524,11 @@ func _choose(ppos: Vector2) -> void:
 ## 이 근접 패턴을 지금 쓸 수 있는가
 func _melee_ok(m: String, ready: Array[int]) -> bool:
 	match m:
-		"hammer", "chase", "sweep":
+		"sweep":
+			return ready.has(SWEEPERS[0]) or ready.has(SWEEPERS[1])
+		"flurry":
+			return ready.has(SWEEPERS[0]) and ready.has(SWEEPERS[1])
+		"hammer", "chase":
 			return not ready.is_empty()
 		"constrict":
 			return ready.size() >= 2 and (phase == 3 or core.frac() > 0.15)
@@ -574,6 +593,8 @@ func _combo(kind: String, ready: Array[int], ppos: Vector2) -> Combo:
 	var ls: Array[int] = []
 	var rs: Array[int] = []
 	for i in ready:
+		if kind == "flurry" and not SWEEPERS.has(i):
+			continue
 		(ls if ROOTS[i].x < 0.0 else rs).append(i)
 	var order: Array[int] = []
 	var side := 0 if ppos.x >= 0.0 else 1                    # 플레이어 반대쪽 촉수부터
@@ -634,14 +655,11 @@ static func _nearest(ts: Array[int], x: float) -> int:
 
 
 ## 휩쓸 촉수: 플레이어 쪽에 달린 것 중 닿는 것, 없으면 가장 가까운 것
+## 휩쓸 촉수: 아래 두 촉수(SWEEPERS) 중 플레이어 쪽에 달린 것, 쓸 수 없으면 다른 하나
 func _sweeper(ts: Array[int], ppos: Vector2) -> int:
-	var best := -1
-	for i in ts:
-		var same_side: bool = signf(ROOTS[i].x) == signf(ppos.x)
-		if same_side and ppos.distance_to(ROOTS[i]) < Lash.REACH + 80.0:
-			if best < 0 or ppos.distance_to(ROOTS[i]) < ppos.distance_to(ROOTS[best]):
-				best = i
-	return best if best >= 0 else _nearest(ts, ppos.x)
+	var near: int = SWEEPERS[1] if ppos.x >= 0.0 else SWEEPERS[0]
+	var far: int = SWEEPERS[0] if near == SWEEPERS[1] else SWEEPERS[1]
+	return near if ts.has(near) else far
 
 
 ## 먹물 포 발광 (Fan 이 부른다. 발사점은 분사구 하나뿐)

@@ -1,12 +1,13 @@
 extends CanvasLayer
-## 메인 화면: 시작 / 이어하기(스테이지 선택) / 조작법 / 종료. 우하단의 미국·한국 국기 버튼으로 영어·한국어를 고른다.
+## 메인 화면: 시작 / 이어하기(ESC 메뉴에서 왔을 때: 멈춰 둔 판으로 돌아감) / 스테이지 선택 / 조작법 / 종료. 우하단의 미국·한국 국기 버튼으로 영어·한국어를 고른다.
 ## 게임은 뒤에서 돌지만(보스가 대기 자세로 흔들린다) 입력은 막힌다 (main.gd 가 title.visible 을 본다).
 ## 새 게임은 저장된 진행이 있으면 한 번 더 눌러야 시작한다 (확인).
 
 const Loc := preload("res://scripts/loc.gd")
 
 signal start_requested               # 새 게임 (진행 초기화 후 첫 스테이지로)
-signal continue_requested            # 이어하기: 항로도(스테이지 선택)
+signal continue_requested            # 스테이지 선택: 항로도
+signal resume_requested              # 이어하기: 멈춰 둔 판으로 돌아간다
 signal quit_requested
 
 var profile                          # main.gd 가 연결
@@ -16,6 +17,7 @@ var font: SystemFont
 var root: Control
 var _confirm_new := false
 var _help := false
+var can_resume := false              # ESC 메뉴에서 왔다 = 멈춰 둔 판이 있다 (main.gd 가 정한다)
 
 
 func _ready() -> void:
@@ -94,7 +96,12 @@ func _build() -> void:
 		var b_new := _button(box, new_text, _on_new)
 		if _confirm_new:
 			b_new.add_theme_color_override("font_color", Color(1.0, 0.55, 0.45))
-		var b_cont := _button(box, Loc.t("이어하기 (스테이지 선택)"), func() -> void:
+		var b_res: Button = null
+		if can_resume:
+			b_res = _button(box, Loc.t("이어하기"), func() -> void:
+				close()
+				resume_requested.emit())
+		var b_cont := _button(box, Loc.t("스테이지 선택 (항로도)"), func() -> void:
 			close()
 			continue_requested.emit())
 		b_cont.disabled = not _has_progress()
@@ -103,7 +110,9 @@ func _build() -> void:
 			_help = true
 			_build())
 		_button(box, Loc.t("종료"), func() -> void: quit_requested.emit())
-		if not _has_progress():
+		if b_res != null:
+			b_res.grab_focus()
+		elif not _has_progress():
 			b_new.grab_focus()
 		else:
 			b_cont.grab_focus()
