@@ -1434,13 +1434,121 @@ func _v044_test() -> void:
 	main.start_stage(0)
 
 
+## v0.50: 크라켄 표적은 방어막에 싸인 외눈(코어) 하나. 돌진·차지는 막히고 리버스 드라이브만 뚫는다, 방어막 동안 코어 하한,
+## 촉수를 다 끊으면 방어막이 깨진다, 연타 3종, 첫 타 예고 여유, 빠른 차지, 차지 완료 슬로우
+func _kraken_shield_test() -> void:
+	main.start_stage(2)
+	var b = main.boss
+	var p = main.player
+	b.next_t = 99.0
+	_check("kraken: tentacles are not strike targets", b.strike_hit(b.part_pos(0), 20.0).is_empty())
+	var sh: Dictionary = b.strike_hit(b.CORE_POS + Vector2(0, b.SHIELD_R + 10.0), 20.0)
+	_check("kraken: the shield around the core is the only target", sh.get("kind", "") == "shield")
+	_check("kraken: assist sees only the core (no tentacle targets)", b.assist_targets(Vector2(0, -1500)).size() == 1)
+	main.debug.god = true
+	p.reset(b.CORE_POS + Vector2(0, b.SHIELD_R + 200.0), false)
+	var a0: int = b.core.armor_hp
+	_dash_dir("charge", Vector2.UP)
+	var bounced := false
+	for k in 30:
+		main.hitstop = 0
+		main._physics_process(DT)
+		if p.vel.y > 0.0 and b.shield_flash > 0.0:
+			bounced = true
+	_check("charge into the shield: blocked, no core damage, bounced out (core %d)" % b.core.armor_hp, b.core.armor_hp == a0 and bounced)
+	main.on_strike(sh, 12, p.position, Vector2.UP, "power", false, false)
+	_check("reverse drive pierces the shield (core %d -> %d)" % [a0, b.core.armor_hp], b.core.armor_hp == a0 - 12)
+	for k in 30:
+		b.damage(sh, 16)
+	_check("shielded core never drops below the floor (%d)" % b.core.armor_hp, b.core.armor_hp == b.SHIELD_FLOOR and not b.core.broken)
+	main.debug.god = false
+	main.reset_run()
+	b.next_t = 99.0
+	for i in 5:
+		b.damage_part(i, 8)
+		b.damage_part(i, 8)
+	_check("two intercepts sever a tentacle (alive %d)" % b.parts_left(), b.parts_left() == 1 and b.phase == 1)
+	var n0: int = b.shards.size()
+	b.damage_part(5, 99)
+	_check("last tentacle gone -> shield shatters (phase %d, shards +%d)" % [b.phase, b.shards.size() - n0], b.phase == 2 and b.shards.size() - n0 >= 10)
+
+	# 첫 타 여유: 단독 내려치기는 판정까지 LEAD_K 배, 연타의 두 번째부터는 원래 박자
+	main.reset_run()
+	b.next_t = 99.0
+	var h = b.Hammer.new(1)
+	b.start_attack(h)
+	h.claim()
+	var t_first := _frames_to_strike(h, Vector2(300, -1300))
+	main.reset_run()
+	b.next_t = 99.0
+	h = b.Hammer.new(1)
+	h.lead = false
+	b.start_attack(h)
+	h.claim()
+	var t_plain := _frames_to_strike(h, Vector2(300, -1300))
+	_check("first hit telegraphs longer (%d vs %d frames)" % [t_first, t_plain], absf(float(t_first) / t_plain - h.LEAD_K) < 0.08)
+
+	# 연타 3종: 끝까지 돌고, 동시에 예고하는 촉수는 최대 2개, 두 번째 타는 첫 타가 내려친 뒤에 시작
+	for kind in ["vortex", "march", "flurry"]:
+		main.reset_run()
+		b.next_t = 99.0
+		var ready: Array[int] = [0, 1, 2, 3, 4, 5]
+		var c = b._combo(kind, ready, Vector2(300, -1300))
+		b.start_attack(c)
+		var most := 0
+		var early := false
+		for k in 900:
+			main.hitstop = 0
+			p.position = Vector2(300, -1300)
+			p.vel = Vector2.ZERO
+			p.invuln = 99.0
+			main._physics_process(DT)
+			var warn := 0
+			for a in b.lingering:
+				if a.melee_warning():
+					warn += 1
+			most = maxi(most, warn)
+			if c.fired >= 2 and c.first != null and c.first.lead:
+				early = true
+			if b.atk == null:
+				break
+		_check("%s combo: %d hits, ends, <=2 telegraphing, waits for the first hit" % [kind, c.fired], b.atk == null and c.fired == b.COMBO_HITS and most >= 1 and most <= 2 and not early)
+
+	# 차지 완료 순간 짧은 슬로우
+	main.reset_run()
+	p.reset(Vector2(0, -1300), false)
+	main.slowmo = 0.0
+	p.press_dash()
+	for k in int(p.charge_need() / DT) + 3:
+		main.hitstop = 0
+		main._physics_process(DT)
+		if main.slowmo > 0.0:
+			break
+	_check("charge complete -> brief slow-mo (%.2f)" % main.slowmo, main.slowmo > 0.0 and main.slowmo <= main.CHARGED_SLOW)
+	p.release_dash()
+	main.reset_run()
+
+
+## 내려치기가 판정을 낼 때까지 프레임 수 (플레이어는 무적으로 고정)
+func _frames_to_strike(h, at: Vector2) -> int:
+	for k in 600:
+		main.hitstop = 0
+		main.player.position = at
+		main.player.vel = Vector2.ZERO
+		main.player.invuln = 99.0
+		main._physics_process(DT)
+		if h.phase == "strike":
+			return k
+	return -1
+
+
 ## v0.47: 크라켄(촉수 요격·구동부·조이기·방전 그물·소용돌이), 강습 코어, 코어가 열리는 중에도 맞음 + 코어 안에 박히지 않음
 func _v047_test() -> void:
 	main.start_stage(2)
 	var b = main.boss
 	var p = main.player
 	_check("stage 3 is the kraken (%s, parts %d, hp %d)" % [b.get_script().resource_path.get_file(), b.part_count(), b.part_hp[0]],
-		b.get_script().resource_path.ends_with("kraken.gd") and b.part_count() == 6 and b.part_hp[0] == 20 and b.phase == 1)
+		b.get_script().resource_path.ends_with("kraken.gd") and b.part_count() == 6 and b.part_hp[0] == 16 and b.phase == 1)
 	b.next_t = 99.0
 
 	# 몸통 내려치기: 들어 올려 멈춘 동안(set) 차지 강습으로 요격 → 그 촉수 구동부 -8, 부딪힌 방향으로 크게 튕겨 나감
@@ -1464,11 +1572,14 @@ func _v047_test() -> void:
 	p.invuln = 0.0
 	p.reset(bar_mid + Vector2(0, 150), false)
 	var hp1: int = b.part_hp[1]
+	var core1: int = b.core.armor_hp
 	_dash_dir("charge", Vector2.UP)
 	for k in 6:
 		main.hitstop = 0
 		main._physics_process(DT)
 	_check("hammer intercept: drive unit -8 (hp %d -> %d), tentacle recoils" % [hp1, b.part_hp[1]], b.part_hp[1] == hp1 - 8 and s.phase == "recoil")
+	_check("intercept also hurts the shielded core, with a zap to it (core %d -> %d, zaps %d)" % [core1, b.core.armor_hp, b.zaps.size()], b.core.armor_hp == core1 - 8 and b.zaps.size() == 1)
+	_check("intercept gives a quick charge (need %.2f)" % p.charge_need(), p.quick_t > 0.0 and absf(p.charge_need() - p.stats.charge_time * 0.5) < 0.001)
 	for k in 30:
 		main.hitstop = 0
 		main._physics_process(DT)
@@ -1733,11 +1844,12 @@ func _v047_test() -> void:
 	for i in 6:
 		b.damage_part(i, 99)
 	_check("all drive units -> mantle opens", b.phase == 2)
-	_step(int((b.OPEN_TIME + 1.0 + b.REGROW) / DT))
+	_step(int((b.SHIELD_SHATTER + 1.0 + b.REGROW) / DT))
 	_check("kraken core phase, two tentacles regrown (phase %d, busy %s)" % [b.phase, str(b.busy)], b.phase == 3 and b.tent_ready(2) and b.tent_ready(3) and not b.tent_ready(0))
 	b.next_t = 99.0
 	b.atk = null
-	var vx = b.Vortex.new([2, 3])
+	var rr: Array[int] = [2, 3]
+	var vx = b._combo("vortex", rr, Vector2(300, -1200))
 	b.start_attack(vx)
 	var most := 0
 	for k in 600:
@@ -1754,7 +1866,13 @@ func _v047_test() -> void:
 		if b.atk == null:
 			break
 	_check("vortex finishes with at most 2 tentacles telegraphing at once (max %d)" % most, b.atk == null and most >= 1 and most <= 2)
-	_check("core phase: the core is the target", not b.strike_hit(b.CORE_POS, 10.0).is_empty())
+	_check("core phase: the core is the target", not b.strike_hit(b.CORE_POS, 10.0).is_empty() and b.strike_hit(b.CORE_POS, 10.0)["kind"] == "core")
+	var ca: int = b.core.armor_hp
+	_check("core phase: intercepting a regrown tentacle hurts the core (%d)" % ca, not b.intercept_core(2, 8) and b.core.armor_hp == ca - 8)
+
+	_kraken_shield_test()
+	b = main.boss
+	p = main.player
 
 	# 기본 시스템: 요격에 성공하면 차지 쿨다운이 바로 초기화된다 (코어 없이도). 강습 코어는 연쇄 요격 피해 +2 씩 (최대 +6)
 	p.reset(Vector2(300, -1000), false)

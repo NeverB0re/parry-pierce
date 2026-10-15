@@ -26,6 +26,10 @@ var plan := [
 	["core", "core", 60, Vector2(250, -1800), Vector2(0, -2100), 0.3],
 	["regrow", "regrow", 50, Vector2(250, -1300), Vector2(0, -1900), 0.3],
 	["vortex", "vortex", 80, Vector2(250, -1300), Vector2(0, -1600), 0.24],
+	["zap", "zap", 24, Vector2(250, -1300), Vector2(0, -1900), 0.3],
+	["shatter", "shatter", 14, Vector2(250, -1300), Vector2(0, -2100), 0.3],
+	["march", "march", 150, Vector2(-300, -1300), Vector2(0, -1600), 0.24],
+	["flurry", "flurry", 150, Vector2(300, -1300), Vector2(0, -1600), 0.24],
 	["close", "idle", 30, Vector2(300, -1500), Vector2(-150, -1700), 0.6],
 ]
 var idx := 0
@@ -71,7 +75,7 @@ func _process(_d: float) -> bool:
 				a = b.Hammer.new(1)
 				b.start_attack(a)
 				a.claim()
-				for k in 75:
+				for k in 115:
 					b.step(1.0 / 60.0, pl[3])
 				var hb = b.clash_box(pl[3])
 				hb["dir"] = Vector2(0.3, -1).normalized()
@@ -82,13 +86,22 @@ func _process(_d: float) -> bool:
 					b.damage_part(1, 99)
 				a = null
 			"sweep": a = b.Lash.new(1)
+			"zap":
+				b.damage_part(1, 8)
+				b.damage_part(4, 16)
+			"shatter":
+				for i in 6:
+					b.damage_part(i, 99)
+			"march", "flurry":
+				var rr: Array[int] = [0, 1, 2, 3, 4, 5]
+				a = b._combo(pl[1], rr, pl[3])
 			"constrict": a = b.Constrict.new(0, 1)
 			"net": a = b.Net.new(true)
 			"ink": a = b.Fan.new(-1, b.SIPHON, p.position)
 			"broken":
-				b.damage_part(0, 99)
-				b.damage_part(3, 99)
-				b.damage_part(4, 12)
+				b.damage_part(0, 16)
+				b.damage_part(3, 16)
+				b.damage_part(4, 8)
 			"core", "vortex", "regrow":
 				for i in 6:
 					b.damage_part(i, 99)
@@ -100,7 +113,8 @@ func _process(_d: float) -> bool:
 				elif pl[1] == "vortex":
 					b.grown[2] = 1.0
 					b.grown[3] = 1.0
-					a = b.Vortex.new([2, 3])
+					var rr: Array[int] = [2, 3]
+					a = b._combo("vortex", rr, pl[3])
 		if a != null:
 			b.start_attack(a)
 			if a.has_method("claim"):

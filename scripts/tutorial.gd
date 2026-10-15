@@ -84,11 +84,12 @@ func _pages() -> Dictionary:
 			],
 		},
 		"tentacle": {
-			"title": Loc.t("크라켄 — 촉수를 요격해 끊기"),
+			"title": Loc.t("크라켄 — 촉수를 요격해 외눈을 부수기"),
 			"lines": [
-				Loc.t("촉수 공격은 모두 근접공격입니다. 촉수가 멈춰 붉게 점멸할 때 차지 강습으로 요격하면 촉수가 튕겨 나가고 구동부(촉수의 빛나는 점)에 큰 피해가 들어갑니다. 차지 중에는 요격할 수 있는 촉수가 밝게 빛납니다."),
-				Loc.t("요격하면 차지 쿨다운이 바로 돌아오니 연속으로 요격하세요."),
-				Loc.t("구동부가 부서지면 촉수가 떨어져 나갑니다. 촉수를 잃을수록 남은 촉수는 빨라지고, 코어가 드러나면 일부가 다시 자랍니다."),
+				Loc.t("표적은 방어막에 싸인 외눈 하나입니다. 돌진과 차지 강습은 방어막에 막히고, 리버스 드라이브만 뚫고 들어갑니다."),
+				Loc.t("촉수가 멈춰 붉게 점멸할 때 차지 강습으로 요격하면 외눈에 피해가 들어갑니다. 두 번 요격한 촉수는 떨어져 나갑니다."),
+				Loc.t("요격하면 차지 쿨다운이 돌아오고 다음 차지가 빨라집니다. 연타는 첫 타를 요격해 이어 가세요."),
+				Loc.t("촉수를 모두 끊으면 방어막이 깨지고 외눈을 직접 노릴 수 있습니다."),
 				Loc.t("보라색 방전 그물은 패리할 수 없습니다. 보라 띠가 곧 맞는 범위이니 돌진으로 통과하세요. 화면 밖에서 다가오면 가장자리에 경고가 뜹니다."),
 			],
 		},
@@ -625,7 +626,7 @@ class Stage extends Control:
 			if u >= 1.5 and u < 2.4:
 				_mouse(Vector2(size.x - 40.0, 60.0), true, false)
 
-	## 촉수 요격: 겨누고 멈춘 촉수에 차지 강습 → 움츠러들고 구동부 피해 → 세 번이면 축 늘어진다
+	## 촉수 요격: 겨누고 멈춘 촉수에 차지 강습 → 움츠러들고 전류가 방어막 속 외눈으로 → 끊어진 촉수는 떨어져 나간다
 	func _tentacle() -> void:
 		var T := 7.0
 		var tt := fmod(t, T)
@@ -649,10 +650,15 @@ class Stage extends Control:
 				draw_line(pts[q], pts[q + 1], col, lerpf(26.0, 10.0, q / 11.0))
 		var drv := pts[4]
 		var flash := _smooth(3.0, 3.1, tt) * (1.0 - _smooth(3.1, 3.6, tt))
-		if not limp:
-			draw_circle(drv, 11.0, Color(1.0, 0.42, 0.22).lerp(Color.WHITE, flash))
-			_ring(drv, 16.0, Color(0.62, 0.3, 0.14), 2.0)
-		else:                                          # 떨어져 나간 자리
+		var eye := Vector2(150, 40)                    # 방어막 속 외눈: 요격하면 전류가 흘러 번쩍이고 금이 간다
+		draw_circle(eye, 34.0, Color(0.45, 0.95, 1.0, 0.1))
+		_ring(eye, 34.0, Color(0.45, 0.95, 1.0, 0.7), 2.0)
+		draw_rect(Rect2(eye.x - 16.0, eye.y - 5.0, 32.0, 10.0), Color(1.0, 0.42, 0.22).lerp(Color.WHITE, flash))
+		if tt >= 3.0:
+			draw_line(eye + Vector2(-6, -5), eye + Vector2(-14, -16), Color(1.0, 0.55, 0.22), 2.0)
+		if flash > 0.0:
+			draw_line(drv, eye, Color(1.0, 0.9, 0.6, flash), 3.0)
+		if limp:                                       # 떨어져 나간 자리
 			draw_circle(root + Vector2(0, 30), 14.0, Color(1.0, 0.42, 0.22, 0.35))
 		if tt >= 1.0 and tt < 2.9:                     # 겨누고 멈춤: 내리꽂힐 띠
 			var blink := 0.5 + 0.5 * sin(t * 24.0)
@@ -675,11 +681,11 @@ class Stage extends Control:
 		elif tt < 3.0:
 			_caption(Loc.t("멈춰 붉게 점멸 = 차지 강습으로 요격!"), Color(1.0, 0.8, 0.6))
 		elif tt < 5.0:
-			_caption(Loc.t("요격! 차지 쿨다운 초기화 → 바로 다음 요격"), GOLD)
+			_caption(Loc.t("요격! 외눈에 피해 + 다음 차지가 빨라진다"), GOLD)
 			_spark(tip, _smooth(3.0, 3.6, tt), Color(1.0, 0.85, 0.5), 14, 50.0)
 			_spark(drv, _smooth(3.0, 3.6, tt), Color(1.0, 0.6, 0.3), 8, 34.0)
 		else:
-			_caption(Loc.t("구동부가 부서진 촉수는 뿌리째 떨어져 나간다"), Color(0.85, 0.9, 1.0))
+			_caption(Loc.t("두 번 요격한 촉수는 떨어져 나간다"), Color(0.85, 0.9, 1.0))
 		if tt >= 1.4 and tt < 2.6:
 			_mouse(Vector2(size.x - 40.0, 60.0), true, false)
 

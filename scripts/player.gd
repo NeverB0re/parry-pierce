@@ -53,6 +53,7 @@ const CORE_REBOUND_SHIELD := 0.5 # 그때의 튕김 무적
 const CHAIN_TIME := 4.0          # 강습 코어: 이 시간 안에 다음 요격이 없으면 연쇄가 끊긴다
 const CHAIN_BONUS := 2           # 연쇄 한 단계당 요격 피해 +2
 const CHAIN_MAX := 3
+const QUICK_TIME := 3.0          # 요격 성공: 이 시간 안의 다음 차지는 절반 시간에 모인다 (동조와 달리 피해 배율 없음)
 const STRIKE_PASS := 0.25         # 적중 직후 이 시간 안에 시작한 일반 돌진은, 방금 맞힌 표적의 원 안쪽에서만 충돌하지 않는다 (적 안에서 빠져나오는 돌진이 멈추지 않게)
 const SMALL_GUARD := 0.25        # 일반 돌진이 끝난 직후 이 시간 동안 잔탄에 맞지 않는다 (옅은 실드)
 const HEAT_RING_R := 64.0        # 잔탄 체력 링 (초기 빌드의 외부 시스템 원형 체력바 모양): 돌진 쿨다운 링 바깥
@@ -106,6 +107,7 @@ var charge_t := 0.0
 var charged_notified := false
 var dash_cd := 0.0
 var charge_cd := 0.0             # 차지 강습 후 다음 차지가 완료될 수 있을 때까지
+var quick_t := 0.0               # 빠른 차지 남은 시간 (요격 성공으로 얻는다)
 var chain := 0                   # 강습 코어: 연쇄 요격 횟수 (요격 피해 +2 씩, 최대 +6). 시간이 지나거나 맞으면 끊긴다
 var chain_t := 0.0
 var heat_vis := 0.0              # 잔탄 체력 링이 보이는 남은 시간 (과열 중엔 계속 가득)
@@ -162,6 +164,7 @@ func reset(pos: Vector2, platform := false) -> void:
 	bounce_rise = 0.0
 	parry_hit = false
 	charge_cd = 0.0
+	quick_t = 0.0
 	chain = 0
 	chain_t = 0.0
 	heat_vis = 0.0
@@ -228,9 +231,9 @@ func charge_view() -> float:
 	return clampf((charge_t - need * 0.5) / (need * 0.5), 0.0, 1.0)
 
 
-## 차지 완료에 필요한 시간 (퍼펙트 회피 버프가 있으면 절반)
+## 차지 완료에 필요한 시간 (퍼펙트 회피 버프나 요격 직후의 빠른 차지가 있으면 절반)
 func charge_need() -> float:
-	return stats.charge_time * (0.5 if buffed else 1.0)
+	return stats.charge_time * (0.5 if buffed or quick_t > 0.0 else 1.0)
 
 
 func is_charged() -> bool:
@@ -300,6 +303,7 @@ func _dash(kind: String) -> void:
 	dash_cd = stats.dash_cooldown
 	if kind == "charge":
 		charge_cd = stats.charge_cooldown
+		quick_t = 0.0
 	evade_window = stats.perfect_evade_window if kind == "dash" else 0.0
 	evade_rewarded = false
 	vel = aim * spd
@@ -502,6 +506,8 @@ func step(dt: float) -> void:
 
 	dash_cd = maxf(0.0, dash_cd - dt)
 	charge_cd = maxf(0.0, charge_cd - dt)
+	if not charging:                              # 모으는 중에는 줄지 않는다 (쏠 때 소모)
+		quick_t = maxf(0.0, quick_t - dt)
 	small_guard = maxf(0.0, small_guard - dt)
 	strike_pass_t = maxf(0.0, strike_pass_t - dt)
 	evade_window = maxf(0.0, evade_window - dt)
@@ -708,7 +714,7 @@ func _on_strike(hit: Dictionary) -> void:
 	if frozen:
 		return
 	bounce_off(dir, kind)
-	if hit.get("kind", "") == "core":            # 큰 코어: 튕김이 껍질 안쪽(예: 아래에서 맞혀 위로)을 향하면 바깥으로 되튄다 (코어 안에 박히지 않게)
+	if hit.get("kind", "") == "core" or hit.get("kind", "") == "shield":   # 큰 코어·방어막: 튕김이 껍질 안쪽(예: 아래에서 맞혀 위로)을 향하면 바깥으로 되튄다 (코어 안에 박히지 않게)
 		var n: Vector2 = hit["n"]
 		var vn := vel.dot(n)
 		if vn < 0.0:
@@ -760,6 +766,7 @@ func on_heat_break() -> void:
 ## 요격 성공 (main.gd): 기본 시스템 — 차지 쿨다운이 바로 초기화된다 (연속 요격). 강습 코어가 있으면 연쇄 요격 단계도 오른다
 func on_intercept() -> void:
 	charge_cd = 0.0
+	quick_t = QUICK_TIME
 	if stats.assault:
 		chain = mini(chain + 1, CHAIN_MAX)
 		chain_t = CHAIN_TIME
@@ -1082,6 +1089,14 @@ func _draw() -> void:
 			var qf := 1.0 if chain_t > 1.0 else 0.4 + 0.6 * float(int(Time.get_ticks_msec() / 90) % 2)   # 끝나기 전 깜빡임
 			draw_circle(qp, 4.5, Color(C_ATTACK, 0.9 * qf))
 			draw_circle(qp, 9.0, Color(C_ATTACK, 0.25 * qf))
+
+	# 빠른 차지(요격 성공): 기체 둘레를 도는 주황 갈고리 둘 (동조의 청백 고리와 구분). 끝나기 전 깜빡임
+	if quick_t > 0.0 and (quick_t > 0.8 or int(Time.get_ticks_msec() / 90) % 2 == 0):
+		var qa2 := Time.get_ticks_msec() * 0.012
+		for k in 2:
+			var a0 := qa2 + k * PI
+			draw_arc(Vector2.ZERO, 36.0, a0, a0 + 1.1, 10, Color(C_ATTACK, 0.85), 3.5)
+			draw_circle(Vector2.from_angle(a0 + 1.1) * 36.0, 4.0, Color(1.0, 0.9, 0.6))
 
 	# 차지 쿨다운: 기체 아래의 주황 막대가 차오른다 (다 차야 다음 차지가 완료된다). 돌진 쿨다운 링과 겹치지 않게 따로 둔다
 	if charge_cd > 0.0:

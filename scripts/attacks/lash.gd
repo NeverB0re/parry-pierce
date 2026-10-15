@@ -56,7 +56,7 @@ func _line(a: float, reach := REACH) -> PackedVector2Array:
 
 
 func _act(_dt: float, ppos: Vector2) -> void:
-	var tm: float = boss.tempo()
+	var tm: float = _tempo()
 	if _from.is_empty():
 		_from = boss.spines[tents[0]].duplicate()
 		aim_at(ppos)

@@ -1,11 +1,14 @@
 extends "res://scripts/colossus_base.gd"
 ## 콜로서스 ③ 크라켄 (차지 강습 + 요격 중심형). 천장에 매달린 거대한 기계 문어형 채굴함. 기계 촉수 8개 중 6개가 싸우고, 바깥 2개는 배경이다.
-## 핵심: 촉수 공격(근접, 회피 불가)이 위치를 잡고 멈춘 순간을 차지 강습으로 요격하면, 그 촉수의 구동부에 바로 피해가 들어간다.
-## 페이즈: 1) 외부 시스템 = 촉수 6개의 구동부(체력 20). 구동부가 부서진 촉수는 뿌리째 떨어져 나간다. 촉수를 잃을수록 남은 촉수가 빨라진다
-##         2) 개방 — 외투막 한가운데가 좌우로 열린다
-##         3) 동력 코어 — 장갑에 싸인 코어. 떨어져 나간 촉수 둘(REVIVED)이 뿌리에서 다시 자라난다 (표적은 아님, 요격하면 공격만 끊김)
+## 표적은 외투막 한가운데의 외눈(동력 코어) 하나뿐. 촉수에는 노릴 곳이 없다 (돌진은 쉬는 촉수를 그냥 통과한다).
+## 핵심: 촉수 공격(근접, 회피 불가)이 위치를 잡고 멈춘 순간을 차지 강습으로 요격하면, 그 촉수(구동부, 2번 요격이면 끊어짐)와 코어에 함께 피해가 들어간다.
+## 페이즈: 1) 방어막 — 코어가 방어막에 싸여 있다. 돌진·차지 강습은 튕겨 나오고(피해 없음), 리버스 드라이브와 반사탄은 뚫고 코어에 피해.
+##            코어에 쌓인 피해는 균열·깜빡임·연기로 보인다(체력바 없음). 방어막 동안 코어는 SHIELD_FLOOR 아래로는 깎이지 않는다
+##         2) 촉수 6개가 모두 떨어져 나가면 방어막이 저절로 산산조각 난다
+##         3) 동력 코어 — 직접 노릴 수 있다. 떨어져 나간 촉수 둘(REVIVED)이 다시 자라나고, 요격하면 코어에 바로 피해
 ## 공격: 몸통 내려치기 · 압착(촉수 둘) · 추적 감아치기 · 휩쓸기 · 조이기(촉수 2개 이상 잃은 뒤) · 먹물 포(부채 탄막, 가운데 주탄)
-##       · 방전 그물(패리 불가, 드물게) · 소용돌이(코어 페이즈 전용, 연속 내려치기). 동시에 예고하는 촉수는 최대 2개.
+##       · 방전 그물(패리 불가, 드물게) · 연타 3종(소용돌이·행진·난타, combo.gd). 동시에 예고하는 촉수는 최대 2개.
+## 근접 패턴의 첫 타는 예고가 느리다 (tentacle.gd LEAD_K).
 ## 촉수 모양은 척추(마디 N 개)로 그린다: 강철 마디판 + 관절 링 + 유압 피스톤 + 집게 끝. 쉬는 촉수는 크라켄이, 공격 중인 촉수는 그 공격 모듈(attacks/tentacle.gd)이 움직인다.
 ## 바닥 y=0, 위쪽이 음수. 몸 중심 x=0.
 
@@ -15,24 +18,20 @@ const Clap := preload("res://scripts/attacks/clap.gd")
 const Chase := preload("res://scripts/attacks/chase.gd")
 const Lash := preload("res://scripts/attacks/lash.gd")
 const Constrict := preload("res://scripts/attacks/constrict.gd")
-const Vortex := preload("res://scripts/attacks/vortex.gd")
+const Combo := preload("res://scripts/attacks/combo.gd")
 const Net := preload("res://scripts/attacks/net.gd")
 const Fan := preload("res://scripts/attacks/fan.gd")
 
 # ── 구조 ───────────────────────────────────────────────
-const CORE_POS := Vector2(0, -2520)          # 동력 코어 중심 (외투막 안)
-const DOOR_RECT := Rect2(-240, -2790, 480, 540)
-const ARMOR_HP := 170
-const PLATE_SITES := 10
+const CORE_POS := Vector2(0, -2520)          # 외눈 = 동력 코어 중심 (외투막 한가운데)
+const ARMOR_HP := 180                        # 코어 체력 (장갑판 없이 균열로 보인다). 다 깎이면 한 발 더 맞아야 부서진다 (armored_core.gd)
+const SHIELD_FLOOR := 60                     # 방어막 동안 코어는 이 아래로 깎이지 않는다 (마지막 페이즈에 할 일을 남긴다)
+const SHIELD_R := 270.0                      # 방어막 반지름
+const SHIELD_SHATTER := 1.6                  # 방어막이 깨지는 연출 시간 (페이즈 2)
 const CORE_R := 60.0
-const CORE_OUTLINE := [
-	Vector2(0, -262), Vector2(78, -226), Vector2(145, -173), Vector2(189, -94), Vector2(205, 0), Vector2(189, 94),
-	Vector2(145, 173), Vector2(78, 226), Vector2(0, 262), Vector2(-78, 226), Vector2(-145, 173), Vector2(-189, 94),
-	Vector2(-205, 0), Vector2(-189, -94), Vector2(-145, -173), Vector2(-78, -226),
-]
-const PLATE_SITE_BOX := Rect2(-200, -240, 400, 480)
+const EYE_RX := 200.0                        # 눈알(코어 껍질) 반지름 (가로·세로)
+const EYE_RY := 150.0
 const SIPHON := Vector2(0, -2120)            # 먹물 포 (외투막 아래 분사구)
-const EYES := [Vector2(-350, -2420), Vector2(350, -2420)]
 
 # ── 촉수 ───────────────────────────────────────────────
 const N := 12                                # 척추 마디 수
@@ -46,14 +45,16 @@ const REGROW := 1.6                          # 다시 자라나는 시간
 const W_ROOT := 100.0                        # 촉수 굵기 (뿌리 → 끝)
 const W_TIP := 40.0
 const PART_AT := 3                           # 구동부가 달린 척추 마디
-const PART_HP := 20
+const PART_HP := 16                         # 요격 2번이면 끊어진다
 const PART_R := 52.0
-const OPEN_TIME := 1.6
+const ZAP_TIME := 0.4                        # 요격 피해가 촉수 뿌리에서 코어로 흐르는 전류 줄기
 
 # ── 공격 고르기 ────────────────────────────────────────
 const GAP := Vector2(0.7, 1.2)
 const GAP_CORE := Vector2(0.45, 0.85)
 const SPECIAL_EVERY := 4                     # 방전 그물(패리 불가)은 공격 이만큼마다 (드물게)
+const COMBO_HITS := 3                        # 연타 타수
+const MARCH_X := [-640.0, 0.0, 640.0]        # 행진: 이 자리를 한쪽 끝부터 차례로 내려친다
 
 # ── 색 ─────────────────────────────────────────────────
 const C_BODY := Color(0.06, 0.08, 0.09)
@@ -61,7 +62,6 @@ const C_BODY_DARK := Color(0.035, 0.05, 0.06)
 const C_RIM := Color(0.4, 0.53, 0.55)
 const C_STEEL := Color(0.14, 0.17, 0.19)     # 촉수 마디판
 const C_PISTON := Color(0.62, 0.66, 0.68)
-const C_EYE := Color(1.0, 0.78, 0.42)
 const C_PARRY := Color(1.0, 0.88, 0.35)
 const C_GLOW := Color(1.0, 0.78, 0.42)
 
@@ -76,16 +76,37 @@ var siphon_glow := 0.0
 var debris: Array[Dictionary] = []           # 떨어져 나간 촉수 조각
 var last := ""
 var since_special := 0
+var zaps: Array[Dictionary] = []             # 코어로 흐르는 전류 줄기 {from, t}
+var shield_flash := 0.0                      # 방어막에 무언가 부딪힘 (번쩍)
+var shield_hit_n := Vector2.UP               # 부딪힌 쪽
+var cracks: Array[PackedVector2Array] = []   # 코어 균열선 (피해가 쌓일수록 앞에서부터 더 많이 그린다)
 
 
 func _init() -> void:
-	open_time = OPEN_TIME
+	open_time = SHIELD_SHATTER
 	attack_gap = GAP
 	core_assist_r = 220.0
 
 
 func _ready() -> void:
-	core = ArmoredCore.new(self, CORE_POS, CORE_OUTLINE, ARMOR_HP, PLATE_SITE_BOX, PLATE_SITES, 37)
+	var outline := []
+	for k in 20:
+		var a := k * TAU / 20.0
+		outline.append(Vector2(cos(a) * EYE_RX, sin(a) * EYE_RY))
+	core = ArmoredCore.new(self, CORE_POS, outline, ARMOR_HP, Rect2(), 0, 37)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 91
+	for k in 10:                                         # 균열: 동공 가장자리에서 바깥으로 갈라지는 번개 모양
+		var a := k * TAU / 10.0 + rng.randf_range(-0.25, 0.25)
+		var p := Vector2.from_angle(a) * CORE_R * 0.8
+		var line := PackedVector2Array([p])
+		var d := Vector2.from_angle(a)
+		for s in 4:
+			d = d.rotated(rng.randf_range(-0.6, 0.6))
+			p += d * rng.randf_range(24.0, 38.0)
+			p = Vector2(clampf(p.x, -EYE_RX * 0.9, EYE_RX * 0.9), clampf(p.y, -EYE_RY * 0.88, EYE_RY * 0.88))
+			line.append(p)
+		cracks.append(line)
 	reset()
 
 
@@ -109,6 +130,75 @@ func reset() -> void:
 	debris.clear()
 	last = ""
 	since_special = 0
+	zaps.clear()
+	shield_flash = 0.0
+
+
+# ── 방어막 · 외눈 코어 ─────────────────────────────────
+## 표적은 코어 하나. 페이즈 1은 방어막 원({kind:"shield"}), 그 뒤는 눈알 껍질(core.hit). 촉수에는 표적이 없다
+func strike_hit(p: Vector2, r: float) -> Dictionary:
+	if dead:
+		return {}
+	if phase == 1:
+		var d := p - CORE_POS
+		if d.length() < r + SHIELD_R:
+			return {"kind": "shield", "n": d.normalized() if d.length() > 0.1 else Vector2.DOWN}
+		return {}
+	return core.hit(p, r)
+
+
+func assist_targets(from := Vector2.ZERO) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if dead:
+		return out
+	out.append({"pos": CORE_POS, "r": SHIELD_R if phase == 1 else core_assist_r})
+	for a in active_attacks():
+		a.assist_targets(from, out)
+	return out
+
+
+func target_pos(_from: Vector2) -> Vector2:
+	return CORE_POS
+
+
+## 방어막을 뚫은 피해 (리버스 드라이브·반사탄). 돌진·차지 강습은 main.gd 가 먼저 막는다
+func damage(hit: Dictionary, dmg: int) -> bool:
+	if hit["kind"] == "shield":
+		shield_flash = 1.0
+		shield_hit_n = hit["n"]
+		_feed_core(dmg)
+		return false
+	return super(hit, dmg)
+
+
+## 방어막 너머 코어에 피해를 쌓는다 (SHIELD_FLOOR 아래로는 안 깎인다). 균열 단계가 오르면 CORE_STAGE 이벤트(흔들림·파편)
+func _feed_core(dmg: int) -> void:
+	var d := mini(dmg, core.armor_hp - SHIELD_FLOOR)
+	if d > 0:
+		core.damage(d)
+	else:
+		core.flash = 1.0
+
+
+## 촉수 요격 피해 (main.gd _clash): 촉수 구동부 + 코어. 뿌리에서 코어로 전류 줄기가 흐른다
+func damage_part(i: int, dmg: int) -> bool:
+	if phase == 1 and part_alive(i):
+		_feed_core(dmg)
+		zaps.append({"from": i, "t": 0.0})
+	var broke := super(i, dmg)
+	if broke and phase == 2:                         # 마지막 촉수 → 방어막이 산산조각
+		shield_flash = 1.0
+		for k in 14:
+			var a := k * TAU / 14.0 + randf_range(-0.1, 0.1)
+			var at := CORE_POS + Vector2.from_angle(a) * SHIELD_R
+			_spawn_shard(at, randf_range(18.0, 30.0), Vector2.from_angle(a) * randf_range(500.0, 900.0) + Vector2(0, -300))
+	return broke
+
+
+## 코어 페이즈: 다시 자란 촉수를 요격 → 코어에 바로 피해. 부서지면 true (승리)
+func intercept_core(i: int, dmg: int) -> bool:
+	zaps.append({"from": i, "t": 0.0})
+	return damage_core(dmg)
 
 
 # ── 외부 시스템 ────────────────────────────────────────
@@ -254,6 +344,11 @@ func _step_effects(dt: float) -> void:
 
 func _step_phase(dt: float) -> void:
 	attack_gap = GAP_CORE if phase == 3 else GAP
+	shield_flash = maxf(0.0, shield_flash - dt * 3.0)
+	for z in zaps.duplicate():
+		z["t"] = float(z["t"]) + dt
+		if z["t"] >= ZAP_TIME:
+			zaps.erase(z)
 	siphon_glow = move_toward(siphon_glow, 0.0, dt * 2.0)
 	if phase == 3:                               # 코어 페이즈: 촉수 둘이 뿌리에서 다시 자라난다
 		for i in REVIVED:
@@ -279,15 +374,16 @@ func _choose(ppos: Vector2) -> void:
 	var pool: Array[String] = ["ink"]
 	if not ready.is_empty():
 		pool.append_array(["hammer", "hammer", "chase", "sweep"])
-		if hard:
-			pool.append_array(["vortex", "vortex"])
 		if ready.size() >= 2:
-			pool.append("clap")
+			pool.append_array(["clap", "vortex", "march", "flurry"])
+			if hard:
+				pool.append_array(["vortex", "flurry"])
 			if hard or parts_left() <= 4:
 				pool.append_array(["constrict", "constrict"])
 	while pool.size() > 1 and pool.has(last):
 		pool.erase(last)
-	match pool[randi() % pool.size()]:
+	var kind: String = pool[randi() % pool.size()]
+	match kind:
 		"hammer":
 			_grab_start("hammer", Hammer.new(_nearest(ready, ppos.x)))
 		"chase":
@@ -300,10 +396,46 @@ func _choose(ppos: Vector2) -> void:
 		"constrict":
 			var lr := _outer_pair(ready)
 			_grab_start("constrict", Constrict.new(lr[0], lr[1]))
-		"vortex":
-			_pick("vortex", Vortex.new(ready))
+		"vortex", "march", "flurry":
+			_pick(kind, _combo(kind, ready, ppos))
 		_:
 			_pick("ink", Fan.new(-1, SIPHON, ppos, hard))
+
+
+## 연타: 촉수를 번갈아 COMBO_HITS 번. 그때 쓸 수 없는 촉수면 같은 무리의 다른 촉수, 그것도 없으면 그 타는 건너뛴다
+##  vortex 소용돌이 = 빠른 내려치기가 매번 플레이어를 겨눈다 / march 행진 = 정해진 자리를 플레이어에게서 먼 쪽부터 차례로 내려친다
+##  flurry 난타 = 좌우 촉수가 번갈아 휩쓴다
+func _combo(kind: String, ready: Array[int], ppos: Vector2) -> Combo:
+	var lr := _outer_pair(ready)
+	var xs: Array = MARCH_X.duplicate()
+	if ppos.x < 0.0:                                         # 먼 쪽부터 다가온다
+		xs.reverse()
+	var makers := []
+	for k in COMBO_HITS:
+		var want: int = lr[k % 2]
+		var x: float = xs[k]
+		makers.append(func():
+			var i := _free_tent(want, lr)
+			if i < 0:
+				return null
+			match kind:
+				"march":
+					return Hammer.new(i, true, 0.0, x)
+				"flurry":
+					var a = Lash.new(i)
+					a.pace = 0.7
+					return a
+			return Hammer.new(i, true))
+	return Combo.new(kind, makers, 0.95 if kind == "flurry" else 0.8)
+
+
+func _free_tent(want: int, alts: Array[int]) -> int:
+	if tent_ready(want):
+		return want
+	for i in alts:
+		if tent_ready(i):
+			return i
+	return -1
 
 
 func _pick(kind: String, a) -> void:
@@ -381,10 +513,11 @@ func _draw() -> void:
 	for k in 2:
 		_draw_mech(bg_spines[k], 0.85, C_BODY_DARK, false)
 	_draw_mantle()
-	_draw_door()
+	_draw_core()
 	for i in 6:
 		_draw_arm(i)
-	_draw_part_marks()
+	_draw_shield()
+	_draw_zaps()
 	_draw_debris()
 	_draw_shards()
 	for a in active_attacks():
@@ -406,6 +539,9 @@ func _draw_arm(i: int) -> void:
 	var striking: bool = m != null and m.delay <= 0.0 and m._harmful()
 	var lit: bool = m != null and focus_glow > 0.0 and m.delay <= 0.0 and m._clashable()
 	var revived := phase >= 2 and REVIVED.has(i) and not dead
+	if phase == 1 and part_stage[i] >= 2:                 # 한 번 요격당한 촉수: 뿌리 관절에서 불꽃이 튄다 (다음 요격이면 끊어진다)
+		if int(t * 8.0 + i) % 3 == 0:
+			draw_circle(spines[i][PART_AT] + Vector2(sin(t * 23.0 + i) * 18.0, cos(t * 19.0) * 18.0), 3.0, Color(1.0, 0.85, 0.5))
 	_draw_mech(spines[i], 1.0, C_STEEL, revived)
 	if striking or lit:                                  # 판정이 있는 공격 중 = 금색(패리할 수 있음) / 차지·조준 중 요격할 수 있으면 밝게
 		var c := Color(C_PARRY, 0.75) if striking else Color(1.0, 0.92, 0.6, 0.45 + 0.35 * sin(t * 12.0))
@@ -478,49 +614,18 @@ func _draw_mantle() -> void:
 		var w := 520.0 - k * 40.0
 		draw_line(Vector2(-w, y), Vector2(-260, y - 30), Color(C_BODY_DARK, 1.0), 6.0)
 		draw_line(Vector2(260, y - 30), Vector2(w, y), Color(C_BODY_DARK, 1.0), 6.0)
-	for e in EYES:                                       # 눈: 가로로 찢어진 동공
-		draw_circle(e, 62.0, C_BODY_DARK)
-		draw_arc(e, 62.0, 0.0, TAU, 28, Color(C_RIM, 0.6), 4.0)
-		var g := 0.55 if not dead else maxf(0.0, 0.55 - death_t * 0.4)
-		draw_circle(e, 40.0, Color(C_EYE, 0.14 * g))
-		draw_rect(Rect2(e.x - 34.0, e.y - 7.0, 68.0, 14.0), Color(C_EYE, g))
 	# 분사구 (먹물 포)
 	draw_circle(SIPHON, 46.0, C_BODY_DARK)
 	draw_arc(SIPHON, 46.0, 0.0, PI, 18, C_RIM, 4.0)
 	draw_circle(SIPHON + Vector2(0, 14), 18.0 + 14.0 * siphon_glow, Color(C_GLOW, 0.2 + 0.6 * siphon_glow))
 
 
-## 외투막 문: 페이즈 1 닫힘, 2 좌우로 열리는 중, 3 코어
-func _draw_door() -> void:
-	var open_k := 0.0 if phase == 1 else (1.0 if phase == 3 else clampf(open_t / OPEN_TIME, 0.0, 1.0))
-	if open_k > 0.0:
-		_draw_core()
-	if open_k >= 1.0:
-		return
-	var rc := DOOR_RECT
-	var half_w := rc.size.x * 0.5
-	var slide := ease(open_k, 2.2) * (half_w + 20.0)
-	var alpha := 1.0 - maxf(0.0, open_k - 0.7) / 0.3
-	for s in [-1.0, 1.0]:
-		var x0: float = rc.position.x + (0.0 if s < 0.0 else half_w) + s * slide
-		var door := Rect2(x0, rc.position.y, half_w, rc.size.y)
-		draw_rect(door, Color(C_BODY_DARK, alpha))
-		draw_rect(door, Color(C_RIM, 0.55 * alpha), false, 4.0)
-		for k in 6:                                      # 비늘 판
-			var y := door.position.y + 45.0 + k * 85.0
-			draw_arc(Vector2(door.position.x + door.size.x * 0.5, y), 70.0, 0.2, PI - 0.2, 12, Color(C_RIM, 0.3 * alpha), 3.0)
-	if open_k > 0.0:
-		var gap := slide * 2.0
-		draw_rect(Rect2(CORE_POS.x - gap * 0.5, rc.position.y, gap, rc.size.y), Color(C_HEART, 0.25 * (1.0 - open_k)))
-	else:
-		draw_line(Vector2(0, rc.position.y), Vector2(0, rc.end.y), Color(C_HEART, 0.18 + 0.1 * sin(t * 3.0)), 3.0)
-
-
+## 외눈 = 동력 코어: 눈구멍 + 붉은 홍채 + 가로로 찢어진 동공(빛나는 코어). 체력바 대신 쌓인 피해가 그대로 보인다:
+## 균열이 늘어나 빛이 새고(피해 비율만큼 cracks 를 앞에서부터), 동공이 흐려지며 깜빡이고, 연기가 오른다
 func _draw_core() -> void:
 	var hc := CORE_POS
 	var f: float = core.frac()
 	var beat := 0.5 + 0.5 * sin(t * (4.2 + f * 5.0))
-	var lit := strike_glow or focus_glow > 0.0
 	var shell: PackedVector2Array = core.shell_poly
 	if dead:
 		draw_colored_polygon(shell, Color(0.1, 0.05, 0.05))
@@ -528,37 +633,95 @@ func _draw_core() -> void:
 		draw_circle(hc, CORE_R + k * 240.0, Color(C_HEART, 0.5 * (1.0 - k)))
 		draw_arc(hc, CORE_R + k * 450.0, 0.0, TAU, 48, Color(1, 0.9, 0.7, 1.0 - k), 6.0)
 		return
-	draw_colored_polygon(shell, Color(0.12, 0.05, 0.05))
-	draw_colored_polygon(core.shell_inner, Color(0.24, 0.07, 0.06).lerp(Color(0.45, 0.12, 0.07), f * 0.6))
-	for k in 5:                                          # 신경 다발 (맥동)
-		var a := k * TAU / 5.0 + 0.3
-		var p1 := hc + Vector2.from_angle(a) * 70.0
-		var p2 := hc + Vector2.from_angle(a + 0.4 * sin(t * 2.0 + k)) * 180.0
-		draw_line(p1, p2, Color(0.55, 0.12, 0.1, 0.7), 6.0)
+	var socket := PackedVector2Array()                       # 눈구멍 (외투막 판의 테두리)
+	for q in shell:
+		socket.append(hc + (q - hc) * 1.14)
+	draw_colored_polygon(socket, C_BODY_DARK)
+	var so := socket.duplicate()
+	so.append(socket[0])
+	draw_polyline(so, Color(C_RIM, 0.6), 5.0)
+	draw_colored_polygon(shell, Color(0.2, 0.06, 0.05).lerp(Color(0.08, 0.04, 0.04), f))
+	draw_colored_polygon(core.shell_inner, Color(0.45, 0.12, 0.07).lerp(Color(0.22, 0.07, 0.05), f))
 	var flick := 1.0
+	if f > 0.55:                                             # 많이 상함: 동공 빛이 깜빡인다
+		flick = 0.55 + 0.45 * float(int(t * (8.0 + f * 10.0)) % 4 != 0)
 	if core.broken:
 		flick = 0.55 + 0.45 * float(int(t * 14.0) % 3 != 0)
+	var glow := Color(C_HEART, flick).lerp(Color.WHITE, core.flash * 0.7)
 	var pr := CORE_R * (1.0 + 0.06 * beat)
-	var ca := 0.35 + 0.65 * minf(1.0, f * 1.3)
-	draw_circle(hc, pr * 2.0, Color(C_HEART, (0.08 + 0.1 * beat) * ca * flick))
-	draw_circle(hc, pr * 1.3, Color(C_HEART, 0.35 * ca * flick))
-	draw_circle(hc, pr, Color(C_HEART, ca * flick).lerp(Color.WHITE, core.flash * 0.6))
-	draw_circle(hc + Vector2(-pr * 0.3, -pr * 0.3), pr * 0.4, Color(1.0, 0.85, 0.6, ca * flick))
-	core.draw_plates(self, t, lit, beat)
+	draw_circle(hc, pr * 2.2, Color(C_HEART, (0.1 + 0.1 * beat) * flick))
+	var pupil := PackedVector2Array()                         # 가로로 찢어진 동공
+	for k in 16:
+		var a := k * TAU / 16.0
+		pupil.append(hc + Vector2(cos(a) * pr * 1.5, sin(a) * pr * 0.5))
+	draw_colored_polygon(pupil, glow)
+	draw_circle(hc + Vector2(-pr * 0.5, -pr * 0.15), pr * 0.18, Color(1.0, 0.9, 0.7, 0.9 * flick))
+	var n := int(ceil(f * cracks.size()))                     # 균열: 쌓인 피해만큼
+	for k in n:
+		var cr: PackedVector2Array = cracks[k]
+		var pts := PackedVector2Array()
+		for q in cr:
+			pts.append(hc + q)
+		draw_polyline(pts, Color(0.05, 0.02, 0.02), 7.0)
+		draw_polyline(pts, Color(1.0, 0.55, 0.22, 0.55 + 0.4 * beat), 3.0)
 	var smoke := int(f * 6.0)
 	for k in smoke:
 		var life := fmod(t * 0.5 + k * 0.17, 1.0)
-		var sp := hc + Vector2(sin(k * 2.3 + t * 0.8) * 120.0, -150.0 - life * 190.0)
+		var sp := hc + Vector2(sin(k * 2.3 + t * 0.8) * 120.0, -110.0 - life * 190.0)
 		draw_circle(sp, 14.0 + life * 30.0, Color(0.3, 0.3, 0.33, 0.35 * (1.0 - life)))
+	if f > 0.3 and fmod(t * 2.0, 1.0) < 0.3:                   # 균열에서 튀는 불꽃
+		for k in 3:
+			var cr: PackedVector2Array = cracks[(int(t * 2.0) + k * 3) % maxi(1, n)]
+			draw_circle(hc + cr[cr.size() - 1] + Vector2(sin(t * 31.0 + k) * 10.0, -fmod(t * 300.0, 40.0)), 3.0, Color(1.0, 0.85, 0.5))
 	if core.broken:
-		for k in 6:
-			var sa := t * 4.0 + k * 1.1
-			var sd := CORE_R + 14.0 + fmod(t * 120.0 + k * 41.0, 80.0)
-			draw_circle(hc + Vector2.from_angle(sa) * sd, 3.0, Color(1.0, 0.85, 0.5, 0.9))
 		draw_arc(hc, CORE_R + 22.0 + 6.0 * beat, 0.0, TAU, 40, Color(1.0, 0.95, 0.7, 0.55 + 0.4 * beat), 3.0)
-	if focus_glow > 0.0:
+	if focus_glow > 0.0 and phase == 3:
 		var in_reach := hc.distance_to(focus_from) <= focus_reach + 200.0
-		draw_arc(hc, 290.0, 0.0, TAU, 48, Color(1.0, 0.85, 0.55, focus_glow * (0.6 if in_reach else 0.25)), 3.0)
+		draw_arc(hc, EYE_RX + 40.0, 0.0, TAU, 48, Color(1.0, 0.85, 0.55, focus_glow * (0.6 if in_reach else 0.25)), 3.0)
+
+
+## 방어막: 페이즈 1 = 육각 무늬가 흐르는 청록 막 (부딪힌 쪽이 번쩍), 페이즈 2 = 금이 가며 사라진다 (파편은 damage_part 가 뿌린다)
+func _draw_shield() -> void:
+	if dead or phase == 3:
+		return
+	var k := 1.0 if phase == 1 else 1.0 - clampf(open_t / SHIELD_SHATTER * 3.0, 0.0, 1.0)
+	if k <= 0.0:
+		return
+	var c := Color(0.45, 0.95, 1.0)
+	var hc := CORE_POS
+	draw_circle(hc, SHIELD_R, Color(c, (0.07 + 0.12 * shield_flash) * k))
+	draw_arc(hc, SHIELD_R, 0.0, TAU, 64, Color(c, (0.55 + 0.4 * shield_flash) * k), 4.0)
+	draw_arc(hc, SHIELD_R - 10.0, 0.0, TAU, 64, Color(c, 0.18 * k), 2.0)
+	for j in 6:                                               # 막 위를 흐르는 호
+		var a0 := t * 0.4 + j * TAU / 6.0
+		draw_arc(hc, SHIELD_R - 4.0, a0, a0 + 0.35, 8, Color(1, 1, 1, 0.35 * k), 3.0)
+	if shield_flash > 0.0:                                    # 부딪힌 쪽 물결
+		var a := shield_hit_n.angle()
+		draw_arc(hc, SHIELD_R + 8.0, a - 0.6, a + 0.6, 16, Color(1, 1, 1, 0.8 * shield_flash * k), 6.0)
+		draw_arc(hc, SHIELD_R + 22.0 * (1.0 - shield_flash), a - 0.4, a + 0.4, 12, Color(c, 0.6 * shield_flash * k), 3.0)
+	if phase == 2:                                            # 깨지는 중: 금
+		for j in 8:
+			var a := j * TAU / 8.0 + 0.2
+			var p0 := hc + Vector2.from_angle(a) * SHIELD_R
+			draw_polyline(PackedVector2Array([p0, p0 + Vector2.from_angle(a + 2.6) * 60.0, p0 + Vector2.from_angle(a + 2.2) * 110.0]), Color(1, 1, 1, 0.8 * k), 3.0)
+
+
+## 요격 피해가 촉수 뿌리에서 코어로 흐르는 전류 줄기 (지그재그, 금빛 → 사라짐)
+func _draw_zaps() -> void:
+	for z in zaps:
+		var u := float(z["t"]) / ZAP_TIME
+		var from: Vector2 = ROOTS[int(z["from"])]
+		var to := CORE_POS
+		var pts := PackedVector2Array()
+		var dd := (to - from).orthogonal().normalized()
+		for q in 9:
+			var f := q / 8.0
+			var j := 0.0 if q == 0 or q == 8 else sin(q * 7.3 + t * 40.0) * 26.0
+			pts.append(from.lerp(to, f) + dd * j)
+		var head := mini(8, int(u * 3.0 * 8.0) + 1)             # 앞쪽으로 뻗어 나가다 닿으면 전체가 빛나고 사라진다
+		var a := 1.0 - maxf(0.0, u - 0.35) / 0.65
+		draw_polyline(pts.slice(0, head + 1), Color(1.0, 0.75, 0.35, 0.5 * a), 12.0)
+		draw_polyline(pts.slice(0, head + 1), Color(1.0, 0.95, 0.8, a), 4.0)
 
 
 ## 떨어져 나간 촉수 토막: 마디판 + 관절 + 끊긴 단면의 불씨

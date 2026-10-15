@@ -29,7 +29,7 @@ func _init(tent: int) -> void:
 
 
 func _act(dt: float, ppos: Vector2) -> void:
-	var tm: float = boss.tempo()
+	var tm: float = _tempo()
 	var root: Vector2 = boss.ROOTS[tents[0]]
 	if not _started:
 		_started = true

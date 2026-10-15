@@ -62,6 +62,7 @@ var stage_idx := 0                    # 지금 싸우는 스테이지 (Stages.LI
 
 var state := State.PLAY
 var hitstop := 0.0
+const CHARGED_SLOW := 0.12        # 차지 완료 순간 짧은 슬로우
 var slowmo := 0.0
 var shake := 0.0
 var run_time := 0.0
@@ -424,7 +425,7 @@ func _tutorial_triggers() -> void:
 	var kd: String = boss.attack_kind()
 	if kd == "swing":
 		tutorial.request(["charge"])
-	elif kd == "hammer" or kd == "clap" or kd == "chase" or kd == "sweep" or kd == "constrict" or kd == "vortex":
+	elif kd == "hammer" or kd == "clap" or kd == "chase" or kd == "sweep" or kd == "constrict" or kd == "vortex" or kd == "march" or kd == "flurry":
 		tutorial.request(["charge", "tentacle"])
 	elif kd == "net":
 		tutorial.request(["unparry"])
@@ -606,7 +607,7 @@ func _clash(hb: Dictionary, p: Vector2) -> void:
 	var contact: Vector2 = hb["pos"]
 	var dir: Vector2 = player.vel.normalized()
 	var kind: String = player.dash_kind
-	var dmg: int = player.intercept_damage() if hb.has("part") else 0
+	var dmg: int = player.intercept_damage() if (hb.has("part") or hb.has("core")) else 0
 	player.pass_target = {}                      # 요격은 표적 원과 무관하다
 	player.bounce_off(dir, kind)                 # 먼저 튕긴다 (리버스 드라이브가 끝나며 풀어 주는 경직이 이번 요격의 경직을 풀지 않게)
 	hb["dir"] = dir                              # 촉수는 부딪힌 방향으로 크게 튕겨 나간다
@@ -615,6 +616,11 @@ func _clash(hb: Dictionary, p: Vector2) -> void:
 	if hb.has("part"):                           # 부위에 달린 공격(팔·촉수)이면 그 부위에 피해. 프레스는 끊기만 한다
 		tele.hit("intercept_power" if kind == "power" else "intercept", dmg)
 		boss.damage_part(int(hb["part"]), dmg)
+	elif hb.has("core"):                         # 크라켄 코어 페이즈: 다시 자란 촉수 요격 → 코어에 바로 피해
+		tele.hit("intercept_power" if kind == "power" else "intercept", dmg)
+		if boss.intercept_core(int(hb["tent"]), dmg):
+			_core_destroyed(at)
+			return
 	else:
 		tele.add("intercept_" + str(hb["id"]))
 	player.on_intercept()                        # 기본 시스템: 차지 쿨다운 초기화 (연속 요격). 강습 코어는 연쇄 단계도 올린다
@@ -959,10 +965,14 @@ func on_dash(pos: Vector2, dir: Vector2, kind := "dash") -> void:
 
 
 ## 차지 완료
+## 차지 완료: 짧은 슬로우 + 링 (조준 슬로우 중에는 조준이 우선)
 func on_charged(pos: Vector2) -> void:
 	sfx.play("bolt", -2.0, 0.0)
 	shake = maxf(shake, 4.0)
+	slowmo = maxf(slowmo, CHARGED_SLOW)
+	hud.warp(0.12)
 	fx.ring(pos, Color(1.0, 0.6, 0.3), 90.0, 0.25, 4.0)
+	fx.ring(pos, Color(1.0, 0.85, 0.55), 50.0, 0.2, 3.0, true)
 
 
 ## 스턴에서 회복: 다시 조종할 수 있다는 신호
@@ -1058,6 +1068,12 @@ func on_parry_launch(pos: Vector2, dir: Vector2) -> void:
 ## 돌진 적중. kind: "dash"(피해 1, 가볍게) / "charge"(3, 주황) / "power"(패리 돌진 12·16, 크게)
 func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, kind := "dash", buffed := false, strong := false) -> void:
 	var contact := pos + dir * Player.RADIUS
+	if hit["kind"] == "shield" and kind != "power":   # 크라켄 방어막: 돌진·차지 강습은 피해 없이 튕겨 나온다 (리버스 드라이브만 뚫는다)
+		tele.add("shield_block")
+		boss.shield_flash = 1.0
+		boss.shield_hit_n = hit["n"]
+		_parry_push_feedback(contact, -dir)
+		return
 	tele.hit(kind, dmg)
 	if buffed:
 		tele.add("sync_strong_hit" if strong else "sync_hit")

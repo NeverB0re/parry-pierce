@@ -57,7 +57,7 @@ func _setup(name: String) -> void:
 			pin_pos = Vector2(-250, -1500) if name == "dash_kraken" else Vector2(-120, -1450)
 			p.reset(pin_pos, false)
 			b.start_attack(b.Fan.new(-1, b.SIPHON, pin_pos, true))
-			target = b.part_pos(1)
+			target = b.CORE_POS
 		"dash_net":
 			main.start_stage(2)
 			var b = main.boss

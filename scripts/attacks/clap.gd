@@ -35,7 +35,7 @@ func _aim(ppos: Vector2) -> void:
 
 
 func _act(_dt: float, ppos: Vector2) -> void:
-	var tm: float = boss.tempo()
+	var tm: float = _tempo()
 	if _from.is_empty():
 		for i in tents:
 			_from.append(boss.spines[i].duplicate())

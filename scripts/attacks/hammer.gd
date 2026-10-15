@@ -22,28 +22,29 @@ var y_top := -1600.0
 var y_stop := -800.0
 var y_bar := -1600.0
 var _from := PackedVector2Array()
-var _tm := 1.0
+var pin_x := NAN                      # 정해진 x 에 내려친다 (행진 연타). NAN = 플레이어를 따라감
 
 
-func _init(tent: int, fast := false, wait := 0.0) -> void:
+func _init(tent: int, fast := false, wait := 0.0, at_x := NAN) -> void:
 	kind = "hammer"
 	_grab([tent], "prep")
 	hit_from = 4
 	fixed_half = HALF
 	delay = wait
+	pin_x = at_x
 	if fast:
-		_tm = 0.65
+		pace = 0.65
 
 
 func _aim(ppos: Vector2) -> void:
-	cx = clampf(ppos.x, -900.0, 900.0)
+	cx = clampf(ppos.x if is_nan(pin_x) else pin_x, -900.0, 900.0)
 	y_top = clampf(ppos.y - ABOVE, TOP_MIN, -900.0)
 	y_stop = minf(ppos.y + BELOW, STOP_MAX)
 	y_bar = y_top
 
 
 func _act(_dt: float, ppos: Vector2) -> void:
-	var tm: float = _tm * boss.tempo()
+	var tm: float = _tempo()
 	if _from.is_empty():
 		_from = boss.spines[tents[0]].duplicate()
 		_aim(ppos)
