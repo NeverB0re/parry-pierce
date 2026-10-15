@@ -6,6 +6,8 @@ extends "res://scripts/colossus_base.gd"
 ##            코어에 쌓인 피해는 균열·깜빡임·연기로 보인다(체력바 없음). 방어막 동안 코어는 SHIELD_FLOOR 아래로는 깎이지 않는다
 ##         2) 촉수 6개가 모두 떨어져 나가면 방어막이 저절로 산산조각 난다
 ##         3) 동력 코어 — 직접 노릴 수 있다. 떨어져 나간 촉수 둘(REVIVED)이 다시 자라나고, 요격하면 코어에 바로 피해
+## v0.50+: 탄막이 중심 (탄막 6 : 근접 4, 쉬는 시간 짧게). 촉수 끝·배경 다리·분사구가 모두 발사점 (barrage.gd). 근접 중에도 가끔 한 발씩 날아온다.
+## 몸은 DROP 만큼 낮게 걸려 있다 (코어 작게, 튕겨 올라가도 천장에 붙지 않게).
 ## 공격: 몸통 내려치기 · 압착(촉수 둘) · 추적 감아치기 · 휩쓸기 · 조이기(촉수 2개 이상 잃은 뒤) · 먹물 포(부채 탄막, 가운데 주탄)
 ##       · 방전 그물(패리 불가, 드물게) · 연타 3종(소용돌이·행진·난타, combo.gd). 동시에 예고하는 촉수는 최대 2개.
 ## 근접 패턴의 첫 타는 예고가 느리다 (tentacle.gd LEAD_K).
@@ -21,25 +23,28 @@ const Constrict := preload("res://scripts/attacks/constrict.gd")
 const Combo := preload("res://scripts/attacks/combo.gd")
 const Net := preload("res://scripts/attacks/net.gd")
 const Fan := preload("res://scripts/attacks/fan.gd")
+const Spiral := preload("res://scripts/attacks/spiral.gd")
+const Barrage := preload("res://scripts/attacks/barrage.gd")
 
 # ── 구조 ───────────────────────────────────────────────
-const CORE_POS := Vector2(0, -2520)          # 외눈 = 동력 코어 중심 (외투막 한가운데)
+const DROP := 640.0                          # 몸을 천장에서 이만큼 내려 걸었다 (튕겨 올라가도 천장에 붙지 않게)
+const CORE_POS := Vector2(0, -2520.0 + DROP)          # 외눈 = 동력 코어 중심 (외투막 한가운데)
 const ARMOR_HP := 180                        # 코어 체력 (장갑판 없이 균열로 보인다). 다 깎이면 한 발 더 맞아야 부서진다 (armored_core.gd)
 const SHIELD_FLOOR := 60                     # 방어막 동안 코어는 이 아래로 깎이지 않는다 (마지막 페이즈에 할 일을 남긴다)
-const SHIELD_R := 270.0                      # 방어막 반지름
+const SHIELD_R := 205.0                      # 방어막 반지름
 const SHIELD_SHATTER := 1.6                  # 방어막이 깨지는 연출 시간 (페이즈 2)
-const CORE_R := 60.0
-const EYE_RX := 200.0                        # 눈알(코어 껍질) 반지름 (가로·세로)
-const EYE_RY := 150.0
-const SIPHON := Vector2(0, -2120)            # 먹물 포 (외투막 아래 분사구)
+const CORE_R := 46.0
+const EYE_RX := 150.0                        # 눈알(코어 껍질) 반지름 (가로·세로)
+const EYE_RY := 112.0
+const SIPHON := Vector2(0, -2120.0 + DROP)            # 먹물 포 (외투막 아래 분사구)
 
 # ── 촉수 ───────────────────────────────────────────────
 const N := 12                                # 척추 마디 수
 # 촉수 0~5 (짝수 = 왼쪽, 홀수 = 오른쪽): 뿌리와 쉬는 자세의 끝
-const ROOTS := [Vector2(-430, -2210), Vector2(430, -2210), Vector2(-260, -2170), Vector2(260, -2170), Vector2(-90, -2150), Vector2(90, -2150)]
-const IDLE_TIPS := [Vector2(-900, -1000), Vector2(900, -1000), Vector2(-560, -760), Vector2(560, -760), Vector2(-210, -1080), Vector2(210, -1080)]
-const BG_ROOTS := [Vector2(-560, -2300), Vector2(560, -2300)]     # 배경 다리 (표적·판정 없음, 방전 그물만 건다)
-const BG_TIPS := [Vector2(-1080, -620), Vector2(1080, -620)]
+const ROOTS := [Vector2(-430, -2210.0 + DROP), Vector2(430, -2210.0 + DROP), Vector2(-260, -2170.0 + DROP), Vector2(260, -2170.0 + DROP), Vector2(-90, -2150.0 + DROP), Vector2(90, -2150.0 + DROP)]
+const IDLE_TIPS := [Vector2(-900, -620), Vector2(900, -620), Vector2(-560, -400), Vector2(560, -400), Vector2(-210, -560), Vector2(210, -560)]
+const BG_ROOTS := [Vector2(-560, -2300.0 + DROP), Vector2(560, -2300.0 + DROP)]     # 배경 다리 (표적·판정 없음, 방전 그물만 건다)
+const BG_TIPS := [Vector2(-1080, -520), Vector2(1080, -520)]
 const REVIVED := [2, 3]                      # 코어 페이즈에 다시 자라나는 촉수
 const REGROW := 1.6                          # 다시 자라나는 시간
 const W_ROOT := 100.0                        # 촉수 굵기 (뿌리 → 끝)
@@ -50,8 +55,12 @@ const PART_R := 52.0
 const ZAP_TIME := 0.4                        # 요격 피해가 촉수 뿌리에서 코어로 흐르는 전류 줄기
 
 # ── 공격 고르기 ────────────────────────────────────────
-const GAP := Vector2(0.7, 1.2)
-const GAP_CORE := Vector2(0.45, 0.85)
+const GAP := Vector2(0.45, 0.8)               # 근접 뒤 쉬는 시간
+const GAP_CORE := Vector2(0.3, 0.55)
+const GAP_FIRE := Vector2(0.25, 0.5)         # 탄막 뒤 (멍때릴 틈을 주지 않는다)
+const RANGED_KINDS := ["ink", "spray", "fan", "spiral", "tips", "ring", "cross"]
+const RANGED_SHARE := 0.62                   # 탄막 : 근접 = 6 : 4 (근접은 시그니처 패턴 위주)
+const AMBIENT_EVERY := 1.15                  # 근접 중·쉬는 중에도 가끔 한 발씩 날아온다
 const SPECIAL_EVERY := 4                     # 방전 그물(패리 불가)은 공격 이만큼마다 (드물게)
 const COMBO_HITS := 3                        # 연타 타수
 const MARCH_X := [-640.0, 0.0, 640.0]        # 행진: 이 자리를 한쪽 끝부터 차례로 내려친다
@@ -75,6 +84,9 @@ var hit_dir_t := -99.0
 var siphon_glow := 0.0
 var debris: Array[Dictionary] = []           # 떨어져 나간 촉수 조각
 var last := ""
+var ambient_t := 1.5
+var emit_glow: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]   # 발사점 발광 (0~5 촉수 끝, 6·7 배경 다리)
+var _ppos := Vector2(0, -400)
 var since_special := 0
 var zaps: Array[Dictionary] = []             # 코어로 흐르는 전류 줄기 {from, t}
 var shield_flash := 0.0                      # 방어막에 무언가 부딪힘 (번쩍)
@@ -85,7 +97,7 @@ var cracks: Array[PackedVector2Array] = []   # 코어 균열선 (피해가 쌓�
 func _init() -> void:
 	open_time = SHIELD_SHATTER
 	attack_gap = GAP
-	core_assist_r = 220.0
+	core_assist_r = 170.0
 
 
 func _ready() -> void:
@@ -129,6 +141,9 @@ func reset() -> void:
 	siphon_glow = 0.0
 	debris.clear()
 	last = ""
+	ambient_t = 1.5
+	for k in 8:
+		emit_glow[k] = 0.0
 	since_special = 0
 	zaps.clear()
 	shield_flash = 0.0
@@ -342,8 +357,22 @@ func _step_effects(dt: float) -> void:
 	_step_debris(dt)
 
 
+func step(dt: float, ppos: Vector2) -> void:
+	_ppos = ppos
+	super(dt, ppos)
+
+
+func _on_attack_finished() -> void:
+	if RANGED_KINDS.has(last):
+		attack_gap = GAP_FIRE
+	else:
+		attack_gap = GAP_CORE if phase == 3 else GAP
+
+
 func _step_phase(dt: float) -> void:
-	attack_gap = GAP_CORE if phase == 3 else GAP
+	for k in 8:
+		emit_glow[k] = move_toward(emit_glow[k], 0.0, dt * 2.5)
+	_ambient(dt)
 	shield_flash = maxf(0.0, shield_flash - dt * 3.0)
 	for z in zaps.duplicate():
 		z["t"] = float(z["t"]) + dt
@@ -353,6 +382,54 @@ func _step_phase(dt: float) -> void:
 	if phase == 3:                               # 코어 페이즈: 촉수 둘이 뿌리에서 다시 자라난다
 		for i in REVIVED:
 			grown[i] = minf(1.0, grown[i] + dt / REGROW)
+
+
+## 근접 공격 중·쉬는 중에도 가끔 한 발씩 (플레이어가 가만히 있지 못하게). 탄막 중에는 쏘지 않는다
+func _ambient(dt: float) -> void:
+	if dead or hold_attacks or phase == 2:
+		return
+	if atk != null and (RANGED_KINDS.has(atk.kind) or atk.kind == "net"):
+		return
+	ambient_t -= dt
+	if ambient_t > 0.0:
+		return
+	ambient_t = AMBIENT_EVERY * randf_range(0.8, 1.2)
+	var em := emitters()
+	var e: Array = em[randi() % em.size()]
+	var o: Vector2 = e[1]
+	var d := (_ppos - o).normalized().rotated(randf_range(-0.12, 0.12))
+	shots.spawn(o, d * 270.0 * bolt_mult(), 9.0, 0.0, 0.0, Projectiles.Kind.SMALL)
+	emit_glow_set(int(e[0]), 1.0)
+	emit(Ev.BOLT, o)
+
+
+## 탄을 쏠 수 있는 발사점 [[번호, 위치], ...]: 분사구(-1) · 놀고 있는 촉수 끝(0~5) · 배경 다리 끝(6·7)
+func emitters() -> Array:
+	var out := [[-1, SIPHON]]
+	for i in 6:
+		if tent_ready(i) and grown[i] >= 1.0 and not spines[i].is_empty():
+			out.append([i, spines[i][N - 1]])
+	for k in 2:
+		out.append([6 + k, bg_spines[k][N - 1]])
+	return out
+
+
+## 발사점 위치 (지금 쓸 수 없으면 Vector2.INF)
+func emitter_pos(id: int) -> Vector2:
+	if id < 0:
+		return SIPHON
+	if id >= 6:
+		return bg_spines[id - 6][N - 1]
+	if tent_ready(id) and grown[id] >= 1.0 and not spines[id].is_empty():
+		return spines[id][N - 1]
+	return Vector2.INF
+
+
+func emit_glow_set(id: int, v: float) -> void:
+	if id < 0:
+		siphon_glow = v
+	else:
+		emit_glow[id] = v
 
 
 func die() -> void:
@@ -371,15 +448,20 @@ func _choose(ppos: Vector2) -> void:
 		since_special = 0
 		_pick("net", Net.new(randf() < 0.5))
 		return
-	var pool: Array[String] = ["ink"]
+	var fire: Array[String] = ["ink", "spray", "tips", "ring", "cross"]
+	var melee: Array[String] = []
 	if not ready.is_empty():
-		pool.append_array(["hammer", "hammer", "chase", "sweep"])
+		melee.append_array(["hammer", "chase", "sweep"])
 		if ready.size() >= 2:
-			pool.append_array(["clap", "vortex", "march", "flurry"])
+			melee.append_array(["clap", "vortex", "march", "flurry", "vortex", "flurry"])
 			if hard:
-				pool.append_array(["vortex", "flurry"])
+				melee.append_array(["vortex", "flurry"])
 			if hard or parts_left() <= 4:
-				pool.append_array(["constrict", "constrict"])
+				melee.append_array(["constrict", "constrict", "constrict"])
+	var pool: Array[String] = fire
+	if not melee.is_empty() and randf() > RANGED_SHARE:
+		pool = melee
+	pool = pool.duplicate()
 	while pool.size() > 1 and pool.has(last):
 		pool.erase(last)
 	var kind: String = pool[randi() % pool.size()]
@@ -398,6 +480,10 @@ func _choose(ppos: Vector2) -> void:
 			_grab_start("constrict", Constrict.new(lr[0], lr[1]))
 		"vortex", "march", "flurry":
 			_pick(kind, _combo(kind, ready, ppos))
+		"spray":
+			_pick("spray", Spiral.new(-1, SIPHON, ppos, hard))
+		"tips", "ring", "cross":
+			_pick(kind, Barrage.new(kind, emitters(), ppos, hard))
 		_:
 			_pick("ink", Fan.new(-1, SIPHON, ppos, hard))
 
@@ -481,12 +567,12 @@ func _sweeper(ts: Array[int], ppos: Vector2) -> int:
 
 
 ## 먹물 포 발광 (Fan 이 부른다. 발사점은 분사구 하나뿐)
-func set_glow(_c: int, v: float) -> void:
-	siphon_glow = v
+func set_glow(c: int, v: float) -> void:
+	emit_glow_set(c, v)
 
 
-func glow_of(_c: int) -> float:
-	return siphon_glow
+func glow_of(c: int) -> float:
+	return siphon_glow if c < 0 else emit_glow[c]
 
 
 ## 떨어져 나간 촉수 토막: 빠르게 돌며 날아가다 벽에 튕기고, 융해 지대에 빠지면 물보라와 함께 사라진다
@@ -516,6 +602,7 @@ func _draw() -> void:
 	_draw_core()
 	for i in 6:
 		_draw_arm(i)
+	_draw_emit_glow()
 	_draw_shield()
 	_draw_zaps()
 	_draw_debris()
@@ -523,6 +610,19 @@ func _draw() -> void:
 	for a in active_attacks():
 		a.draw()
 	shots.draw(self)
+
+
+## 탄을 쏘기 전 촉수 끝·배경 다리 끝이 달아오른다
+func _draw_emit_glow() -> void:
+	for id in 8:
+		var g := emit_glow[id]
+		if g <= 0.02:
+			continue
+		var p := emitter_pos(id) if id < 6 else bg_spines[id - 6][N - 1]
+		if p == Vector2.INF:
+			continue
+		draw_circle(p, 20.0 + 26.0 * g, Color(C_GLOW, 0.2 + 0.45 * g))
+		draw_circle(p, 9.0 + 6.0 * g, Color(1.0, 0.95, 0.8, 0.5 + 0.5 * g))
 
 
 func _draw_arm(i: int) -> void:
@@ -596,7 +696,11 @@ func _draw_mech(sp: PackedVector2Array, ws: float, col: Color, revived: bool) ->
 
 ## 외투막 (몸통): 천장 너머까지 이어진 둥근 머리 + 양쪽 지느러미 + 눈 + 아래 분사구
 func _draw_mantle() -> void:
+	draw_set_transform(Vector2(0, DROP))
 	var sway := sin(t * 0.7) * 14.0
+	draw_colored_polygon(PackedVector2Array([Vector2(-150, -3150), Vector2(150, -3150), Vector2(190, -3700), Vector2(-190, -3700)]), C_BODY_DARK)   # 천장에서 늘어진 줄기
+	for s2 in [-1.0, 1.0]:
+		draw_line(Vector2(s2 * 150, -3150), Vector2(s2 * 190, -3700), Color(C_RIM, 0.4), 3.0)
 	for s in [-1.0, 1.0]:                                 # 지느러미
 		var fin := PackedVector2Array([Vector2(s * 380, -2950), Vector2(s * (720 + sway), -3150), Vector2(s * (680 + sway), -2860), Vector2(s * 520, -2700)])
 		draw_colored_polygon(fin, C_BODY_DARK)
@@ -614,6 +718,7 @@ func _draw_mantle() -> void:
 		var w := 520.0 - k * 40.0
 		draw_line(Vector2(-w, y), Vector2(-260, y - 30), Color(C_BODY_DARK, 1.0), 6.0)
 		draw_line(Vector2(260, y - 30), Vector2(w, y), Color(C_BODY_DARK, 1.0), 6.0)
+	draw_set_transform(Vector2.ZERO)
 	# 분사구 (먹물 포)
 	draw_circle(SIPHON, 46.0, C_BODY_DARK)
 	draw_arc(SIPHON, 46.0, 0.0, PI, 18, C_RIM, 4.0)

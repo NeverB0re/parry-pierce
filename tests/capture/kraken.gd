@@ -30,6 +30,12 @@ var plan := [
 	["shatter", "shatter", 14, Vector2(250, -1300), Vector2(0, -2100), 0.3],
 	["march", "march", 150, Vector2(-300, -1300), Vector2(0, -1600), 0.24],
 	["flurry", "flurry", 150, Vector2(300, -1300), Vector2(0, -1600), 0.24],
+	["new_idle", "", 30, Vector2(250, -700), Vector2(0, -1100), 0.5],
+	["tips", "tips", 70, Vector2(250, -700), Vector2(0, -1100), 0.5],
+	["tips_fire", "tips", 100, Vector2(250, -700), Vector2(0, -1100), 0.5],
+	["ring", "ring", 120, Vector2(250, -700), Vector2(0, -1100), 0.5],
+	["cross", "cross", 120, Vector2(250, -700), Vector2(0, -1100), 0.5],
+	["spray", "spray", 100, Vector2(250, -700), Vector2(0, -1100), 0.5],
 	["close", "idle", 30, Vector2(300, -1500), Vector2(-150, -1700), 0.6],
 ]
 var idx := 0
@@ -98,6 +104,8 @@ func _process(_d: float) -> bool:
 			"constrict": a = b.Constrict.new(0, 1)
 			"net": a = b.Net.new(true)
 			"ink": a = b.Fan.new(-1, b.SIPHON, p.position)
+			"tips", "ring", "cross": a = b.Barrage.new(pl[1], b.emitters(), p.position)
+			"spray": a = b.Spiral.new(-1, b.SIPHON, p.position)
 			"broken":
 				b.damage_part(0, 16)
 				b.damage_part(3, 16)

@@ -1445,6 +1445,21 @@ func _kraken_shield_test() -> void:
 	var sh: Dictionary = b.strike_hit(b.CORE_POS + Vector2(0, b.SHIELD_R + 10.0), 20.0)
 	_check("kraken: the shield around the core is the only target", sh.get("kind", "") == "shield")
 	_check("kraken: assist sees only the core (no tentacle targets)", b.assist_targets(Vector2(0, -1500)).size() == 1)
+	for kind in ["tips", "ring", "cross", "spray", "ink"]:      # 탄막 5종: 발사점이 사방에 있고, 끝까지 돌아 탄을 쏜다
+		b.reset()
+		b.next_t = 99.0
+		b._ppos = Vector2(300, -700)
+		b.start_attack(b.Barrage.new(kind, b.emitters(), b._ppos) if kind in ["tips", "ring", "cross"] else (b.Spiral.new(-1, b.SIPHON, b._ppos) if kind == "spray" else b.Fan.new(-1, b.SIPHON, b._ppos)))
+		var spawned := 0
+		for k in 600:
+			b.step(DT, b._ppos)
+			spawned = maxi(spawned, b.shots.size())
+			if b.atk == null:
+				break
+		_check("kraken barrage %s finishes and fires (%d shots)" % [kind, spawned], b.atk == null and spawned > 3)
+	b.reset()
+	b.next_t = 99.0
+	_check("kraken emitters: siphon + tentacle tips + legs", b.emitters().size() == 9)
 	main.debug.god = true
 	p.reset(b.CORE_POS + Vector2(0, b.SHIELD_R + 200.0), false)
 	var a0: int = b.core.armor_hp
@@ -1756,7 +1771,7 @@ func _v047_test() -> void:
 	var lash = b.Lash.new(1)
 	b.start_attack(lash)
 	lash.claim()
-	var pp := Vector2(700, -1300)
+	var pp := Vector2(900, -700)
 	var swept := false
 	for k in 400:
 		main.hitstop = 0
