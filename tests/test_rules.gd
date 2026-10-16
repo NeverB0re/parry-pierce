@@ -2255,9 +2255,14 @@ func _satellite_test() -> void:
 	var hp0: int = b.core.armor_hp
 	b.damage(sh, 5)                                           # 반사탄처럼 blocks_strike 를 거치지 않은 결계 적중
 	_check("satellite: reflected shots do not open the barrier", not b.barrier_open and b.core.armor_hp == hp0)
-	_check("satellite: a fully synced charge opens it", not b.blocks_strike(sh, "charge", false, true))
+	_check("satellite: a fully synced charge gets through the barrier", not b.blocks_strike(sh, "charge", false, true))
 	b.damage(sh, 12)
-	_check("satellite: the opening strike damages the core and the barrier opens (hp %d -> %d)" % [hp0, b.core.armor_hp], b.barrier_open and b.core.armor_hp == hp0 - 12 and b.atk != null and b.atk.kind == "open")
+	_check("satellite: the first two strikes only crack it (cracks %d, open %s, hp %d)" % [b.cracks, b.barrier_open, b.core.armor_hp], b.cracks == 1 and not b.barrier_open and b.core.armor_hp == hp0)
+	b.blocks_strike(sh, "power", true, false)
+	b.damage(sh, 16)
+	b.blocks_strike(sh, "charge", false, true)
+	b.damage(sh, 12)
+	_check("satellite: the third strike opens it and damages the core (hp %d -> %d)" % [hp0, b.core.armor_hp], b.barrier_open and b.core.armor_hp == hp0 - 12 and b.atk != null and b.atk.kind == "open")
 	var mains := 0
 	for k in int(2.0 / DT):
 		b.step(DT, Vector2(300, -1300))
@@ -2268,8 +2273,11 @@ func _satellite_test() -> void:
 	_check("satellite: open = the core is the target", b.strike_hit(b.CORE_POS, 10.0).get("kind", "") == "core")
 	for k in int(b.OPEN_TIME / DT):
 		b.step(DT, Vector2(300, -1300))
-	_check("satellite: the barrier closes after OPEN_TIME", not b.barrier_open)
-	_check("satellite: a PERFECT reverse drive opens it too", not b.blocks_strike(sh, "power", true, false))
+	_check("satellite: the barrier closes after OPEN_TIME, cracks reset", not b.barrier_open and b.cracks == 0)
+	_check("satellite: right after closing the barrier is sealed (leftover gold bolts cannot reopen it)", b.blocks_strike(sh, "power", true, false) and b.blocks_strike(sh, "charge", false, true))
+	for k in int((b.SEAL_GUARD + 0.1) / DT):
+		b.step(DT, Vector2(300, -1300))
+	_check("satellite: after the seal, a PERFECT reverse drive cracks it too", not b.blocks_strike(sh, "power", true, false))
 	b.pending_open = false
 	# 보라 공격: 궤도 광선 · 결계면 · 노드 분사가 돌고, 광선·벽은 패리 불가 판정
 	b.reset()
@@ -2279,11 +2287,19 @@ func _satellite_test() -> void:
 	var pp := Vector2(200, -900)
 	for k in int(40.0 / DT):
 		b.step(DT, pp)
-		if b.atk != null:
-			seen[b.atk.kind] = true
+		for a in b.active_attacks():
+			seen[a.kind] = true
 		if b.beam_hit(pp, 12.0) != Vector2.ZERO:
 			beam_hit = true
-	_check("satellite: closed patterns cycle (%s)" % str(seen.keys()), seen.has("orbit") and seen.has("wall") and seen.has("spray") and not seen.has("open"))
+	_check("satellite: closed patterns cycle with small side attacks (%s)" % str(seen.keys()), seen.has("burst") and seen.has("lattice") and seen.has("orbit") and seen.has("wall") and seen.has("spray") and not seen.has("open"))
+	var bz = b.RadialBurst.new(b.CORE_POS, 10)
+	bz.boss = b
+	bz.phase = "fire"
+	var on_beam: Vector2 = b.CORE_POS + Vector2.from_angle(bz._angle(0)) * 800.0
+	var between: Vector2 = b.CORE_POS + Vector2.from_angle(bz._angle(0) + PI / 10.0) * 800.0
+	_check("barrier storm: only the thin beam core hurts, the space between beams is safe", bz.beam_hit(on_beam, 12.0) != Vector2.ZERO and bz.beam_hit(between, 12.0) == Vector2.ZERO)
+	bz.mark_dodged(on_beam, 12.0)
+	_check("barrier storm: a dodged beam no longer hits, others still do", bz.beam_hit(on_beam, 12.0) == Vector2.ZERO and bz.dodged_beams == [0])
 	_check("satellite: purple attacks reach the player", beam_hit)
 	var w = b.BarrierWall.new(Vector2(500, -900))
 	w.boss = b

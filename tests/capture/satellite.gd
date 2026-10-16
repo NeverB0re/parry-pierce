@@ -10,6 +10,9 @@ var plan := [
 	["orbit_wind", "orbit", 40, Vector2(300, -900), Vector2(0, -1400), 0.42],
 	["orbit_sweep", "orbit", 110, Vector2(300, -900), Vector2(0, -1400), 0.42],
 	["wall", "wall", 140, Vector2(300, -900), Vector2(0, -1500), 0.42],
+	["burst", "burst", 120, Vector2(300, -900), Vector2(0, -1500), 0.42],
+	["lattice", "lattice", 64, Vector2(300, -900), Vector2(0, -1500), 0.42],
+	["cracked", "cracked", 30, Vector2(300, -1100), Vector2(0, -1700), 0.6],
 	["spray", "spray", 100, Vector2(300, -900), Vector2(0, -1400), 0.42],
 	["open", "open", 90, Vector2(300, -1100), Vector2(0, -1500), 0.42],
 	["close", "idle", 30, Vector2(300, -1300), Vector2(0, -1800), 0.6],
@@ -59,6 +62,9 @@ func _process(_d: float) -> bool:
 			"wall": b.start_attack(b.BarrierWall.new(pl[3]))
 			"spray": b.start_attack(b.NodeSpray.new())
 			"open": b._open()
+			"burst": b.start_attack(b.RadialBurst.new(b.CORE_POS, 10))
+			"lattice": b.start_attack(b.Lattice.new())
+			"cracked": b.cracks = 2
 	local += 1
 	p.invuln = 999.0
 	p.vel = Vector2.ZERO

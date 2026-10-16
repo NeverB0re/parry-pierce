@@ -1,7 +1,8 @@
 extends "res://scripts/attacks/attack.gd"
 ## 결계면 (결계 위성, 패리 불가 = 보라): 경기장 한쪽 끝에서 반대쪽으로 화면 높이 전체의 보라 벽이 밀려온다.
 ## 피할 곳이 없다 → 벽이 지나가는 순간 돌진으로 뚫어야 한다 (완전 동조의 정석 기회). 한 번 뚫으면 그 벽은 더 맞지 않는다 (dodged).
-## 플레이어에게서 먼 쪽에서 출발한다. 예고 동안 출발선이 달아오르고 밀려올 방향이 화살표로 보인다
+## 플레이어에게서 먼 쪽에서 출발한다. 예고 동안 출발선이 달아오르고 밀려올 방향이 화살표로 보인다.
+## wait = 이만큼 기다렸다가 예고 시작 (두 겹 벽: 두 번째 벽은 보조 공격으로 조금 늦게). 겉보기엔 넓은 빛무리, 판정은 가운데 띠만
 
 const WIND := 1.0
 const MOVE := 3.6                    # 끝에서 끝까지
@@ -17,9 +18,13 @@ var x := -WALL
 var x_prev := -WALL
 
 
-func _init(ppos: Vector2) -> void:
+var wait := 0.0
+
+
+func _init(ppos: Vector2, wait_ := 0.0) -> void:
 	kind = "wall"
-	phase = "wind"
+	wait = wait_
+	phase = "wait" if wait > 0.0 else "wind"
 	if ppos.x < 0.0:                     # 플레이어가 왼쪽이면 오른쪽 끝에서 출발
 		x0 = WALL
 		x1 = -WALL
@@ -29,6 +34,10 @@ func _init(ppos: Vector2) -> void:
 
 func step(_dt: float, _ppos: Vector2) -> void:
 	match phase:
+		"wait":
+			if t >= wait:
+				phase = "wind"
+				t = 0.0
 		"wind":
 			if t >= WIND:
 				phase = "move"
@@ -58,6 +67,8 @@ func beam_hit(p: Vector2, r: float) -> Vector2:
 func draw() -> void:
 	var c: CanvasItem = boss
 	var dir := signf(x1 - x0)
+	if phase == "wait":
+		return
 	if phase == "wind":
 		var kk := clampf(t / WIND, 0.0, 1.0)
 		var blink := 0.6 + 0.4 * sin(boss.t * 22.0)
@@ -69,7 +80,8 @@ func draw() -> void:
 			c.draw_colored_polygon(PackedVector2Array([tip, tip - Vector2(dir * 40.0, 22.0), tip - Vector2(dir * 40.0, -22.0)]), Color(C_UNPARRY_CORE, 0.2 + 0.45 * kk))
 		return
 	var fl := 0.9 + 0.2 * sin(boss.t * 30.0)
-	c.draw_rect(Rect2(x - HALF * 3.0, TOP, HALF * 6.0, -TOP), Color(C_UNPARRY, 0.12))
+	c.draw_rect(Rect2(x - 220.0 * fl, TOP, 440.0 * fl, -TOP), Color(C_UNPARRY, 0.07))      # 넓은 빛무리 (판정 없음)
+	c.draw_rect(Rect2(x - HALF * 3.0, TOP, HALF * 6.0, -TOP), Color(C_UNPARRY, 0.14))
 	c.draw_rect(Rect2(x - HALF, TOP, HALF * 2.0, -TOP), Color(C_UNPARRY, 0.6 * fl))
 	c.draw_line(Vector2(x, TOP), Vector2(x, 0), Color(C_UNPARRY_CORE, 0.95), 6.0)
 	var y := fposmod(boss.t * 400.0, 260.0) + TOP         # 벽을 타고 흐르는 결계 무늬
