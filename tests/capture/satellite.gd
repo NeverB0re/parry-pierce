@@ -12,6 +12,8 @@ var plan := [
 	["wall", "wall", 140, Vector2(300, -900), Vector2(0, -1500), 0.42],
 	["burst", "burst", 120, Vector2(300, -900), Vector2(0, -1500), 0.42],
 	["lattice", "lattice", 64, Vector2(300, -900), Vector2(0, -1500), 0.42],
+	["lattice2", "lattice", 160, Vector2(300, -900), Vector2(0, -1500), 0.42],
+	["lattice4", "lattice", 290, Vector2(300, -900), Vector2(0, -1500), 0.42],
 	["cracked", "cracked", 30, Vector2(300, -1100), Vector2(0, -1700), 0.6],
 	["spray", "spray", 100, Vector2(300, -900), Vector2(0, -1400), 0.42],
 	["open", "open", 90, Vector2(300, -1100), Vector2(0, -1500), 0.42],

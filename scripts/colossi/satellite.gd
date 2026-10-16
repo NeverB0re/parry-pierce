@@ -38,6 +38,7 @@ const SEAL_GUARD := 2.5                      # 닫힌 직후 이 시간 동안�
 
 # ── 공격 고르기 ────────────────────────────────────────
 const GAP := Vector2(0.12, 0.3)              # 보라 공격을 자주 (완전 동조 기회)
+const BURST_BEAMS := 8                      # 결계 폭풍 줄기 수 (줄기 사이를 넓게)
 const SPRAY_SIDE := 0.6                      # 큰 보라 공격에 잔탄 분사가 겹칠 확률
 const SEED_EVERY := 4                        # 닫힌 동안 금색 주탄(한 발)은 공격 이만큼마다
 const SEED_SPEED := 170.0
@@ -268,7 +269,7 @@ func _choose(ppos: Vector2) -> void:
 	last = kind
 	match kind:
 		"burst":                                 # 결계 폭풍: 사방으로 도는 광선 (겉보기 압도적, 판정은 가는 심줄)
-			start_attack(RadialBurst.new(CORE_POS, 10 + (2 if phase_hard() else 0)))
+			start_attack(RadialBurst.new(CORE_POS, BURST_BEAMS))
 		"orbit":
 			start_attack(OrbitBeam.new(self, ppos, level >= 3 and phase_hard()))
 		"lattice":

@@ -14,7 +14,7 @@ const C_UNPARRY := Color(0.6, 0.08, 0.36)
 const C_UNPARRY_CORE := Color(1.0, 0.62, 0.86)
 
 var origin := Vector2.ZERO
-var n := 10
+var n := 8
 var a0 := 0.0
 var spin := SPIN
 var rot := 0.0
@@ -22,7 +22,7 @@ var rot_prev := 0.0
 var dodged_beams: Array[int] = []
 
 
-func _init(o: Vector2, count := 10) -> void:
+func _init(o: Vector2, count := 8) -> void:
 	kind = "burst"
 	phase = "wind"
 	origin = o

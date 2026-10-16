@@ -2301,6 +2301,15 @@ func _satellite_test() -> void:
 	bz.mark_dodged(on_beam, 12.0)
 	_check("barrier storm: a dodged beam no longer hits, others still do", bz.beam_hit(on_beam, 12.0) == Vector2.ZERO and bz.dodged_beams == [0])
 	_check("satellite: purple attacks reach the player", beam_hit)
+	var lt = b.Lattice.new()
+	var grows := true
+	for k in range(1, 4):
+		for x in lt._xs(k - 1):
+			grows = grows and lt._xs(k).has(x)
+		for y in lt._ys(k - 1):
+			grows = grows and lt._ys(k).has(y)
+	_check("lattice builds up: vertical first, then horizontal, then the in-between lines, earlier lines stay (%d/%d -> %d/%d)" % [lt._xs(0).size(), lt._ys(0).size(), lt._xs(3).size(), lt._ys(3).size()],
+		grows and lt._ys(0).is_empty() and not lt._xs(0).is_empty() and lt._xs(3).size() > lt._xs(1).size() and lt._ys(3).size() > lt._ys(1).size())
 	var w = b.BarrierWall.new(Vector2(500, -900))
 	w.boss = b
 	_check("barrier wall starts on the far side from the player", w.x0 < 0.0 and w.x1 > 0.0)

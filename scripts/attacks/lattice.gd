@@ -1,13 +1,14 @@
 extends "res://scripts/attacks/attack.gd"
-## 격자 (결계 위성, 패리 불가 = 보라): 경기장 전체에 가로세로 결계선이 그어졌다가(예고) 번쩍인다. 차례마다 반 칸 어긋난다.
+## 격자 (결계 위성, 패리 불가 = 보라): 경기장에 결계선이 네 차례에 걸쳐 늘어나며 번쩍인다 — 넓은 세로줄 → 넓은 가로줄 → 세로줄 사이 → 가로줄 사이.
+## 앞 차례의 선은 그대로 남아 다시 번쩍이고, 새 선만 더해진다 (갑자기 내 자리에 선이 생기지 않게 미리 보고 옮겨 갈 수 있다).
 ## 겉보기엔 화면이 보라 격자로 덮이지만 실제 판정은 번쩍이는 순간의 가는 선뿐 — 칸 안에 머물거나, 번쩍이는 순간 선을 뚫는다.
 ## 회피 처리는 차례 단위 (뚫은 차례만 더는 맞지 않는다)
 
-const ROUNDS := 3
-const WARN := 0.95                   # 예고 (옅은 선이 짙어진다)
+const ROUNDS := 4
+const WARN := 1.0                    # 예고 (새 선이 옅게 나타나 짙어진다)
 const FLASH := 0.3                   # 번쩍 (판정)
-const REST := 0.2
-const STEP := 430.0                  # 선 간격 (칸 크기)
+const REST := 0.25
+const STEP := 520.0                  # 마지막 칸 크기 (처음 두 차례는 그 두 배)
 const HALF := 14.0
 const WALL := 1150.0
 const TOP := -3080.0
@@ -21,7 +22,7 @@ var off := Vector2.ZERO
 
 func _init() -> void:
 	kind = "lattice"
-	off = Vector2(randf() * STEP, randf() * STEP)
+	off = Vector2(randf() * STEP * 2.0, randf() * STEP * 2.0)
 
 
 func _round_t() -> float:
@@ -36,21 +37,31 @@ func _local() -> float:
 	return fmod(t, _round_t())
 
 
-func _xs(k: int) -> Array[float]:
+## k 번째 차례까지의 세로줄: 넓은 줄(0차례부터) + 그 사이 줄(2차례부터). fresh = 이번 차례에 새로 생긴 줄만
+func _xs(k: int, fresh := false) -> Array[float]:
 	var out: Array[float] = []
-	var x := -WALL + fposmod(off.x + (STEP * 0.5 if k % 2 == 1 else 0.0), STEP)
-	while x < WALL:
-		out.append(x)
-		x += STEP
+	if not fresh or k == 0:
+		out.append_array(_lines(-WALL, WALL, off.x, STEP * 2.0))
+	if k >= 2 and (not fresh or k == 2):
+		out.append_array(_lines(-WALL, WALL, off.x + STEP, STEP * 2.0))
 	return out
 
 
-func _ys(k: int) -> Array[float]:
+func _ys(k: int, fresh := false) -> Array[float]:
 	var out: Array[float] = []
-	var y := TOP + fposmod(off.y + (STEP * 0.5 if k % 2 == 1 else 0.0), STEP)
-	while y < 0.0:
-		out.append(y)
-		y += STEP
+	if k >= 1 and (not fresh or k == 1):
+		out.append_array(_lines(TOP, 0.0, off.y, STEP * 2.0))
+	if k >= 3 and (not fresh or k == 3):
+		out.append_array(_lines(TOP, 0.0, off.y + STEP, STEP * 2.0))
+	return out
+
+
+static func _lines(lo: float, hi: float, o: float, gap: float) -> Array[float]:
+	var out: Array[float] = []
+	var v := lo + fposmod(o, gap)
+	while v < hi:
+		out.append(v)
+		v += gap
 	return out
 
 
@@ -106,12 +117,15 @@ func draw() -> void:
 	var flash := lt >= WARN and lt < WARN + FLASH
 	var kk := clampf(lt / WARN, 0.0, 1.0)
 	var dim := 0.35 if dodged_rounds.has(k) else 1.0
+	var new_x := _xs(k, true)
+	var new_y := _ys(k, true)
 	for x in _xs(k):
-		_line(c, Vector2(x, TOP), Vector2(x, 0), flash, kk, dim)
+		_line(c, Vector2(x, TOP), Vector2(x, 0), flash, kk if new_x.has(x) else 1.0, dim)
 	for y in _ys(k):
-		_line(c, Vector2(-WALL, y), Vector2(WALL, y), flash, kk, dim)
+		_line(c, Vector2(-WALL, y), Vector2(WALL, y), flash, kk if new_y.has(y) else 1.0, dim)
 
 
+## 선 하나: 번쩍 = 넓은 빛무리 + 굵은 심줄, 예고 = 옅게 (새 줄은 차츰 짙어지고, 이미 있던 줄은 처음부터 보인다)
 func _line(c: CanvasItem, a: Vector2, b: Vector2, flash: bool, kk: float, dim: float) -> void:
 	if flash:
 		c.draw_line(a, b, Color(C_UNPARRY, 0.12 * dim), 120.0)          # 넓은 빛무리 (판정 없음)
