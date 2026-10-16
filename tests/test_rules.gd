@@ -35,6 +35,7 @@ func _process(_d: float) -> bool:
 	_v044_test()
 	_v047_test()
 	_i18n_test()
+	_zone_test()
 	_title_test()
 	_telemetry_test()
 	print("FAILS ", fails)
@@ -1460,19 +1461,19 @@ func _kraken_shield_test() -> void:
 			spawned = maxi(spawned, b.shots.size())
 			if b.atk == null:
 				break
-		_check("kraken barrage %s finishes and fires (%d shots)" % [kind, spawned], b.atk == null and spawned > 3)
+		_check("kraken barrage %s finishes and fires (%d shots)" % [kind, spawned], b.atk == null and spawned >= (1 if kind == "snipe" else 4))
 	b.reset()
 	b.next_t = 99.0
 	_check("kraken emitters: siphon + tentacle tips + legs", b.emitters().size() == 9)
 	var fixed_a: Array = []                                 # 고정 탄막: 플레이어가 어디 있든 같은 방향으로 쏜다
-	for pp in [Vector2(-800, -400), Vector2(800, -1200)]:
+	for pp in [Vector2(-150, -300), Vector2(120, -500), Vector2(-1000, -1200)]:   # 같은 구역(바로 아래) 두 곳 + 왼쪽
 		b.reset()
 		b.next_t = 99.0
 		b.start_attack(b._fire("ink", pp, false, false))
 		for k in 80:
 			b.step(DT, pp)
 		fixed_a.append(b.shots.vel[0].angle() if b.shots.size() > 0 else 99.0)
-	_check("ink is fixed (same first-shot angle wherever the player is: %s)" % str(fixed_a), absf(fixed_a[0] - fixed_a[1]) < 0.001)
+	_check("ink fires in fixed directions: same within a sector, another sector picks another (%s)" % str(fixed_a), absf(fixed_a[0] - fixed_a[1]) < 0.001 and absf(fixed_a[0] - fixed_a[2]) > 0.3)
 	var lsw = b.Lash.new(4, true)                           # 고정 휩쓸기: 바깥 수평 → 아래
 	lsw.boss = b
 	lsw.aim_at(Vector2(900, -300))
@@ -2129,3 +2130,36 @@ func _title_test() -> void:
 	main.world.close()
 	main.get_tree().paused = false
 	main.start_stage(0)
+
+
+## 패턴 고르기 원칙: 구역 가중치, 근접은 날아오는 탄이 걷힌 뒤에만
+func _zone_test() -> void:
+	main.start_stage(2)
+	var k = main.boss
+	_check("kraken: floor sweep is likely when low, rare when high (%.2f vs %.2f)" % [k._zone_w("sweep", Vector2(0, -300)), k._zone_w("sweep", Vector2(0, -2300))],
+		k._zone_w("sweep", Vector2(0, -300)) > 1.0 and k._zone_w("sweep", Vector2(0, -2300)) < 0.1)
+	_check("kraken: siphon barrages are rare when the player is above the body", k._zone_w("ink", Vector2(0, -2400)) < 0.3 and k._zone_w("ink", Vector2(0, -600)) >= 1.0)
+	main.start_stage(0)
+	var o = main.boss
+	var pp: Vector2 = o.SHOULDERS[1] + Vector2(300, 500)
+	o.shots.clear()
+	o.shots.spawn(pp + Vector2(-400, 0), Vector2(300, 0), 5.0)       # 플레이어에게 다가오는 탄
+	var swung := 0
+	for i in 40:
+		o.atk = null
+		o.last = ""
+		o._choose(pp)
+		if o.atk != null and o.atk.kind == "swing":
+			swung += 1
+	_check("observer: no arm swing while a bullet is coming (%d)" % swung, swung == 0)
+	o.shots.clear()
+	swung = 0
+	for i in 40:
+		o.atk = null
+		o.last = ""
+		o._choose(pp)
+		if o.atk != null and o.atk.kind == "swing":
+			swung += 1
+	_check("observer: arm swing is common in arm reach when clear (%d/40)" % swung, swung >= 10)
+	o.atk = null
+	main.reset_run()

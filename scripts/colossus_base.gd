@@ -74,6 +74,49 @@ func emit(type: int, pos: Vector2, extra := {}) -> void:
 	events.append(ev)
 
 
+# ── 패턴 고르기 공통 도구 ──────────────────────────────
+# 원칙: 탄막은 플레이어를 겨누지 않고 정해진 방향·공간을 채운다 (방향은 정해진 선택지 중 플레이어 쪽).
+#       근접은 날아오는 탄이 걷힌 뒤에만. 패턴은 플레이어가 있는 구역에 맞는 것이 자주 나온다 (zone 가중치).
+const DIRS_DOWN := [PI * 0.5, PI * 0.5 - 0.7, PI * 0.5 + 0.7, 0.15, PI - 0.15]   # 아래 · 오른아래 · 왼아래 · 오른쪽 · 왼쪽
+const CLEAR_R := 900.0               # 근접은 플레이어 이 거리 안으로 다가오는 탄이 없을 때만
+
+
+## 정해진 방향(dirs) 중 from → to 에 가장 가까운 것
+static func nearest_dir(from: Vector2, to: Vector2, dirs: Array) -> float:
+	var want := (to - from).angle()
+	var best: float = dirs[0]
+	for d in dirs:
+		if absf(angle_difference(float(d), want)) < absf(angle_difference(best, want)):
+			best = d
+	return best
+
+
+## 플레이어 가까이(CLEAR_R) 다가오는 적 탄이 없고, 패리 불가 고리도 퍼지고 있지 않은가 (근접을 시작해도 되는가)
+func shots_clear(ppos: Vector2) -> bool:
+	if is_lingering("rings"):
+		return false
+	for k in shots.size():
+		if shots.mine[k] == 1:
+			continue
+		var d: Vector2 = ppos - shots.pos[k]
+		if d.length() < CLEAR_R and d.dot(shots.vel[k]) > 0.0:
+			return false
+	return true
+
+
+## 가중치 뽑기 {종류: 가중치}. avoid(직전 패턴)는 가중치를 크게 줄인다
+static func weighted_pick(w: Dictionary, avoid := "") -> String:
+	var total := 0.0
+	for k in w:
+		total += float(w[k]) * (0.15 if k == avoid else 1.0)
+	var r := randf() * total
+	for k in w:
+		r -= float(w[k]) * (0.15 if k == avoid else 1.0)
+		if r <= 0.0:
+			return k
+	return w.keys()[0]
+
+
 ## 지금 공격 종류 ("" = 쉬는 중). 튜토리얼·HUD·디버그가 읽는다
 func attack_kind() -> String:
 	return "" if atk == null else atk.kind

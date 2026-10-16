@@ -1,5 +1,5 @@
 extends "res://scripts/attacks/attack.gd"
-## 흩뿌리기: 포구가 달아오른 뒤 사방으로 탄을 COUNT 발 흩뿌린다. 세 발에 한 발은 잔탄. 탄은 패리할 수 있다.
+## 흩뿌리기: 포구가 달아오른 뒤 사방으로 탄을 COUNT 발 고르게 뿌린다 (두 겹 속도, 틈이 일정해 빠져나갈 길이 보인다). 세 발에 한 발은 잔탄. 탄은 패리할 수 있다.
 ## boss 에 필요한 것: set_glow(cannon, v), bolt_mult()
 
 const Projectiles := preload("res://scripts/projectiles.gd")
@@ -23,9 +23,9 @@ func step(_dt: float, _ppos: Vector2) -> void:
 		boss.set_glow(cannon, t / CHARGE)
 		return
 	for i in COUNT:
-		var ang := TAU * i / float(COUNT) + randf_range(-0.15, 0.15)
+		var ang := TAU * i / float(COUNT)
 		var kd := Projectiles.Kind.SMALL if i % 3 == 2 else Projectiles.Kind.BOLT
-		boss.shots.spawn(origin, Vector2.from_angle(ang) * randf_range(SPEED.x, SPEED.y) * boss.bolt_mult(), 9.0, 0.0, 0.0, kd)
+		boss.shots.spawn(origin, Vector2.from_angle(ang) * (SPEED.x if i % 2 == 0 else SPEED.y) * boss.bolt_mult(), 9.0, 0.0, 0.0, kd)
 	boss.emit(Ev.BOLT, origin)
 	boss.set_glow(cannon, 1.0)
 	boss.finish_attack()

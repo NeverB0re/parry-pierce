@@ -4,8 +4,8 @@ extends "res://scripts/attacks/attack.gd"
 ##  tips  = 촉수 끝 물결 — 발사점이 왼쪽 → 오른쪽(다음 바퀴는 반대) 차례로 경기장 가운데 쪽으로 넓은 부채를 쏜다. 바퀴마다 반 칸 어긋난다
 ##  ring  = 분사구에서 동심 고리 — 한 줄 걸러 반 칸씩 어긋난다 (고리 사이로 빠져나간다)
 ##  cross = 양쪽 가장자리에서 수평으로 엇갈리게 휘두르는 탄 줄기 (가운데에서 X 자로 엇갈린다)
-##  snipe = 저격 (시그니처, 유일하게 겨눈다) — 치켜든 두 촉수가 번갈아 조준선을 띄우고 큰 주탄을 쏜다. 마지막 순간 조준이 멈춘다.
-##          탄 수는 적고 주탄이라 패리 → 리버스 드라이브의 기회
+##  snipe = 저격 (시그니처, 유일하게 겨눈다) — 치켜든 두 촉수가 번갈아 조준선을 띄우고 빠른 유도탄을 한 발씩 쏜다.
+##          한 발씩이고 주탄(유도탄)이라 패리 → 리버스 드라이브의 기회 (되돌리면 피해가 크다)
 ## 탄은 모두 패리할 수 있다 (주탄 = 리버스 드라이브).
 ## light = 작은 탄막 두 개를 겹쳐 쏠 때의 작은 판. 스테이지(boss.level)가 뒤일수록 탄 수가 조금씩 는다.
 ## boss 에 필요한 것: emitters() → [[번호, 위치], ...], emitter_pos(번호) (못 쓰면 Vector2.INF), set_glow(c, v), bolt_mult()
@@ -33,11 +33,12 @@ const CROSS_TIME := 2.6
 const CROSS_RATE := 0.13
 const CROSS_SWEEP := 0.55
 # snipe
-const SNIPE_SHOTS := 4               # + 1 (3스테이지부터)
+const SNIPE_SHOTS := 2               # + 1 (3스테이지부터)
 const SNIPE_CHARGE := 0.8            # 조준선이 보이는 시간
 const SNIPE_LOCK := 0.2              # 마지막 이만큼은 조준이 멈춘다 (피할 틈)
-const SNIPE_GAP := 0.6
-const SNIPE_SPEED := 560.0
+const SNIPE_GAP := 1.1
+const SNIPE_SPEED := 460.0           # 유도탄 (보통 유도탄 270 보다 빠르다)
+const SNIPE_LIFE := 5.0
 
 var mode := "tips"
 var hard := false
@@ -77,7 +78,7 @@ func _setup() -> void:
 		tips_rounds = 1
 		ring_count = 2
 		cross_time = 1.4
-		snipe_n = 2
+		snipe_n = 1
 	match mode:
 		"tips":
 			var tips := em.filter(func(e): return int(e[0]) >= 0)
@@ -236,9 +237,7 @@ func _snipe(ppos: Vector2) -> void:
 		var o: Vector2 = boss.emitter_pos(id)
 		if o != Vector2.INF and aims.has(done):
 			var a: float = aims[done]
-			boss.shots.spawn(o, Vector2.from_angle(a) * SNIPE_SPEED * m, 9.0)
-			for s in [-1.0, 1.0]:                          # 양옆 잔탄 둘 (주탄 옆을 메운다)
-				boss.shots.spawn(o, Vector2.from_angle(a + s * 0.16) * SMALL_SPEED * m, 9.0, 0.0, 0.0, Projectiles.Kind.SMALL)
+			boss.shots.spawn(o, Vector2.from_angle(a) * SNIPE_SPEED * m, SNIPE_LIFE, 0.0, 0.0, Projectiles.Kind.HOMING)
 			boss.emit(Ev.BOLT, o)
 			boss.set_glow(id, 1.0)
 		aims.erase(done)

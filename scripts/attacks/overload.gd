@@ -1,7 +1,7 @@
 extends "res://scripts/attacks/attack.gd"
 ## 반응로 폭주 (코어 페이즈 전용, 고난도 탄막): 반응로가 달아오르며 맥동한 뒤 잔탄 고리를 RINGS 번 뿜는다.
 ## 고리마다 조금씩 돌려 쏘아 겹친 고리가 소용돌이 격자를 이루고, 그 틈으로 빠져나가야 한다.
-## 두 고리마다 주탄 한 발이 플레이어를 노린다 (패리 → 리버스 드라이브로 반응로에 꽂을 기회).
+## 두 고리마다 주탄 네 발이 십자로 나간다 (겨누지 않는다. 패리 → 리버스 드라이브로 반응로에 꽂을 기회).
 ## boss 에 필요한 것: bolt_mult()
 
 const Projectiles := preload("res://scripts/projectiles.gd")
@@ -30,7 +30,7 @@ func _init(o: Vector2) -> void:
 	turn = 1.0 if randf() < 0.5 else -1.0
 
 
-func step(_dt: float, ppos: Vector2) -> void:
+func step(_dt: float, _ppos: Vector2) -> void:
 	if t < WIND:
 		return
 	var ft := t - WIND
@@ -41,8 +41,9 @@ func step(_dt: float, ppos: Vector2) -> void:
 			var d := Vector2.from_angle(off + j * TAU / COUNT)
 			boss.shots.spawn(origin + d * START_R, d * SMALL_SPEED * m, 9.0, 0.0, 0.0, Projectiles.Kind.SMALL)
 		if rings % 2 == 1:
-			var aim := (ppos - origin).normalized()
-			boss.shots.spawn(origin + aim * START_R, aim * MAIN_SPEED * m, 9.0)
+			for q in 4:
+				var md := Vector2.from_angle(off + q * PI * 0.5 + PI * 0.25)
+				boss.shots.spawn(origin + md * START_R, md * MAIN_SPEED * m, 9.0)
 		boss.emit(Ev.BOLT, origin)
 		rings += 1
 	if rings >= RINGS and ft >= (RINGS - 1) * INTERVAL + AFTER:

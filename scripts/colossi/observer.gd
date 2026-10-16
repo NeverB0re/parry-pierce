@@ -68,12 +68,14 @@ var feet: Array[Vector2] = []
 var fists: Array[Vector2] = []
 var debris: Array[Dictionary] = []   # 부서져 떨어진 부위
 var eye_glow := 0.0
+var last := ""                       # 직전 패턴 (연달아 같은 것을 덜 고른다)
 var beam_glow := 0.0                 # 레이저 직전·중 눈이 보랏빛으로 달아오름
 var cannon_glow: Array[float] = [0.0, 0.0]   # 발사 전 포구가 달아오르는 정도
 
 
 func _init() -> void:
 	open_time = OPEN_TIME
+	attack_gap = Vector2(0.5, 0.9)               # 멍때릴 틈 없이 (기본 1.0~1.8 은 길었다)
 
 
 func _ready() -> void:
@@ -232,32 +234,33 @@ func _on_attack_finished() -> void:
 		fists[1] = FIST_IDLE[1]
 
 
+## 구역 가중치로 고른다: 낮은 곳 = 분출, 팔이 닿는 곳 = 휩쓸기, 그 밖 = 포대 사격. 레이저는 드물게.
+## 휩쓸기(근접)는 날아오는 탄이 걷힌 뒤에만 (탄막과 겹치지 않게). 조준 연사가 관측자의 시그니처(겨누는 사격)
 func _choose(ppos: Vector2) -> void:
-	var roll := randf()
 	var can_shoot := phase == 3 or part_alive(0) or part_alive(1)
 	var arm := _swing_arm(ppos)
-	if ppos.y > LOW_ZONE_Y and roll < 0.6:      # 융해 지대 근처: 아래에서 솟는 덩어리 위주
-		start_attack(Erupt.new(ppos))
-		return
-	if roll < 0.2:
-		start_attack(Erupt.new(ppos))
-		return
-	if roll < 0.36:                               # 패리 불가 눈 레이저
-		start_attack(Beam.new(HEAD_POS))
-		return
-	if arm >= 0 and (roll < 0.64 or not can_shoot):
-		var sw := Swing.new(arm, 2 + arm, fists[arm])
-		start_attack(sw)
-		sw.aim_at(ppos)
-	elif can_shoot:
-		var c := _shooter(ppos)
-		var org: Vector2 = HEAD_POS if c < 0 else MUZZLES[c]
-		if roll < 0.86:
-			start_attack(Volley.new(c, org, ppos))
-		else:
-			start_attack(Burst.new(c, org))
-	else:
-		start_attack(Erupt.new(ppos))
+	var low := ppos.y > LOW_ZONE_Y
+	var w := {"erupt": 2.5 if low else 0.5, "beam": 0.6}
+	if arm >= 0 and shots_clear(ppos):
+		w["swing"] = 2.2
+	if can_shoot:
+		w["volley"] = 1.6 if not low else 0.6
+		w["burst"] = 0.8
+	var kind := weighted_pick(w, last)
+	last = kind
+	match kind:
+		"erupt":
+			start_attack(Erupt.new(ppos))
+		"beam":
+			start_attack(Beam.new(HEAD_POS))
+		"swing":
+			var sw := Swing.new(arm, 2 + arm, fists[arm])
+			start_attack(sw)
+			sw.aim_at(ppos)
+		_:
+			var c := _shooter(ppos)
+			var org: Vector2 = HEAD_POS if c < 0 else MUZZLES[c]
+			start_attack(Volley.new(c, org, ppos) if kind == "volley" else Burst.new(c, org))
 
 
 ## 휩쓸 수 있는 팔: 플레이어 쪽 팔 우선, 부서졌거나 닿지 않으면 반대 팔

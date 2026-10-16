@@ -154,9 +154,11 @@ func _choose(ppos: Vector2) -> void:
 	var calm: bool = lingering.is_empty() and shots.size() <= CALM_SHOTS    # 회전형 탄막은 다른 패턴이 쉴 때만 혼자
 	var want_homing := since_homing >= (2 if hard else HOMING_EVERY) and not homing_origins().is_empty()
 	var main_kind := ""
-	if since_special >= SPECIAL_EVERY and randf() < 0.5:    # 드물게: 천장 프레스(근접, 회피 불가) / 심장부 동심원 파동(패리 불가)
+	var high := ppos.y < -1900.0                             # 높은 곳: 천장 프레스가 노리는 곳
+	if since_special >= SPECIAL_EVERY and randf() < (0.75 if high else 0.35):   # 드물게: 천장 프레스(근접) / 심장부 동심원 파동(패리 불가)
 		since_special = 0
-		main_kind = "press" if (randf() < 0.5 or is_lingering("rings")) else "rings"
+		var press_ok := shots_clear(ppos)                    # 근접은 날아오는 탄이 걷힌 뒤에만
+		main_kind = "press" if press_ok and (high or randf() < 0.4) else "rings"
 	elif ppos.y > LOW_ZONE_Y and last != "mines" and randf() < 0.6:   # 낮은 곳: 기뢰 위주
 		main_kind = "mines"
 	else:
@@ -172,7 +174,7 @@ func _choose(ppos: Vector2) -> void:
 		if pool.is_empty():
 			pool.append("fan")
 		main_kind = pool[randi() % pool.size()]
-	if want_homing and main_kind != "spiral":                # 유도탄은 다른 탄막과 겹쳐 쏜다 (회전형과는 겹치지 않는다)
+	if want_homing and main_kind != "spiral" and main_kind != "press":   # 유도탄(요새의 시그니처, 겨누는 사격)은 다른 탄막과 겹쳐 쏜다 (회전형·프레스와는 겹치지 않는다)
 		since_homing = 0
 		start_side(Homing.new())
 	var c := _battery(ppos)
@@ -184,10 +186,16 @@ func _choose(ppos: Vector2) -> void:
 			_pick("rings", Rings.new(REACTOR_POS))
 		"mines":
 			_pick("mines", Mines.new(ppos, hard))
-		"spiral":
-			_pick("spiral", Spiral.new(c, org, ppos, hard))
-		"fan":
-			_pick("fan", Fan.new(c, org, ppos, hard))
+		"spiral":                                           # 고정 방향(플레이어 쪽 선택지)으로 휘두른다
+			var sp := Spiral.new(c, org, ppos, hard)
+			sp.fixed = true
+			sp.center = nearest_dir(org, ppos, DIRS_DOWN)
+			_pick("spiral", sp)
+		"fan":                                              # 고정 방향(플레이어 쪽 선택지), 부채마다 반 칸 어긋난다
+			var f := Fan.new(c, org, ppos, hard)
+			f.fixed = true
+			f.aim = nearest_dir(org, ppos, DIRS_DOWN)
+			_pick("fan", f)
 		_:
 			_pick("overload", Overload.new(REACTOR_POS))
 

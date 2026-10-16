@@ -70,7 +70,6 @@ const RANGED_KINDS := ["ink", "spray", "fan", "spiral", "tips", "ring", "cross",
 const RANGED_SHARE := 0.62                   # 탄막 : 근접 = 6 : 4 (근접은 시그니처 패턴 위주)
 const DUO_CHANCE := [0.0, 0.15, 0.3]         # 스테이지별: 작은 탄막 두 개를 겹쳐 쏠 확률 (근접과는 절대 겹치지 않는다)
 const DUOS := [["ring", "snipe"], ["cross", "tips"], ["ink", "snipe"]]     # 고정 탄막 + 저격(작게) 또는 고정 둘
-const CLEAR_R := 900.0                       # 근접 패턴은 플레이어 이 거리 안에 날아오는 탄이 없을 때만 시작한다
 const CLEAR_WAIT := 2.5                      # 그래도 이 시간이 지나면 시작한다 (탄이 오래 남아 있을 때)
 const SPECIAL_EVERY := 4                     # 방전 그물(패리 불가)은 공격 이만큼마다 (드물게)
 const COMBO_HITS := 3                        # 연타 타수
@@ -516,10 +515,10 @@ func _choose(ppos: Vector2) -> void:
 		var pool: Array[String] = fire
 		if not melee.is_empty() and randf() > RANGED_SHARE:
 			pool = melee
-		pool = pool.duplicate()
-		while pool.size() > 1 and pool.has(last):
-			pool.erase(last)
-		kind = pool[randi() % pool.size()]
+		var w := {}                                          # 같은 패턴이 여러 번 들어 있으면 그만큼 자주 + 구역 가중치
+		for k in pool:
+			w[k] = float(w.get(k, 0.0)) + _zone_w(k, ppos)
+		kind = weighted_pick(w, last)
 	if not RANGED_KINDS.has(kind) and kind != "eye" and not _shots_clear(ppos):   # 근접·그물: 날아오는 탄이 걷힐 때까지 기다린다 (요격하려면 멈춰야 하므로)
 		want = kind
 		want_t = 0.0
@@ -544,15 +543,25 @@ func _melee_ok(m: String, ready: Array[int]) -> bool:
 
 ## 플레이어 가까이(CLEAR_R) 날아오는 적 탄이 없는가
 func _shots_clear(ppos: Vector2) -> bool:
-	if is_lingering("rings"):                                # 퍼지는 동심원이 남아 있으면 기다린다
-		return false
-	for k in shots.size():
-		if shots.mine[k] == 1:
-			continue
-		var d: Vector2 = ppos - shots.pos[k]
-		if d.length() < CLEAR_R and d.dot(shots.vel[k]) > 0.0:
-			return false
-	return true
+	return shots_clear(ppos)
+
+
+## 구역 가중치: 플레이어가 그 패턴이 덮는 곳에 있으면 자주, 아니면 드물게 (y 아래 = +)
+func _zone_w(kind: String, p: Vector2) -> float:
+	var below_body := p.y > SIPHON.y - 100.0
+	var low := p.y > ROOTS[4].y + 150.0                      # 늘어진 촉수 뿌리보다 아래 = 하단
+	match kind:
+		"ink", "spray":
+			return 1.0 if below_body else 0.15
+		"tips":
+			return 1.0 if absf(p.x) < 750.0 and p.y > -1900.0 else 0.4
+		"cross":
+			return 1.0 if p.y > -1700.0 and p.y < -250.0 else 0.25
+		"sweep", "flurry":
+			return 1.4 if low else 0.05
+		"ring", "snipe", "eye":
+			return 0.8
+	return 1.0
 
 
 func _start(kind: String, ready: Array[int], ppos: Vector2, hard: bool) -> void:
@@ -597,13 +606,15 @@ func _start(kind: String, ready: Array[int], ppos: Vector2, hard: bool) -> void:
 ## 탄막 모듈. light = 두 개를 겹쳐 쏠 때의 작은 판
 func _fire(kind: String, ppos: Vector2, hard: bool, light: bool):
 	match kind:
-		"spray":                                             # 고정: 분사구 아래 부채꼴을 휘두른다
+		"spray":                                             # 고정 방향(플레이어 쪽 선택지)으로 부채꼴을 휘두른다
 			var sp = Spiral.new(-1, SIPHON, SIPHON + Vector2(0, 1000), hard)
 			sp.fixed = true
+			sp.center = nearest_dir(SIPHON, ppos, DIRS_DOWN)
 			return sp
-		"ink":                                               # 고정: 아래로 부채, 부채마다 반 칸 어긋난다
+		"ink":                                               # 고정 방향(플레이어 쪽 선택지)으로 부채, 부채마다 반 칸 어긋난다
 			var f = Fan.new(-1, SIPHON, SIPHON + Vector2(0, 1000), hard and not light)
 			f.fixed = true
+			f.aim = nearest_dir(SIPHON, ppos, DIRS_DOWN)
 			if light:
 				f.wave_n = 2
 			return f
