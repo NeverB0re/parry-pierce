@@ -1,5 +1,6 @@
 extends CanvasLayer
 ## ESC 메뉴. 플레이 중에는 마우스가 창 밖으로 못 나가고, 메뉴를 열어야 풀린다. 열 때마다(그리고 언어를 바꿀 때) 글자를 새로 만든다.
+const UiFont := preload("res://scripts/ui_font.gd")
 
 const Loc := preload("res://scripts/loc.gd")
 
@@ -7,7 +8,7 @@ signal restart_requested
 signal world_requested
 signal title_requested
 
-var font: SystemFont
+var font: Font
 var ui_scale := 1.0                  # 터치 기기에서는 키운다
 var tutorial                         # main.gd 가 연결: 조작법 다시 보기
 var title                            # main.gd 가 연결: 타이틀이 열려 있으면 ESC 는 무시한다
@@ -20,8 +21,7 @@ func _ready() -> void:
 	layer = 50
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	visible = false
-	font = SystemFont.new()
-	font.font_names = PackedStringArray(["Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans CJK KR", "Segoe UI", "sans-serif"])
+	font = UiFont.make(PackedStringArray(["Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans CJK KR", "Segoe UI", "sans-serif"]))
 
 	var dim := ColorRect.new()
 	dim.color = Color(0, 0, 0, 0.65)
@@ -67,7 +67,8 @@ func _build() -> void:
 		visible = false
 		get_tree().paused = false
 		title_requested.emit())
-	_button(box, Loc.t("종료"), func() -> void: get_tree().quit())
+	if not OS.has_feature("web"):                              # 브라우저에서는 창을 닫을 수 없다
+		_button(box, Loc.t("종료"), func() -> void: get_tree().quit())
 
 	help_box = VBoxContainer.new()
 	help_box.add_theme_constant_override("separation", 14)
@@ -123,4 +124,4 @@ func open() -> void:
 func resume() -> void:
 	visible = false
 	get_tree().paused = false
-	Input.mouse_mode = Input.MOUSE_MODE_CONFINED
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if OS.has_feature("web") else Input.MOUSE_MODE_CONFINED

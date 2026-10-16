@@ -103,7 +103,7 @@ func _ready() -> void:
 		elif a == "--lowfx":
 			Quality.low = true
 	if not touch_mode:
-		Input.mouse_mode = Input.MOUSE_MODE_CONFINED   # 플레이 중엔 창 밖으로 못 나감 (ESC 메뉴에서 해제)
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if OS.has_feature("web") else Input.MOUSE_MODE_CONFINED   # 플레이 중엔 창 밖으로 못 나감 (ESC 메뉴에서 해제, 웹은 가둘 수 없다)
 	for a in OS.get_cmdline_user_args():      # 테스트용: -- --spawn=x,y
 		if a.begins_with("--spawn="):
 			var xy := a.trim_prefix("--spawn=").split(",")
@@ -312,7 +312,7 @@ func _on_jump() -> void:
 
 func _on_arrived() -> void:
 	if touch_ui == null:
-		Input.mouse_mode = Input.MOUSE_MODE_CONFINED
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if OS.has_feature("web") else Input.MOUSE_MODE_CONFINED
 	var ids := ["dodge", "charge", "parry"]               # 꼭 알아야 할 것만 스테이지별로: ① 돌진 → 차지 → 패리 ② 요격 ③ 연속 요격 (본 장은 다시 안 뜬다)
 	if stage_idx >= 1:
 		ids.append("intercept")

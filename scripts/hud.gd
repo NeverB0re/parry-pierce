@@ -1,12 +1,13 @@
 extends Control
 ## HUD: 체력 가면, 추진 게이지, 배너, 비네트, 화면 플래시.
+const UiFont := preload("res://scripts/ui_font.gd")
 
 const Loc := preload("res://scripts/loc.gd")
 const Player := preload("res://scripts/player.gd")
 const Sprites := preload("res://scripts/sprites.gd")
 
 var main: Node
-var font: SystemFont
+var font: Font
 var banner_title := ""
 var banner_sub := ""
 var flash_a := 0.0
@@ -19,8 +20,7 @@ func _ready() -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	font = SystemFont.new()
-	font.font_names = PackedStringArray(["Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans CJK KR", "sans-serif"])
+	font = UiFont.make(PackedStringArray(["Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans CJK KR", "sans-serif"]))
 
 
 func banner(title: String, sub := "") -> void:

@@ -2,6 +2,7 @@ extends CanvasLayer
 ## 월드 맵 (스테이지 사이, ESC 메뉴에서도): 은하 9개(스테이지)와 목적지(10번째)를 점선 항로로 잇고, 기체가 고른 스테이지 위에 떠 있다.
 ## 깬 은하는 다시 골라 재전투할 수 있다. 안 깬 곳(다음 하나만 고를 수 있음)·아직 만들지 않은 곳은 회색.
 ## 아래에는 얻은 동력 코어를 보여 주고, 눌러서(또는 숫자 키) 장착·교체한다 (장착 칸 수만큼만 작동). FTL 도약 → 고른 스테이지.
+const UiFont := preload("res://scripts/ui_font.gd")
 
 const Loc := preload("res://scripts/loc.gd")
 signal jump_requested
@@ -16,7 +17,7 @@ const C_OWNED := Color(0.78, 0.8, 0.86)       # 얻었지만 장착하지 않은
 
 var profile                          # main.gd 가 연결 (profile.gd)
 var ui_scale := 1.0
-var font: SystemFont
+var font: Font
 var sub: Label
 var map: MapView
 var core_labels := {}                # 코어 id → Label
@@ -31,8 +32,7 @@ func _ready() -> void:
 	layer = 60
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	visible = false
-	font = SystemFont.new()
-	font.font_names = PackedStringArray(["Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans CJK KR", "sans-serif"])
+	font = UiFont.make(PackedStringArray(["Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans CJK KR", "sans-serif"]))
 
 	var dim := ColorRect.new()
 	dim.color = Color(0.02, 0.03, 0.05, 0.96)

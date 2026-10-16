@@ -3,6 +3,7 @@ extends CanvasLayer
 ## 처음 켰을 때·항로도에서 돌아왔을 때는 전용 배경(우주·행성·리버스 드라이브 궤적·멀리 선 콜로서스 실루엣)이 게임을 완전히 가린다.
 ## ESC 메뉴에서 왔을 때(이어하기)만 멈춘 판이 어둡게 비친다. 입력은 막힌다 (main.gd 가 title.visible 을 본다).
 ## 새 게임은 저장된 진행이 있으면 한 번 더 눌러야 시작한다 (확인).
+const UiFont := preload("res://scripts/ui_font.gd")
 
 const Loc := preload("res://scripts/loc.gd")
 
@@ -14,7 +15,7 @@ signal quit_requested
 var profile                          # main.gd 가 연결
 var tutorial                         # main.gd 가 연결: 조작법 목록
 var ui_scale := 1.0
-var font: SystemFont
+var font: Font
 var root: Control
 var _confirm_new := false
 var _help := false
@@ -25,8 +26,7 @@ func _ready() -> void:
 	layer = 55
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	visible = false
-	font = SystemFont.new()
-	font.font_names = PackedStringArray(["Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans CJK KR", "Segoe UI", "sans-serif"])
+	font = UiFont.make(PackedStringArray(["Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans CJK KR", "Segoe UI", "sans-serif"]))
 	root = Control.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(root)
@@ -119,7 +119,8 @@ func _build() -> void:
 			_confirm_new = false
 			_help = true
 			_build())
-		_button(box, Loc.t("종료"), func() -> void: quit_requested.emit())
+		if not OS.has_feature("web"):                          # 브라우저에서는 창을 닫을 수 없다
+			_button(box, Loc.t("종료"), func() -> void: quit_requested.emit())
 		if b_res != null:
 			b_res.grab_focus()
 		elif not _has_progress():

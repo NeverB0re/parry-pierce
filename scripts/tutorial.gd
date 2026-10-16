@@ -2,6 +2,7 @@ extends CanvasLayer
 ## 튜토리얼 팝업: 새 메커니즘이 처음 나올 때 게임을 멈추고 반복 재생 애니메이션 + 설명을 보여 준다.
 ## 애니메이션은 코드로 그린 짧은 루프(움짤)다. 한 번 본 장은 다시 자동으로 뜨지 않고(user://tutorial.cfg),
 ## ESC 메뉴의 '조작법'에서 언제든 다시 볼 수 있다.
+const UiFont := preload("res://scripts/ui_font.gd")
 
 const Loc := preload("res://scripts/loc.gd")
 const Sprites := preload("res://scripts/sprites.gd")
@@ -17,7 +18,7 @@ var current := ""
 var was_paused := false
 var was_mouse := Input.MOUSE_MODE_VISIBLE
 
-var font: SystemFont
+var font: Font
 var dim: ColorRect
 var title_l: Label
 var stage: Control
@@ -30,8 +31,7 @@ func _ready() -> void:
 	layer = 60
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	visible = false
-	font = SystemFont.new()
-	font.font_names = PackedStringArray(["Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans CJK KR", "sans-serif"])
+	font = UiFont.make(PackedStringArray(["Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans CJK KR", "sans-serif"]))
 	_load_seen()
 	_build_ui()
 
@@ -303,7 +303,7 @@ class Stage extends Control:
 	const HexShield := preload("res://scripts/hex_shield.gd")
 	var kind := ""
 	var t := 0.0
-	var font: SystemFont
+	var font: Font
 
 	func _ready() -> void:
 		texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST

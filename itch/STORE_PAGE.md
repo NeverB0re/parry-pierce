@@ -4,8 +4,8 @@
 - **Title**: Parry Pierce
 - **Short description / tagline** (EN): `Parry the barrage, ride the energy back, and pierce the colossus. A one-button-per-verb 2D boss-fight prototype.`
 - **Short description** (KO): `탄막을 패리하고, 받아낸 힘으로 거대 병기를 꿰뚫어라. 보스전 중심 2D 액션 프로토타입.`
-- **Kind of project**: Downloadable · **Genre**: Action · **Release status**: In development (Prototype)
-- **Platforms**: Windows · **Languages**: English, Korean
+- **Kind of project**: HTML (브라우저 실행 + Windows 다운로드) · **Genre**: Action · **Release status**: In development (Prototype)
+- **Platforms**: Windows, Web · **Languages**: English, Korean
 - **Tags**: `parry`, `boss-rush`, `bullet-hell`, `2d`, `pixel-art`, `singleplayer`, `action`, `mouse-only`, `short`, `godot`
 - **Pricing**: Free (or $0 or donate)
 - **Cover**: `cover.png` · **Screenshots**: `screenshots/01~07_*.png`
@@ -44,9 +44,10 @@ Language: pick **English / 한국어** with the flag buttons at the bottom-right
 
 ### Notes
 - This is an early prototype — balance and content are still moving. Feedback is very welcome in the comments!
+- Play right in the browser, or download the Windows build for the smoothest performance.
 - Windows may show a SmartScreen warning ("unknown publisher") because the build is not code-signed. Choose *More info → Run anyway* if you trust it.
-- Progress and settings are stored locally; no network access, no accounts, no tracking.
-- Sprite art: *Space Rage* by **Ravenmore** (CC-BY 3.0, http://dycha.net/). Sound effects, music and boss art are generated in code.
+- Progress and settings are stored locally (in the browser for the web version); no network access, no accounts, no tracking.
+- Sprite art: *Space Rage* by **Ravenmore** (CC-BY 3.0, http://dycha.net/). Sound effects, music and boss art are generated in code. Font: Noto Sans KR (SIL OFL).
 
 ---
 
@@ -76,9 +77,10 @@ Language: pick **English / 한국어** with the flag buttons at the bottom-right
 
 ### 안내
 - 초기 프로토타입이라 밸런스·콘텐츠가 계속 바뀝니다. 댓글로 피드백을 남겨 주세요!
+- 브라우저에서 바로 하거나, 더 매끄럽게 하려면 Windows 판을 받으세요.
 - 코드 서명이 없는 빌드라 Windows SmartScreen 경고가 뜰 수 있습니다 (*추가 정보 → 실행*).
-- 진행·설정은 내 컴퓨터에만 저장됩니다. 네트워크·계정·추적 없음.
-- 도트 그림: Ravenmore *Space Rage* (CC-BY 3.0). 효과음·배경음악과 보스·배경 그림은 코드로 만들었습니다.
+- 진행·설정은 내 컴퓨터에만 저장됩니다 (웹판은 브라우저 저장소). 네트워크·계정·추적 없음.
+- 도트 그림: Ravenmore *Space Rage* (CC-BY 3.0). 효과음·배경음악과 보스·배경 그림은 코드로 만들었습니다. 글꼴: Noto Sans KR (SIL OFL).
 
 ---
 

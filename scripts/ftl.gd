@@ -1,6 +1,7 @@
 extends CanvasLayer
 ## FTL 도약 연출 = 스테이지 전환. 별빛이 중앙에서 뻗어 나가며 빨라지고 → 흰 섬광(이 순간 다음 스테이지를 준비) → 섬광이 걷히며 도착.
 ## 연출 동안 게임은 멈춰 있다.
+const UiFont := preload("res://scripts/ui_font.gd")
 
 const Loc := preload("res://scripts/loc.gd")
 signal arrived                       # 섬광이 다 걷혀 조작을 돌려줄 때
@@ -15,7 +16,7 @@ var title := ""
 var on_swap: Callable                # 섬광이 가득 찼을 때 한 번 (다음 스테이지 준비)
 var swapped := false
 var canvas: Control
-var font: SystemFont
+var font: Font
 var stars: Array[Vector3] = []       # (각도, 시작 거리 비율, 속도 배율)
 
 
@@ -23,8 +24,7 @@ func _ready() -> void:
 	layer = 80
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	visible = false
-	font = SystemFont.new()
-	font.font_names = PackedStringArray(["Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans CJK KR", "sans-serif"])
+	font = UiFont.make(PackedStringArray(["Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans CJK KR", "sans-serif"]))
 	canvas = Control.new()
 	canvas.set_anchors_preset(Control.PRESET_FULL_RECT)
 	canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE

@@ -6,6 +6,7 @@
 |---|---|
 | `build/windows/` | **업로드할 게임 폴더** — `ParryPierce.exe` + `README.txt` (butler 로 올릴 때 이 폴더를 통째로) |
 | `ParryPierce-v0.62-windows.zip` | 같은 내용의 **zip** (웹 대시보드에서 직접 올릴 때) |
+| `build/web/`, `ParryPierce-v0.62-web.zip` | **브라우저 실행판** (HTML5) — `index.html` 이 zip 맨 위에 있다 |
 | `cover.png` | 표지 이미지 (1260×1000, itch 권장 630×500 의 2배. 5:4 비율이라 그대로 올리면 된다) |
 | `screenshots/01~07_*.png` | 스크린샷 7장 (1280×720, 영어 화면) |
 | `STORE_PAGE.md` | 페이지에 붙여 넣을 소개문 (영어 + 한국어), 태그, 설정 값 |
@@ -34,6 +35,24 @@
 3. **Cover image** 를 새 `cover.png` 로, **Screenshots** 를 지우고 새 7장으로 교체.
 4. 저장 후 *Devlog* 로 업데이트 소식을 남기면 팔로워에게 알림이 간다 (선택).
 
+## 브라우저에서 바로 실행 (웹판 추가)
+
+Windows 다운로드는 그대로 두고, 같은 페이지에 웹판을 하나 더 올린다.
+
+1. *Edit game* → **Kind of project** 를 `HTML` 로 바꾼다 (다운로드 파일은 그대로 남는다).
+2. **Uploads** → `ParryPierce-v0.62-web.zip` 올리기 → 그 파일에 **This file will be played in the browser** 체크.
+   (Windows zip 은 체크하지 않고 **Windows** 표시만 그대로.)
+3. **Embed options**
+   - *Viewport dimensions*: `1280 × 720`
+   - *Fullscreen button* 켜기 · *Automatically start on page load* 끄기 (첫 클릭이 소리 재생 허용도 겸한다)
+   - *SharedArrayBuffer support* 는 **끈다** (스레드 없는 빌드라 필요 없음)
+   - *Mobile friendly* 끄기 (마우스 필수)
+4. 저장 → 페이지에서 *Run game* 으로 확인. 진행·설정은 브라우저 저장소에 남는다 (사이트 데이터를 지우면 처음부터).
+
+butler 로는 `butler push itch/build/web <사용자명>/<프로젝트주소>:html5 --userversion 0.62` 후 대시보드에서 그 업로드에 *played in the browser* 체크.
+
+**웹판에서 달라지는 점**: 종료 버튼이 없다 · 마우스를 창 안에 가두지 못한다 (조준은 화면 안에서) · 글꼴이 맑은 고딕 대신 함께 넣은 Noto Sans KR · 처음 로딩이 수십 MB.
+
 ## 방법 B — butler (CLI, 업데이트에 편함 — 이후 버전은 이쪽 권장)
 
 butler 는 바뀐 부분만 올려 줍니다. 한 번만 설치·로그인하면 됩니다.
@@ -59,7 +78,8 @@ butler push itch/build/windows  <itch사용자명>/<프로젝트주소>:windows 
 # 빌드 (실행 중인 ParryPierce 먼저 종료)
 "<Godot 콘솔 exe>" --headless --path . --export-release "Windows Desktop" ParryPierce.exe
 # itch 폴더 갱신 + zip
-python itch/pack.py 0.63          # build/windows 와 ParryPierce-v0.63-windows.zip 을 다시 만든다
+"<Godot 콘솔 exe>" --headless --path . --export-release "Web" itch/build/web/index.html
+python itch/pack.py 0.63          # build/windows 와 Windows·웹 zip 을 다시 만든다
 # 올리기
 butler push itch/build/windows <사용자명>/<프로젝트주소>:windows --userversion 0.63
 ```
@@ -71,4 +91,5 @@ butler push itch/build/windows <사용자명>/<프로젝트주소>:windows --use
 - **AI 사용 표기**: itch.io 는 *Generative AI disclosure* 항목이 있습니다. 코드·문구 작성에 AI 도구를 썼다면 그 항목을 사실대로 체크하세요.
 - **저장 데이터**: 진행·언어·튜토리얼 기록은 `%APPDATA%\Godot\app_userdata\Parry Pierce (prototype)\` 에만 저장됩니다 (플레이 기록 폴더는 만들지 않음). 지우면 처음 상태로 돌아갑니다.
 - **조작**: 마우스 필수(마우스 방향 = 조준). 게임패드는 지원하지 않습니다.
-- **플랫폼**: 지금은 Windows 64비트만 빌드합니다. (웹/Mac/Linux 는 내보내기 템플릿·성능 검증이 필요해 포함하지 않았습니다.)
+- **플랫폼**: Windows 64비트 + 웹(HTML5, 스레드 없음). Mac/Linux 는 빌드하지 않습니다.
+- **웹 성능**: 탄이 많은 장면은 브라우저·PC 에 따라 느려질 수 있습니다. 올리기 전에 *Draft* 상태로 3·4스테이지를 한 번 해 보세요.
