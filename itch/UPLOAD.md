@@ -1,13 +1,13 @@
-# itch.io 업로드 방법 (Parry Pierce v0.49)
+# itch.io 업로드 방법 (Parry Pierce v0.62)
 
 이 폴더(`itch/`)에는 itch.io 에 올리는 데 필요한 것이 모두 들어 있습니다.
 
 | 파일 | 용도 |
 |---|---|
 | `build/windows/` | **업로드할 게임 폴더** — `ParryPierce.exe` + `README.txt` (butler 로 올릴 때 이 폴더를 통째로) |
-| `ParryPierce-v0.49-windows.zip` | 같은 내용의 **zip** (웹 대시보드에서 직접 올릴 때) |
+| `ParryPierce-v0.62-windows.zip` | 같은 내용의 **zip** (웹 대시보드에서 직접 올릴 때) |
 | `cover.png` | 표지 이미지 (1260×1000, itch 권장 630×500 의 2배. 5:4 비율이라 그대로 올리면 된다) |
-| `screenshots/01~05_*.png` | 스크린샷 5장 (1280×720, 영어 화면) |
+| `screenshots/01~07_*.png` | 스크린샷 7장 (1280×720, 영어 화면) |
 | `STORE_PAGE.md` | 페이지에 붙여 넣을 소개문 (영어 + 한국어), 태그, 설정 값 |
 
 `exe`/`zip` 은 용량이 커서 git 에는 올리지 않습니다 (`.gitignore`). 새 버전을 만들면 아래 "새 버전 만들기"로 다시 만드세요.
@@ -21,11 +21,18 @@
 3. **Kind of project**: `Downloadable` (실행 파일). *Classification*: `Games`.
 4. **Release status**: `In development` (또는 `Prototype`).
 5. **Pricing**: `$0 or donate`(무료+후원) 권장, 또는 `No payments`.
-6. **Uploads** → *Upload files* 에서 `ParryPierce-v0.49-windows.zip` 선택 → 올라간 파일 옆 체크박스 **Windows** 선택.
+6. **Uploads** → *Upload files* 에서 `ParryPierce-v0.62-windows.zip` 선택 → 올라간 파일 옆 체크박스 **Windows** 선택.
 7. **Description** 에 `STORE_PAGE.md` 의 소개문을 붙여 넣는다.
-8. **Cover image** `cover.png`, **Screenshots** 에 `screenshots/` 의 PNG 5장.
+8. **Cover image** `cover.png`, **Screenshots** 에 `screenshots/` 의 PNG 7장.
 9. **Genre** `Action`, **Tags** 는 `STORE_PAGE.md` 참고, **Languages** 에 `English`, `Korean`.
 10. **Visibility & access** 를 처음엔 **Draft**(비공개)로 두고 *Save* → 미리보기로 확인 → 문제 없으면 **Public** 으로 바꾸고 저장.
+
+## 이미 올린 페이지 업데이트 (v0.49 → v0.62)
+
+1. 대시보드 *Edit game* → **Uploads** 에서 예전 `ParryPierce-v0.49-windows.zip` 을 지우고(또는 *Replace*) `ParryPierce-v0.62-windows.zip` 을 올린 뒤 **Windows** 체크. (butler 를 쓰면 아래 방법 B 한 줄)
+2. **Description** 의 *Colossi* 목록에 4번째 보스(결계 위성) 줄을 추가 — `STORE_PAGE.md` 에 반영해 두었다.
+3. **Cover image** 를 새 `cover.png` 로, **Screenshots** 를 지우고 새 7장으로 교체.
+4. 저장 후 *Devlog* 로 업데이트 소식을 남기면 팔로워에게 알림이 간다 (선택).
 
 ## 방법 B — butler (CLI, 업데이트에 편함 — 이후 버전은 이쪽 권장)
 
@@ -37,9 +44,9 @@ butler 는 바뀐 부분만 올려 줍니다. 한 번만 설치·로그인하면
 butler login
 
 # 3) 업로드: 폴더째 (권장, 다음 버전부터는 변경분만 전송된다)
-butler push itch/build/windows  <itch사용자명>/<프로젝트주소>:windows --userversion 0.49
+butler push itch/build/windows  <itch사용자명>/<프로젝트주소>:windows --userversion 0.62
 
-# 예) butler push itch/build/windows neverb0re/parry-pierce:windows --userversion 0.49
+# 예) butler push itch/build/windows neverb0re/parry-pierce:windows --userversion 0.62
 ```
 
 - 채널 이름 `windows` 는 itch 가 플랫폼(Windows)으로 자동 인식합니다.
@@ -52,9 +59,9 @@ butler push itch/build/windows  <itch사용자명>/<프로젝트주소>:windows 
 # 빌드 (실행 중인 ParryPierce 먼저 종료)
 "<Godot 콘솔 exe>" --headless --path . --export-release "Windows Desktop" ParryPierce.exe
 # itch 폴더 갱신 + zip
-python itch/pack.py 0.50          # build/windows 와 ParryPierce-v0.50-windows.zip 을 다시 만든다
+python itch/pack.py 0.63          # build/windows 와 ParryPierce-v0.63-windows.zip 을 다시 만든다
 # 올리기
-butler push itch/build/windows <사용자명>/<프로젝트주소>:windows --userversion 0.50
+butler push itch/build/windows <사용자명>/<프로젝트주소>:windows --userversion 0.63
 ```
 
 ## 올리기 전에 확인할 것

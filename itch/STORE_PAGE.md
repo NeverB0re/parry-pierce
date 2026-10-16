@@ -8,7 +8,7 @@
 - **Platforms**: Windows · **Languages**: English, Korean
 - **Tags**: `parry`, `boss-rush`, `bullet-hell`, `2d`, `pixel-art`, `singleplayer`, `action`, `mouse-only`, `short`, `godot`
 - **Pricing**: Free (or $0 or donate)
-- **Cover**: `cover.png` · **Screenshots**: `screenshots/01~05_*.png`
+- **Cover**: `cover.png` · **Screenshots**: `screenshots/01~07_*.png`
 - **Community**: Comments on (피드백을 받으려면 켜 두기)
 
 ---
@@ -30,6 +30,7 @@ You are a tiny ship facing titanic war machines. Their weapons are huge, their b
 1. **The Observer** — an all-round tutorial titan: lava eruptions, arm sweeps, an eye laser.
 2. **The Barrage Fortress** — a parry-focused tank of spiral fire, fans, homing missiles and mines.
 3. **The Kraken** — an eight-limbed mechanical octopus. Intercept its tentacles to sever them, and brace for the discharge net.
+4. **The Barrier Satellite** — an orbital fortress sealed inside an unparryable barrier. Slip through its purple storms with perfect evades, crack the barrier with synced strikes, then parry the flood that pours out when it opens.
 
 ### Controls (mouse required)
 | Input | Action |
@@ -45,7 +46,7 @@ Language: pick **English / 한국어** with the flag buttons at the bottom-right
 - This is an early prototype — balance and content are still moving. Feedback is very welcome in the comments!
 - Windows may show a SmartScreen warning ("unknown publisher") because the build is not code-signed. Choose *More info → Run anyway* if you trust it.
 - Progress and settings are stored locally; no network access, no accounts, no tracking.
-- Sprite art: *Space Rage* by **Ravenmore** (CC-BY 3.0, http://dycha.net/). Sound and boss art are generated in code.
+- Sprite art: *Space Rage* by **Ravenmore** (CC-BY 3.0, http://dycha.net/). Sound effects, music and boss art are generated in code.
 
 ---
 
@@ -66,6 +67,7 @@ Language: pick **English / 한국어** with the flag buttons at the bottom-right
 1. **관측자** — 용암 분출·팔 휘두르기·눈 레이저의 올라운더
 2. **탄막 요새** — 나선·부채 탄막, 유도탄, 기뢰의 패리 중심 보스
 3. **크라켄** — 촉수를 요격해 끊어야 하는 기계 문어, 방전 그물 주의
+4. **결계 위성** — 패리 불가 결계에 싸인 궤도 요새. 보라 폭풍을 퍼펙트 회피로 넘기고, 동조 일격으로 결계를 깨뜨린 뒤 쏟아지는 탄막을 패리해 꽂아라
 
 ### 조작 (마우스 필수)
 마우스 = 조준(위 = 활공) · 좌클릭 = 돌진 / 꾹 = 차지 강습 · 우클릭·Space 꾹 = 패리 → 슬로우 조준 → 놓으면 리버스 드라이브 · R 재시작 · Esc 메뉴 · F11 전체 화면
@@ -76,7 +78,7 @@ Language: pick **English / 한국어** with the flag buttons at the bottom-right
 - 초기 프로토타입이라 밸런스·콘텐츠가 계속 바뀝니다. 댓글로 피드백을 남겨 주세요!
 - 코드 서명이 없는 빌드라 Windows SmartScreen 경고가 뜰 수 있습니다 (*추가 정보 → 실행*).
 - 진행·설정은 내 컴퓨터에만 저장됩니다. 네트워크·계정·추적 없음.
-- 도트 그림: Ravenmore *Space Rage* (CC-BY 3.0). 사운드와 보스·배경 그림은 코드로 만들었습니다.
+- 도트 그림: Ravenmore *Space Rage* (CC-BY 3.0). 효과음·배경음악과 보스·배경 그림은 코드로 만들었습니다.
 
 ---
 

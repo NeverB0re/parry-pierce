@@ -1,7 +1,8 @@
 extends SceneTree
-# itch.io 페이지용 이미지 캡처 (창 모드, 자동 종료): 스크린샷 5장(1280x720) + 표지(1260x1000, 630x500 의 2배).
+# itch.io 페이지용 이미지 캡처 (창 모드, 자동 종료): 스크린샷 7장(1280x720) + 표지(1260x1000, 630x500 의 2배).
 # 인자: -- --notutorial --out=<dir>.  영어 화면. 진행·언어 저장은 끈다.
-# 장면은 실제 게임 로직으로 연출한다: 탄막이 가득한 곳을 돌진으로 지나가거나, 금색 탄을 패리하고 리버스 드라이브로 꽂는 순간.
+# 장면은 실제 보스 공격을 그대로 쏘게 두고 연출한다: 날아온 탄이 가까이 오면 그때 돌진하거나 패리하고 리버스 드라이브로 꽂는다.
+# (탄을 임의로 만들어 깔지 않는다 — 실제 게임과 다른 모양이 되므로)
 const Loc := preload("res://scripts/loc.gd")
 var main
 var n := 0
@@ -11,15 +12,20 @@ var f := 0                           # 장면 안의 프레임
 var pin := true                      # 플레이어를 제자리에 고정 (돌진·조준을 시작하면 푼다)
 var pin_pos := Vector2.ZERO
 var target := Vector2.ZERO           # 조준·리버스 드라이브 표적 (월드 좌표)
+var ev := -1                         # 돌진·패리를 시작한 프레임 (-1 = 아직, 탄이 다가오길 기다린다)
+const TRIGGERED := ["dash_fort", "parry_fort", "dash_kraken", "reverse_drive"]   # 찍을 프레임 = 시작 뒤 몇 프레임
+const MAX_WAIT := 900
 var cover_layer: CanvasLayer = null
-# [파일 이름, 장면, 찍을 프레임, 카메라 위치, 줌]
+# [파일 이름, 장면, 찍을 프레임(TRIGGERED 장면은 돌진·패리 뒤 프레임), 카메라 위치, 줌]
 var plan := [
 	["01_title", "title", 30, Vector2.ZERO, 1.0],
-	["02_dash_through_barrage", "dash_fort", 120, Vector2(0, -1950), 0.5],
-	["03_parry_slowmo", "parry_fort", 118, Vector2(0, -1950), 0.5],
-	["04_dash_ink_barrage", "dash_kraken", 116, Vector2(0, -1900), 0.5],
+	["02_dash_through_barrage", "dash_fort", 8, Vector2(0, -1950), 0.5],
+	["03_parry_slowmo", "parry_fort", 22, Vector2(0, -1950), 0.5],
+	["04_dash_ink_barrage", "dash_kraken", 8, Vector2(0, -1550), 0.5],
 	["05_dash_through_net", "dash_net", 202, Vector2(0, -1900), 0.5],
-	["cover", "reverse_drive", 94, Vector2(150, -1780), 0.75],
+	["06_barrier_storm", "sat_burst", 120, Vector2(0, -1500), 0.42],
+	["07_barrier_open", "sat_open", 150, Vector2(0, -1550), 0.45],
+	["cover", "reverse_drive", 16, Vector2(0, -1500), 0.62],
 ]
 
 
@@ -54,10 +60,21 @@ func _setup(name: String) -> void:
 			main.start_stage(2)
 			var b = main.boss
 			b.next_t = 999.0
-			pin_pos = Vector2(-250, -1500) if name == "dash_kraken" else Vector2(-120, -1450)
+			pin_pos = Vector2(-300, -1000) if name == "dash_kraken" else Vector2(-220, -1080)
 			p.reset(pin_pos, false)
-			b.start_attack(b.Fan.new(-1, b.SIPHON, pin_pos, true))
+			var none: Array[int] = []
+			b._start("ink", none, pin_pos, true)              # 실제 게임처럼 먹물 부채 + 저격 유도탄
 			target = b.CORE_POS
+		"sat_burst", "sat_open":
+			main.start_stage(3)
+			var b = main.boss
+			b.next_t = 999.0
+			pin_pos = Vector2(300, -900) if name == "sat_burst" else Vector2(320, -1150)
+			p.reset(pin_pos, false)
+			if name == "sat_burst":
+				b.start_attack(b.RadialBurst.new(b.CORE_POS, b.BURST_BEAMS))
+			else:
+				b._open()
 		"dash_net":
 			main.start_stage(2)
 			var b = main.boss
@@ -69,36 +86,28 @@ func _setup(name: String) -> void:
 
 func _tick(name: String) -> void:
 	var p = main.player
-	var b = main.boss
 	if pin:
 		p.position = pin_pos
 		p.vel = Vector2.ZERO
 	match name:
-		"dash_fort":
-			if f == 100:
-				_field(pin_pos + Vector2(-380, -60), 520.0, 300.0, 90)
-			if f == 112:                                    # 탄막 속으로 돌진 (무적)
+		"dash_fort", "dash_kraken":
+			if ev < 0 and _incoming(220.0, false) >= (6 if name == "dash_fort" else 14):          # 실제 탄막이 몰려오면 그 속으로 돌진 (무적)
+				ev = f
 				pin = false
-				p.aim = Vector2(-1.0, -0.2).normalized()
-				p._dash("dash")
-		"dash_kraken":
-			if f == 96:
-				_field(pin_pos + Vector2(380, 40), 520.0, 300.0, 90)
-			if f == 108:
-				pin = false
-				p.aim = Vector2(1.0, 0.1).normalized()
+				p.aim = Vector2(-1.0, -0.2).normalized() if name == "dash_fort" else Vector2(1.0, 0.1).normalized()
 				p._dash("dash")
 		"parry_fort", "reverse_drive":
-			var parry_f := 96 if name == "parry_fort" else 70
-			if name == "reverse_drive" and f == 60:
-				_field(pin_pos + Vector2(60, -150), 480.0, 360.0, 70)
-			if f == parry_f:                                 # 금색 탄 하나를 패리
-				b.shots.spawn(p.position + Vector2(28, 0), Vector2.ZERO, 5.0, 1.0)
+			if ev < 0:                                        # 가까운 실제 금색 탄 쪽으로 다가가 맞이한다 (탄은 건드리지 않는다)
+				var g := _nearest_gold(320.0)
+				if g != Vector2.INF:
+					pin_pos = pin_pos.move_toward(g, 7.0)
+			if ev < 0 and _incoming(p.RADIUS + p.stats.parry_reach, true) > 0:   # 날아온 금색 탄을 패리
+				ev = f
 				p.parry_press()
-			if f > parry_f and p.aim_phase:
+			if ev >= 0 and p.aim_phase:
 				var sp: Vector2 = main.get_viewport().get_canvas_transform() * target
 				Input.warp_mouse(sp)
-			if name == "reverse_drive" and f == parry_f + 8 and p.aim_phase:
+			if name == "reverse_drive" and ev >= 0 and f == ev + 8 and p.aim_phase:
 				pin = false
 				p.aim = (target - p.position).normalized()
 				p.launch_parry_dash()                         # 리버스 드라이브
@@ -109,17 +118,28 @@ func _tick(name: String) -> void:
 				p._dash("dash")
 
 
-## 멈춘 듯 떠 있는 탄 무더기 (잔탄 위주, 주탄 조금). 탄막 한가운데를 지나가는 장면용
-func _field(c: Vector2, rx: float, ry: float, count: int) -> void:
-	var b = main.boss
-	var K = b.shots.Kind
-	seed(7)
-	for i in count:
-		var pos := c + Vector2(randf_range(-rx, rx), randf_range(-ry, ry))
-		if pos.distance_to(pin_pos) < 110.0:
+## 플레이어 r 안의 가장 가까운 적 금색 탄 위치 (없으면 INF)
+func _nearest_gold(r: float) -> Vector2:
+	var sh = main.boss.shots
+	var best := Vector2.INF
+	for i in sh.size():
+		if sh.mine[i] == 0 and sh.kind[i] == sh.Kind.BOLT and sh.pos[i].distance_to(pin_pos) < minf(r, best.distance_to(pin_pos) if best != Vector2.INF else r):
+			best = sh.pos[i]
+	return best
+
+
+## 플레이어 r 안에 들어온 적 탄 수 (gold_only = 주탄만)
+func _incoming(r: float, gold_only: bool) -> int:
+	var sh = main.boss.shots
+	var c := 0
+	for i in sh.size():
+		if sh.mine[i] == 1:
 			continue
-		var k = K.SMALL if randf() < 0.78 else K.BOLT
-		b.shots.spawn(pos, Vector2.from_angle(randf() * TAU) * 24.0, 6.0, 1.0, 0.0, k)
+		if gold_only and sh.kind[i] != sh.Kind.BOLT:
+			continue
+		if sh.pos[i].distance_to(main.player.position) < r:
+			c += 1
+	return c
 
 
 func _process(_d: float) -> bool:
@@ -145,6 +165,7 @@ func _process(_d: float) -> bool:
 		if pl[0] == "cover":
 			DisplayServer.window_set_size(Vector2i(1260, 1000))
 		_setup(name)
+		ev = -1
 	f += 1
 	_tick(name)
 	if name != "title":
@@ -167,7 +188,11 @@ func _process(_d: float) -> bool:
 			t2.offset_top = -110.0
 			t2.offset_bottom = -50.0
 			cover_layer.add_child(t2)
-	if f == int(pl[2]):
+	var shoot: bool = f == int(pl[2]) if not TRIGGERED.has(name) else (ev >= 0 and f == ev + int(pl[2]))
+	if not shoot and f >= MAX_WAIT:
+		push_error("%s: trigger never fired" % pl[0])
+		shoot = true
+	if shoot:
 		print(pl[0], " bolts=", main.boss.shots.size(), " aim_phase=", main.player.aim_phase, " dash=", main.player.dash_kind, " pos=", main.player.position)
 		root.get_texture().get_image().save_png("%s/%s.png" % [out, pl[0]])
 		idx += 1
