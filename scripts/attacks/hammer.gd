@@ -115,7 +115,7 @@ func melee_warning() -> bool:
 
 ## 예고: 막대가 내려치며 쓸고 갈 직사각형 (막대 위치 ~ 멈추는 선)
 func draw() -> void:
-	if delay > 0.0 or not (phase == "prep" or phase == "set" or phase == "warn"):
+	if delay > 0.0 or queued() or not (phase == "prep" or phase == "set" or phase == "warn"):   # 연타 대기 중인 타는 예고를 그리지 않는다 (다음 타만)
 		return
 	var c: CanvasItem = boss
 	var level := _warn_level(0 if phase == "prep" else (1 if phase == "set" else 2))
