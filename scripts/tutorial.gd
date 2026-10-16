@@ -6,7 +6,7 @@ extends CanvasLayer
 const Loc := preload("res://scripts/loc.gd")
 const Sprites := preload("res://scripts/sprites.gd")
 
-const ORDER := ["dodge", "parry", "dashparry", "charge", "unparry", "barrage", "tentacle"]
+const ORDER := ["dodge", "charge", "parry", "intercept", "tentacle", "dashparry", "unparry", "barrage"]   # 자동으로 뜨는 건 앞의 다섯 장 (main.gd _on_arrived), 나머지는 성공 보상 위주라 조작법 목록에서만
 const SAVE_PATH := "user://tutorial.cfg"
 
 var enabled := true                  # false: 자동 팝업·저장 없음 (테스트·헤드리스)
@@ -46,7 +46,7 @@ func _pages() -> Dictionary:
 			"title": Loc.t("회피 — 돌진"),
 			"lines": [
 				Loc.t("%s(짧게)으로 돌진합니다. 돌진하는 동안은 무적이라 탄과 레이저를 통과할 수 있습니다. 단, 근접공격은 돌진으로 피할 수 없습니다.") % dash,
-				Loc.t("돌진은 횟수 제한 없이 쿨다운만 있습니다. 표적에 닿으면 피해를 주고 위로 튕겨 오릅니다."),
+				Loc.t("돌진은 횟수 제한 없이 쿨다운만 있습니다. 표적에 닿으면 피해를 주고 위로 튕겨 오릅니다. 일반 돌진은 튕기는 동안 무적이 아닙니다."),
 				Loc.t("돌진을 시작한 직후 공격이 스치면 '퍼펙트 회피'! 다음 차지 강습이 강해지고 돌진 쿨다운이 바로 돌아옵니다."),
 			],
 		},
@@ -63,13 +63,18 @@ func _pages() -> Dictionary:
 			"title": Loc.t("돌진패리 — 돌진하며 패리"),
 			"lines": [
 				Loc.t("탄막을 향해 돌진하면서 패리하면 '돌진패리'입니다. 타이밍과 상관없이 PERFECT 패리가 됩니다."),
-				Loc.t("PERFECT 패리는 리버스 드라이브가 더 강하고 사거리도 늘어납니다. 돌진 중에는 무적이라 못 막아도 그대로 통과합니다."),
+				Loc.t("PERFECT 패리는 리버스 드라이브가 더 강하고 조준할 시간도 깁니다. 돌진 중에는 무적이라 못 막아도 그대로 통과합니다."),
 			],
 		},
 		"charge": {
-			"title": Loc.t("차지 강습 — 강한 일격과 요격"),
+			"title": Loc.t("차지 강습 — 모아서 강한 일격"),
 			"lines": [
 				Loc.t("%s(으)로 모았다 떼면 차지 강습 — 일반 돌진보다 훨씬 강합니다. 쓰면 잠시 다시 모을 수 없습니다 (주황 링).") % hold,
+			],
+		},
+		"intercept": {
+			"title": Loc.t("요격 — 멈춘 근접공격을 차지 강습으로"),
+			"lines": [
 				Loc.t("적의 근접공격이 위치를 잡고 붉게 점멸하며 멈춰 있을 때 차지 강습으로 부딪히면 요격! 공격을 끊고 그 부위에 큰 피해를 줍니다. 요격에 성공하면 차지 쿨다운이 바로 돌아옵니다."),
 				Loc.t("들어 올리는 중에는 요격할 수 없습니다. 근접공격은 돌진으로 통과할 수 없으니 요격하거나 범위 밖으로 피하세요."),
 				Loc.t("근접공격은 모두 붉은 빗금 + ⚠ 표지로 예고됩니다. 천장이 내려오는 프레스는 정지선 아래로 피하거나 요격하세요."),
@@ -84,13 +89,11 @@ func _pages() -> Dictionary:
 			],
 		},
 		"tentacle": {
-			"title": Loc.t("크라켄 — 촉수를 요격해 외눈을 부수기"),
+			"title": Loc.t("연속 요격 — 요격하고 바로 다음 타로"),
 			"lines": [
-				Loc.t("표적은 방어막에 싸인 외눈 하나입니다. 돌진과 차지 강습은 방어막에 막히고, 리버스 드라이브만 뚫고 들어갑니다."),
-				Loc.t("촉수가 멈춰 붉게 점멸할 때 차지 강습으로 요격하면 외눈에 피해가 들어갑니다. 두 번 요격한 촉수는 떨어져 나갑니다."),
 				Loc.t("요격하면 차지 쿨다운이 돌아오고 다음 차지가 빨라집니다. 연타는 첫 타를 요격해 이어 가세요."),
-				Loc.t("촉수를 모두 끊으면 방어막이 깨지고 외눈을 직접 노릴 수 있습니다."),
-				Loc.t("보라색 방전 그물은 패리할 수 없습니다. 보라 띠가 곧 맞는 범위이니 돌진으로 통과하세요. 화면 밖에서 다가오면 가장자리에 경고가 뜹니다."),
+				Loc.t("크라켄의 표적은 방어막 속 외눈입니다. 돌진과 차지 강습은 방어막에 막히고, 리버스 드라이브와 요격만 외눈에 피해를 줍니다."),
+				Loc.t("촉수가 멈춰 붉게 점멸할 때 차지 강습으로 요격하면 외눈에 피해가 들어가고 촉수가 끊어집니다. 끊긴 촉수는 잠시 뒤 다시 자랍니다."),
 			],
 		},
 		"unparry": {
@@ -374,6 +377,8 @@ class Stage extends Control:
 				_dashparry()
 			"charge":
 				_charge()
+			"intercept":
+				_charge(true)
 			"unparry":
 				_unparry()
 			"barrage":
@@ -524,11 +529,10 @@ class Stage extends Control:
 			_spark(Vector2(sx + 30.0, y), _smooth(tm, tm + 0.5, tt), Color(1, 1, 1), 12, 56.0)
 			_txt(Loc.t("돌진패리! PERFECT"), Vector2(sx - 70.0, y - 62.0), 20, GOLD)
 			if tt >= tm + 0.5:
-				_txt(Loc.t("더 강하게 · 더 멀리"), Vector2(sx - 100.0, y + 64.0), 16, MINT)
+				_txt(Loc.t("더 강하게"), Vector2(sx - 100.0, y + 64.0), 16, MINT)
 
-	func _charge() -> void:
-		var T := 8.0
-		var tt := fmod(t, T)
+	func _charge(intercept := false) -> void:   # 앞 3.6초 = 차지 강습, 뒤 4.4초 = 요격 (따로 반복)
+		var tt := 3.6 + fmod(t, 4.4) if intercept else fmod(t, 3.6)
 		if tt < 3.6:
 			_caption(Loc.t("모으면 더 강하다 — 일반 돌진보다"))
 			var sp := Vector2(120, 170)
@@ -685,7 +689,7 @@ class Stage extends Control:
 			_spark(tip, _smooth(3.0, 3.6, tt), Color(1.0, 0.85, 0.5), 14, 50.0)
 			_spark(drv, _smooth(3.0, 3.6, tt), Color(1.0, 0.6, 0.3), 8, 34.0)
 		else:
-			_caption(Loc.t("두 번 요격한 촉수는 떨어져 나간다"), Color(0.85, 0.9, 1.0))
+			_caption(Loc.t("요격한 촉수는 끊어졌다가 다시 자란다"), Color(0.85, 0.9, 1.0))
 		if tt >= 1.4 and tt < 2.6:
 			_mouse(Vector2(size.x - 40.0, 60.0), true, false)
 

@@ -5,7 +5,6 @@ extends Node2D
 const Loc := preload("res://scripts/loc.gd")
 const Player := preload("res://scripts/player.gd")
 const Ev := preload("res://scripts/ev.gd")
-const Projectiles := preload("res://scripts/projectiles.gd")
 const Fx := preload("res://scripts/fx.gd")
 const Ground := preload("res://scripts/ground.gd")
 const Background := preload("res://scripts/background.gd")
@@ -195,7 +194,7 @@ func _ready() -> void:
 	if DisplayServer.get_name() != "headless" and not args.has("--notitle") and not args.has("--notutorial"):
 		_open_title()
 	else:
-		tutorial.request(["dodge", "parry", "dashparry"])        # 처음 실행: 회피 → 패리 → 돌진패리 순서로 한 장씩
+		tutorial.request(["dodge", "charge", "parry"])        # 처음 실행: 돌진 → 차지 → 패리 순서로 한 장씩
 
 
 func reset_run() -> void:
@@ -289,7 +288,12 @@ func _on_jump() -> void:
 func _on_arrived() -> void:
 	if touch_ui == null:
 		Input.mouse_mode = Input.MOUSE_MODE_CONFINED
-	tutorial.request(["dodge", "parry", "dashparry"])      # 처음 도착: 회피 → 패리 → 돌진패리 순서로 한 장씩 (본 장은 다시 안 뜬다)
+	var ids := ["dodge", "charge", "parry"]               # 꼭 알아야 할 것만 스테이지별로: ① 돌진 → 차지 → 패리 ② 요격 ③ 연속 요격 (본 장은 다시 안 뜬다)
+	if stage_idx >= 1:
+		ids.append("intercept")
+	if stage_idx >= 2:
+		ids.append("tentacle")
+	tutorial.request(ids)
 
 
 ## 발판을 띄운다 (instant: 바로 / 아니면 용암에서 솟아오르는 연출)
@@ -408,7 +412,6 @@ func _physics_body(delta: float) -> void:
 		if player.aim_phase else Player.CHARGE_SPEED * Player.CHARGE_DASH_TIME
 	boss.hold_attacks = player.on_platform or debug.freeze   # 시작·부활 직후 날아오르기 전에는 공격이 시작되지 않는다 (F3: 디버그 정지)
 	boss.step(dt, player.position)
-	_tutorial_triggers()
 	_drain_boss_events()
 	player.step(delta)
 	_heat_cool(dt)
@@ -424,27 +427,6 @@ func _physics_body(delta: float) -> void:
 		if dead_t <= 0.0:
 			reset_run()
 	fx.step(dt)
-
-
-## 새 메커니즘이 처음 나오면 튜토리얼을 띄운다 (팔 휘두르기 준비 → 차지, 눈 레이저 준비 → 패리 불가)
-func _tutorial_triggers() -> void:
-	if not tutorial.enabled:
-		return
-	var kd: String = boss.attack_kind()
-	if kd == "swing":
-		tutorial.request(["charge"])
-	elif kd == "hammer" or kd == "clap" or kd == "chase" or kd == "sweep" or kd == "constrict" or kd == "vortex" or kd == "march" or kd == "flurry":
-		tutorial.request(["charge", "tentacle"])
-	elif kd == "net":
-		tutorial.request(["unparry"])
-	elif kd == "beam":
-		tutorial.request(["unparry"])
-	elif kd == "spiral" or kd == "fan" or kd == "homing" or kd == "mines":
-		tutorial.request(["barrage"])
-	elif kd == "rings":
-		tutorial.request(["unparry"])
-	if boss.shots.kind.has(Projectiles.Kind.SMALL):    # 잔탄이 처음 나오면 (관측자도 섞어 쏜다)
-		tutorial.request(["barrage"])
 
 
 func _tele_extra() -> Dictionary:

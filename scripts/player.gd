@@ -34,7 +34,6 @@ const PARRY_RELEASE_CD := 0.25   # 중간에 뗐을 때 재입력 대기
 const PARRY_DASH_SPEED := 3600.0 # 패리 돌진: 주력 공격. 월드가 느려져도 플레이어는 실시간
 const PARRY_DASH_SPEED_PERFECT := 4000.0
 const PARRY_DASH_TIME := 0.22
-const DASH_PARRY_RANGE := 1.35  # (사거리 무제한 이후 쓰지 않음)
 const UNLIMITED_REACH := 3200.0  # 리버스 드라이브·요격: 사거리 무제한 (표적·벽·천장·바닥에 닿을 때까지). 조준선·어시스트는 이 거리까지 본다
 const UNLIMITED_MAX_T := 1.2     # 그래도 이 시간이 지나면 끝난다 (안전장치)
 const REFLECT_RADIUS := 70.0     # 반사 범위 (기체보다 넓게)
@@ -126,8 +125,8 @@ var parry_cd := 0.0
 var aim_phase := false           # 패리 성공 → 슬로우 → 방향 지정
 var aim_left := 0.0
 var aim_perfect := false
-var aim_boost := false           # 돌진패리 성공 → 이어지는 리버스 드라이브의 사거리가 늘어난다
-var power_boost := false         # 지금 리버스 드라이브가 사거리 증가 상태
+var aim_boost := false           # 돌진패리 성공 → 이어지는 리버스 드라이브가 청록 조준선·꼬리로 보인다 (연출만)
+var power_boost := false         # 지금 리버스 드라이브가 돌진패리에서 나왔다 (연출만)
 var invuln := 0.0                # 피격 후 무적
 var bouncing := false            # 직격 후 튕겨나는 중
 var bounce_rise := 0.0           # 직격 튕김의 처음 솟구치는 속도 (0 = 직격 튕김 아님). 통제 회복 판정용
@@ -416,9 +415,8 @@ func on_parry_push(away: Vector2) -> void:
 	parry_flash = 0.6
 
 
-## 지금 조준 중인 리버스 드라이브의 사거리 (돌진패리면 DASH_PARRY_RANGE 배)
+## 지금 조준 중인 리버스 드라이브의 사거리 (무제한: 조준선 길이)
 func parry_dash_reach() -> float:
-	var spd := PARRY_DASH_SPEED_PERFECT if aim_perfect else PARRY_DASH_SPEED
 	return UNLIMITED_REACH
 
 
@@ -447,7 +445,7 @@ func launch_parry_dash() -> void:
 	perfect_dash = aim_perfect
 	power_boost = aim_boost
 	aim_boost = false
-	dash_total = PARRY_DASH_TIME * (DASH_PARRY_RANGE if power_boost else 1.0)
+	dash_total = PARRY_DASH_TIME
 	dash_t = dash_total
 	dash_cd = stats.dash_cooldown
 	vel = aim * (PARRY_DASH_SPEED_PERFECT if aim_perfect else PARRY_DASH_SPEED)
@@ -1091,7 +1089,7 @@ func _draw() -> void:
 	# 조준
 	if aim_phase:
 		var total := stats.aim_time_perfect if aim_perfect else stats.aim_time
-		var c := Color(0.5, 1.0, 0.88, 0.95) if aim_boost else Color(0.75, 0.92, 1.0, 0.95)   # 돌진패리: 청록 + 더 길게
+		var c := Color(0.5, 1.0, 0.88, 0.95) if aim_boost else Color(0.75, 0.92, 1.0, 0.95)   # 돌진패리: 청록
 		draw_arc(Vector2.ZERO, 38.0, 0.0, TAU, 32, Color(c, 0.5), 2.0)
 		draw_arc(Vector2.ZERO, 46.0, -PI * 0.5, -PI * 0.5 + TAU * clampf(aim_left / total, 0.0, 1.0), 40, c, 4.0)
 		_laser(aim, parry_dash_reach(), c)

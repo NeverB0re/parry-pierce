@@ -1242,7 +1242,7 @@ func _v038_test() -> void:
 	_check("reverse drive range is unlimited (reach %.0f vs old %.0f)" % [p.parry_dash_reach(), normal_reach], p.aim_boost and p.parry_dash_reach() >= p.UNLIMITED_REACH)
 	p.aim = Vector2.RIGHT
 	p.launch_parry_dash()
-	_check("boosted reverse drive lasts longer (dash %.2fs, boost %s)" % [p.dash_t, p.power_boost], p.power_boost and absf(p.dash_t - p.PARRY_DASH_TIME * p.DASH_PARRY_RANGE) < 0.001)
+	_check("dash-parry reverse drive keeps the boost look (kind %s, boost %s)" % [p.dash_kind, p.power_boost], p.power_boost and p.dash_kind == "power")
 	var x0: float = p.position.x
 	_step(int(0.9 / DT))                                # (퍼펙트 패리 히트스톱 0.2초 포함)
 	_check("and goes farther (%.0f px)" % (p.position.x - x0), p.position.x - x0 > normal_reach * 1.15 or p.position.x >= p.WALL_R - 20.0)
