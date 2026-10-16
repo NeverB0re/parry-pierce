@@ -106,20 +106,16 @@ func melee_warning() -> bool:
 	return phase == "prep" or phase == "set" or phase == "warn"
 
 
-## 예고 (잔상식): 두 몸통이 맞부딪힐 가운데 자리의 잔상 + 벽 쪽에서 가운데로 오는 궤적, 두 몸통이 달아오른다
+## 예고: 두 몸통이 쓸고 올 띠 (벽 쪽 ~ 가운데)
 func draw() -> void:
 	if not (phase == "prep" or phase == "set" or phase == "warn"):
 		return
 	var c: CanvasItem = boss
-	var k := MeleeWarn.level_k(0 if phase == "prep" else (1 if phase == "set" else 2))
-	var keep: Array = x
-	x = [cx - MEET, cx + MEET]
-	for j in 2:
-		MeleeWarn.ghost(c, _pose(j).slice(hit_from), HALF * 2.0, true, k)
-	x = keep
-	for j in 2:
-		MeleeWarn.heat(c, boss.spines[tents[j]], hit_from, k)
-		var sx: float = signf(cx - x[j])
-		for dy in [-0.6, 0.0, 0.6]:
-			var y: float = cy + HALF_H * dy
-			MeleeWarn.trail_line(c, Vector2(x[j] + sx * HALF, y), Vector2(cx - sx * (MEET + HALF), y), k)
+	var level := 0 if phase == "prep" else (1 if phase == "set" else 2)
+	var y0 := cy - HALF_H - HALF
+	var y1 := cy + HALF_H + HALF
+	for s in [-1.0, 1.0]:
+		var xa: float = s * (START_X + HALF)
+		var xb: float = cx
+		MeleeWarn.zone(c, PackedVector2Array([Vector2(xa, y0), Vector2(xb, y0), Vector2(xb, y1), Vector2(xa, y1)]), level, boss.t)
+		MeleeWarn.tag(c, Vector2(lerpf(xa, xb, 0.5), cy), level, boss.t)

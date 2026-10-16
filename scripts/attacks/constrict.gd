@@ -104,18 +104,17 @@ func melee_warning() -> bool:
 	return phase == "prep" or phase == "set" or phase == "warn"
 
 
-## 예고 (잔상식): 고리가 조여 들 안쪽 잔상(반지름 절반) + 안쪽으로 오는 궤적, 두 촉수가 달아오른다. 위아래 틈은 비어 있다
+## 예고: 고리가 쓸고 지나갈 두 반원 부채꼴 (틈은 비어 있다)
 func draw() -> void:
 	if not (phase == "prep" or phase == "set" or phase == "warn"):
 		return
 	var c: CanvasItem = boss
-	var k := MeleeWarn.level_k(0 if phase == "prep" else (1 if phase == "set" else 2))
+	var level := 0 if phase == "prep" else (1 if phase == "set" else 2)
+	var rr: float = r + boss.width_at(boss.N - 1) * 0.5
 	for j in 2:
-		var arc := PackedVector2Array()
-		for q in 13:
-			arc.append(center + Vector2.from_angle(lerpf(ARCS[j][0], ARCS[j][1], q / 12.0)) * r * 0.45)
-		MeleeWarn.ghost(c, arc, 50.0, true, k)
-		MeleeWarn.heat(c, boss.spines[tents[j]], hit_from, k)
-		for f in [0.25, 0.5, 0.75]:
-			var a: float = lerpf(ARCS[j][0], ARCS[j][1], f)
-			MeleeWarn.trail_line(c, center + Vector2.from_angle(a) * (r - 40.0), center + Vector2.from_angle(a) * (r * 0.45 + 40.0), k)
+		var pts := PackedVector2Array([center])
+		for q in 17:
+			pts.append(center + Vector2.from_angle(lerpf(ARCS[j][0], ARCS[j][1], q / 16.0)) * rr)
+		MeleeWarn.zone(c, pts, level, boss.t)
+	MeleeWarn.tag(c, center + Vector2(-rr * 0.5, 0), level, boss.t)
+	MeleeWarn.tag(c, center + Vector2(rr * 0.5, 0), level, boss.t)
