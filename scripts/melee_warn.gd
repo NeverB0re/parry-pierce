@@ -77,6 +77,72 @@ static func limb(ci: CanvasItem, spine: PackedVector2Array, level: int, now: flo
 	ci.draw_polyline(spine, Color(C_HOT, 0.5 * blink), 3.0)
 
 
+# ── 잔상식 예고 (크라켄 촉수에 시험 적용): 면을 칠하지 않고, 몸이 끝날 자세의 잔상 + 얇은 궤적 + 몸이 달아오르는 색으로만.
+#    밝은 것 = 다음에 칠 공격, 회색 = 기다리는 공격. 점멸 없음. k = 0~1 (타격이 다가올수록 진해진다)
+const C_GHOST_NEXT := Color(1.0, 0.72, 0.45)
+const C_GHOST_WAIT := Color(0.62, 0.64, 0.7)
+const C_HEAT := Color(1.0, 0.45, 0.15)
+
+
+## 예고 단계(0 준비, 1 고정, 2 곧) → 진하기
+static func level_k(level: int) -> float:
+	return [0.3, 0.65, 1.0][clampi(level, 0, 2)]
+
+
+## 잔상: 몸이 공격을 마칠 자세를 반투명 실루엣으로 (width = 몸 굵기)
+static func ghost(ci: CanvasItem, spine: PackedVector2Array, width: float, next: bool, k: float) -> void:
+	if spine.size() < 2:
+		return
+	var c := C_GHOST_NEXT if next else C_GHOST_WAIT
+	var a := (0.1 + 0.2 * k) if next else 0.1
+	ci.draw_polyline(spine, Color(c, a), width)
+	ci.draw_polyline(spine, Color(c, a * 2.2), 2.5)
+	ci.draw_circle(spine[spine.size() - 1], width * 0.5, Color(c, a))
+
+
+## 궤적(직선): 얇은 점선 + 작은 화살촉 (다음 공격만)
+static func trail_line(ci: CanvasItem, from: Vector2, to: Vector2, k: float) -> void:
+	var d := to - from
+	var n := maxi(2, int(d.length() / 36.0))
+	for q in n:
+		if q % 2 == 0:
+			ci.draw_line(from + d * (q / float(n)), from + d * ((q + 1) / float(n)), Color(C_GHOST_NEXT, 0.25 + 0.35 * k), 3.0)
+	_head(ci, to, d.normalized(), k)
+
+
+## 궤적(호): center 를 축으로 반지름 r, a0 → a1 (다음 공격만)
+static func trail_arc(ci: CanvasItem, center: Vector2, r: float, a0: float, a1: float, k: float) -> void:
+	var n := 24
+	for q in n:
+		if q % 2 == 0:
+			ci.draw_line(center + Vector2.from_angle(lerpf(a0, a1, q / float(n))) * r, center + Vector2.from_angle(lerpf(a0, a1, (q + 1) / float(n))) * r, Color(C_GHOST_NEXT, 0.25 + 0.35 * k), 3.0)
+	var e := center + Vector2.from_angle(a1) * r
+	var before := center + Vector2.from_angle(lerpf(a0, a1, 0.97)) * r
+	_head(ci, e, (e - before).normalized(), k)
+
+
+static func _head(ci: CanvasItem, tip: Vector2, dir: Vector2, k: float) -> void:
+	var side := dir.orthogonal()
+	ci.draw_colored_polygon(PackedVector2Array([tip + dir * 30.0, tip + side * 17.0, tip - side * 17.0]), Color(C_GHOST_NEXT, 0.35 + 0.45 * k))
+
+
+## 다음에 칠 몸이 달아오른다: 주황 → 흰빛 (점멸 없음). 판정이 있는 마디(from~)만
+static func heat(ci: CanvasItem, spine: PackedVector2Array, from: int, k: float) -> void:
+	if spine.size() - from < 2:
+		return
+	var pts := spine.slice(from)
+	ci.draw_polyline(pts, Color(C_HEAT, 0.25 + 0.3 * k), 16.0)
+	ci.draw_polyline(pts, Color(C_HEAT.lerp(Color.WHITE, k), 0.45 + 0.4 * k), 4.0)
+
+
+## 연타 순번 점 (order + 1 개). 다음 공격이면 밝게
+static func pips(ci: CanvasItem, pos: Vector2, order: int, next: bool) -> void:
+	for q in order + 1:
+		var p := pos + Vector2((q - order * 0.5) * 26.0, 0)
+		ci.draw_circle(p, 10.0, Color(0.05, 0.05, 0.06, 0.7))
+		ci.draw_circle(p, 6.0, C_GHOST_NEXT if next else C_GHOST_WAIT)
+
+
 ## 위험 줄무늬: 45도 빗금이 다각형 안쪽만 천천히 흘러간다 (speed: 0 보통, 1 빠르게)
 static func _hatch(ci: CanvasItem, poly: PackedVector2Array, color: Color, now: float, speed: float) -> void:
 	var lo := poly[0]

@@ -78,10 +78,14 @@ func _act(_dt: float, ppos: Vector2) -> void:
 
 
 func _pose() -> PackedVector2Array:
+	return _pose_y(y_bar)
+
+
+func _pose_y(yb: float) -> PackedVector2Array:
 	var root: Vector2 = boss.ROOTS[tents[0]]
 	var s := -1.0 if root.x < cx else 1.0              # 뿌리 쪽 끝 = 막대의 시작
-	var e := Vector2(cx + s * HALF_LEN, y_bar)
-	var f := Vector2(cx - s * HALF_LEN, y_bar)
+	var e := Vector2(cx + s * HALF_LEN, yb)
+	var f := Vector2(cx - s * HALF_LEN, yb)
 	var c1 := root.lerp(e, 0.33) + Vector2(0, -220)
 	var c2 := e + Vector2(s * 260.0, -160.0)
 	var sp := PackedVector2Array()
@@ -113,15 +117,17 @@ func melee_warning() -> bool:
 	return delay <= 0.0 and (phase == "prep" or phase == "set" or phase == "warn")
 
 
-## 예고: 막대가 내려치며 쓸고 갈 직사각형 (막대 위치 ~ 멈추는 선)
+## 예고 (잔상식): 막대가 멈출 자리의 잔상 + 양 끝에서 내려가는 궤적, 다음에 칠 막대는 달아오른다
 func draw() -> void:
 	if delay > 0.0 or not (phase == "prep" or phase == "set" or phase == "warn"):
 		return
 	var c: CanvasItem = boss
-	var level := _warn_level(0 if phase == "prep" else (1 if phase == "set" else 2))
-	var x0 := cx - HALF_LEN - HALF
-	var x1 := cx + HALF_LEN + HALF
-	var area := PackedVector2Array([Vector2(x0, y_top - HALF), Vector2(x1, y_top - HALF), Vector2(x1, y_stop + HALF), Vector2(x0, y_stop + HALF)])
-	MeleeWarn.zone(c, area, level, boss.t)
-	for sx in [-0.6, 0.6]:
-		MeleeWarn.tag(c, Vector2(cx + sx * HALF_LEN, y_top + 120.0), level, boss.t, order)
+	var nx := not queued()
+	var k := MeleeWarn.level_k(0 if phase == "prep" else (1 if phase == "set" else 2))
+	MeleeWarn.ghost(c, _pose_y(y_stop).slice(hit_from), HALF * 2.0, nx, k)
+	if nx:
+		MeleeWarn.heat(c, boss.spines[tents[0]], hit_from, k)
+		for sx in [-1.0, 1.0]:
+			MeleeWarn.trail_line(c, Vector2(cx + sx * HALF_LEN, y_bar + HALF), Vector2(cx + sx * HALF_LEN, y_stop - HALF), k)
+	if order >= 0:
+		MeleeWarn.pips(c, Vector2(cx, y_stop + HALF + 30.0), order, nx)

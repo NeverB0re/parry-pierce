@@ -129,14 +129,18 @@ func melee_warning() -> bool:
 	return phase == "prep" or phase == "set" or phase == "warn"
 
 
+## 예고 (잔상식): 다 휘두른 자리의 잔상 + 뿌리를 축으로 한 호 궤적(플레이어 곁을 지난다), 다음에 칠 촉수는 달아오른다
 func draw() -> void:
 	if not (phase == "prep" or phase == "set" or phase == "warn"):
 		return
 	var c: CanvasItem = boss
-	var level := _warn_level(0 if phase == "prep" else (1 if phase == "set" else 2))
-	var area := _area if not _area.is_empty() else _sector()
-	MeleeWarn.zone(c, area, level, boss.t)
+	var nx := not queued()
+	var k := MeleeWarn.level_k(0 if phase == "prep" else (1 if phase == "set" else 2))
 	var root: Vector2 = boss.ROOTS[tents[0]]
-	MeleeWarn.limb(c, boss.spines[tents[0]], level, boss.t)
-	MeleeWarn.arc_arrow(c, root, arrow_r, th0 + (th1 - th0) * 0.08, th1, level, boss.t)
-	MeleeWarn.tag(c, root + Vector2.from_angle((th0 + th1) * 0.5) * REACH * 0.6, level, boss.t, order)
+	var end := _line(th1)
+	MeleeWarn.ghost(c, end.slice(hit_from), 60.0, nx, k)
+	if nx:
+		MeleeWarn.heat(c, boss.spines[tents[0]], hit_from, k)
+		MeleeWarn.trail_arc(c, root, arrow_r, th0 + (th1 - th0) * 0.06, th1 - (th1 - th0) * 0.04, k)
+	if order >= 0:
+		MeleeWarn.pips(c, end[boss.N - 1] + Vector2(0, 60), order, nx)

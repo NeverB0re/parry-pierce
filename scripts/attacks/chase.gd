@@ -111,19 +111,15 @@ func melee_warning() -> bool:
 	return phase == "follow" or phase == "set" or phase == "warn"
 
 
-## 예고: 따라다니는 동안은 감아칠 수 있는 원의 윤곽만, 멈추면 감아칠 부채꼴
+## 예고 (잔상식): 따라다니는 동안은 닿을 수 있는 원의 옅은 윤곽만, 멈추면 감아친 끝 자세의 잔상 + 호 궤적 + 달아오름
 func draw() -> void:
 	var c: CanvasItem = boss
 	if phase == "follow":
-		var ring := PackedVector2Array()
-		for q in 33:
-			ring.append(pivot + Vector2.from_angle(q * TAU / 32.0) * REACH)
-		MeleeWarn.zone(c, ring, 0, boss.t)
+		c.draw_arc(pivot, REACH, 0.0, TAU, 40, Color(MeleeWarn.C_GHOST_NEXT, 0.18), 2.0)
 		return
 	if phase != "set" and phase != "warn":
 		return
-	var level := 1 if phase == "set" else 2
-	MeleeWarn.zone(c, _area, level, boss.t)
-	MeleeWarn.limb(c, boss.spines[tents[0]], level, boss.t)
-	MeleeWarn.arc_arrow(c, pivot, REACH * 0.7, th0 + (th1 - th0) * 0.08, th1, level, boss.t)
-	MeleeWarn.tag(c, pivot + Vector2.from_angle((th0 + th1) * 0.5) * REACH * 0.55, level, boss.t)
+	var k := MeleeWarn.level_k(1 if phase == "set" else 2)
+	MeleeWarn.ghost(c, _pose(th1, 1.0).slice(hit_from), 50.0, true, k)
+	MeleeWarn.heat(c, boss.spines[tents[0]], hit_from, k)
+	MeleeWarn.trail_arc(c, pivot, REACH * 0.7, th0 + (th1 - th0) * 0.06, th1 - (th1 - th0) * 0.04, k)
