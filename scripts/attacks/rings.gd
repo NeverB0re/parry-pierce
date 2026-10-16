@@ -92,6 +92,7 @@ func draw() -> void:
 		var rr := _radius(k)
 		if rr < 0.0 or rr > MAX_R or dodged_rings.has(k):   # 빨아들인 고리는 사라진다
 			continue
+		c.draw_arc(origin, rr, 0.0, TAU, 160, Color(C_UNPARRY, 0.07), 140.0)        # 넓은 빛무리 (판정 없음)
 		c.draw_arc(origin, rr, 0.0, TAU, 160, Color(C_UNPARRY, 0.7), HALF * 2.0)
 		c.draw_arc(origin, rr, 0.0, TAU, 160, Color(C_UNPARRY_CORE, 0.9), 6.0)
 		c.draw_arc(origin, rr + SPEED * 0.25, 0.0, TAU, 160, Color(C_UNPARRY, 0.15), 3.0)   # 앞쪽 희미한 예고선

@@ -586,9 +586,9 @@ static func _rect_hit(p: Vector2, r: float, rc: Rect2) -> Dictionary:
 
 # ── 표적 피해 ──────────────────────────────────────────
 ## 돌진이 표적(strike_hit 결과)에 적중. 동력 코어가 부서지면 true (= 승리)
-## 방어막·결계({kind:"shield"})에 닿은 돌진이 튕겨 나오는가 (피해 없음). 기본(크라켄) = 리버스 드라이브만 뚫는다
-func blocks_strike(hit: Dictionary, kind: String, _perfect: bool, _strong: bool) -> bool:
-	return hit.get("kind", "") == "shield" and kind != "power"
+## 방어막·결계({kind:"shield"})에 닿은 돌진이 튕겨 나오는가 (피해 없음). 기본(크라켄) = 리버스 드라이브와 완전 동조 차지만 뚫는다
+func blocks_strike(hit: Dictionary, kind: String, _perfect: bool, strong: bool) -> bool:
+	return hit.get("kind", "") == "shield" and kind != "power" and not (kind == "charge" and strong)
 
 
 func damage(hit: Dictionary, dmg: int) -> bool:

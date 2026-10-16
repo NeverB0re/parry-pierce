@@ -95,6 +95,8 @@ func draw() -> void:
 	if phase != "sweep":
 		return
 	# 띠: 판정과 같은 폭(±HALF)의 단단한 보라 + 밝은 가장자리 + 안쪽 전류 세 가닥 + 띠 안에서만 튀는 불꽃
+	c.draw_rect(Rect2(x - 230.0, HIGH, 460.0, LOW - HIGH), Color(C_UNPARRY, 0.07))   # 넓은 빛무리 (판정 없음)
+	c.draw_rect(Rect2(x - HALF * 2.5, HIGH, HALF * 5.0, LOW - HIGH), Color(C_UNPARRY, 0.14))
 	c.draw_rect(Rect2(x - HALF, HIGH, HALF * 2.0, LOW - HIGH), Color(C_UNPARRY, 0.9))
 	c.draw_line(Vector2(x - HALF, HIGH), Vector2(x - HALF, LOW), Color(C_UNPARRY_CORE, 0.95), 4.0)
 	c.draw_line(Vector2(x + HALF, HIGH), Vector2(x + HALF, LOW), Color(C_UNPARRY_CORE, 0.95), 4.0)

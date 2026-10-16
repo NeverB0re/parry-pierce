@@ -1566,6 +1566,8 @@ func _kraken_shield_test() -> void:
 	_check("kraken: tentacles are not strike targets", b.strike_hit(b.part_pos(0), 20.0).is_empty())
 	var sh: Dictionary = b.strike_hit(b.CORE_POS + Vector2(0, b.SHIELD_R + 10.0), 20.0)
 	_check("kraken: the shield around the core is the only target", sh.get("kind", "") == "shield")
+	_check("kraken shield: charges bounce, reverse drives and full-sync charges get through",
+		b.blocks_strike(sh, "charge", false, false) and b.blocks_strike(sh, "dash", false, false) and not b.blocks_strike(sh, "power", false, false) and not b.blocks_strike(sh, "charge", false, true))
 	_check("kraken: assist sees only the core (no tentacle targets)", b.assist_targets(Vector2(0, -1500)).size() == 1)
 	for kind in ["tips", "ring", "snipe", "ink"]:      # 탄막 4종: 발사점이 사방에 있고, 끝까지 돌아 탄을 쏜다
 		b.reset()

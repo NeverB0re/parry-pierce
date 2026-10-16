@@ -3,6 +3,7 @@ extends "res://scripts/attacks/attack.gd"
 ## 단계: wind(눈이 달아오르고 지나갈 부채꼴 예고) → sweep(긋기)
 ## boss 에 필요한 것: beam_glow, EYES (광선이 나가는 눈 위치들)
 
+const MeleeWarn := preload("res://scripts/melee_warn.gd")
 const WIND := 1.1
 const SWEEP := 1.7
 const FROM := PI + 0.2               # 시작 각도 (왼쪽, 살짝 위)
@@ -112,16 +113,12 @@ func draw() -> void:
 		# 시작선 + 긋는 방향 화살표
 		for e in boss.EYES:
 			c.draw_line(e, end_at(FROM), Color(C_UNPARRY_CORE, (0.3 + 0.6 * kk) * blink), 3.0 + 7.0 * kk)
-		for f in [0.2, 0.4, 0.6, 0.8]:
-			var ath: float = lerpf(FROM, TO, f)
-			var radial := Vector2.from_angle(ath)
-			var tangent := Vector2.from_angle(ath - PI * 0.5)
-			var at := origin + radial * 700.0
-			c.draw_colored_polygon(PackedVector2Array([at + tangent * 46.0, at - tangent * 14.0 + radial * 28.0, at - tangent * 14.0 - radial * 28.0]), Color(C_UNPARRY_CORE, 0.25 + 0.5 * kk))
+		MeleeWarn.arc_trace(c, origin, 700.0, FROM, TO, t / MeleeWarn.TRACE_TIME)   # 쓸어 갈 방향: 옅은 점선이 한 번 그어지고 끝에 화살표
 		return
 	var end := end_at(th)
 	var fl := randf_range(0.9, 1.1)
 	for e in boss.EYES:
+		c.draw_line(e, end, Color(C_UNPARRY, 0.07), 200.0 * fl)          # 넓은 빛무리 (판정 없음)
 		c.draw_line(e, end, Color(C_UNPARRY, 0.22), 70.0 * fl)
 		c.draw_line(e, end, Color(C_UNPARRY, 0.75), 30.0 * fl)
 		c.draw_line(e, end, Color(C_UNPARRY_CORE, 0.95), 9.0)

@@ -10,6 +10,7 @@ const Ground := preload("res://scripts/ground.gd")
 const Background := preload("res://scripts/background.gd")
 const Hud := preload("res://scripts/hud.gd")
 const Sfx := preload("res://scripts/sfx.gd")
+const Music := preload("res://scripts/music.gd")
 const PauseMenu := preload("res://scripts/pause_menu.gd")
 const TitleMenu := preload("res://scripts/title_menu.gd")
 const Tutorial := preload("res://scripts/tutorial.gd")
@@ -47,6 +48,7 @@ var boss
 var fx
 var hud
 var sfx
+var music                            # 배경음악 (music.gd)
 var bg
 var lava_front                       # 앞쪽 바닥 (용암 표면 / 대기권 경계)
 var cam: Camera2D
@@ -150,6 +152,8 @@ func _ready() -> void:
 	hud.main = self
 	hud_layer.add_child(hud)
 
+	music = Music.new()
+	add_child(music)
 	sfx = Sfx.new()
 	sfx.process_mode = Node.PROCESS_MODE_ALWAYS          # FTL 도약(일시정지 중)에도 소리
 	add_child(sfx)
@@ -301,7 +305,7 @@ func _on_title_continue() -> void:
 func _on_jump() -> void:
 	title.close()
 	var st: Dictionary = Stages.LIST[profile.stage]
-	sfx.play("dash", 6.0, 0.0)
+	sfx.play("dash_big", 4.0, 0.0)
 	sfx.play("perfect", 0.0, 0.0)
 	ftl.play(Loc.t("%s — 콜로서스 「%s」") % [Loc.t(st["coord"]), Loc.t(st["name"])], func() -> void: start_stage(profile.stage))
 
@@ -604,7 +608,7 @@ func _cure_heat(at: Vector2) -> void:
 	heat -= 1
 	heat_t = HEAT_COOL
 	tele.add("heat_cure")
-	sfx.play("bolt", -2.0, 0.0)
+	sfx.play("heal", -2.0, 0.0)
 	fx.ring(at, Color(1.0, 0.75, 0.35), 90.0, 0.35, 4.0, true)
 	fx.burst(at, 8, Color(1.0, 0.8, 0.45), 380.0, 0.3, 2.5)
 
@@ -629,8 +633,8 @@ func _perfect_impact(at: Vector2, dir: Vector2, sync := false) -> void:
 	fx.ring(at, Color(1.0, 0.9, 0.6) if sync else Color(0.7, 0.9, 1.0), 110.0, 0.3, 5.0)
 	fx.sprite(at, 3 if sync else 2, 440.0, 0.5)  # 적이 입는 피해 표시 (청록 링 / 주황 링)
 	fx.sprite(at, 1, 300.0, 0.45, false, Color(0.7, 1.0, 1.0) if sync else Color.WHITE, 0.05)
-	sfx.play("perfect", 4.0)
-	sfx.play("parry", 0.0)
+	sfx.play("hit_perfect", 6.0)
+	sfx.play("sync" if sync else "perfect", 0.0)
 
 
 func _clash(hb: Dictionary, p: Vector2) -> void:
@@ -661,8 +665,8 @@ func _clash(hb: Dictionary, p: Vector2) -> void:
 	hitstop = maxf(hitstop, 0.2)
 	shake = maxf(shake, 24.0)
 	hud.flash(0.22, Color(1.0, 0.85, 0.55))
-	sfx.play("perfect", 2.0)
-	sfx.play("armor", 4.0)
+	sfx.play("hit_drive", 4.0)
+	sfx.play("hit_charge", 2.0)
 	fx.burst(at, 50, Color(1.0, 0.8, 0.45), 1400.0, 0.6, 4.5)
 	fx.burst(at, 24, Color(1.0, 0.55, 0.25), 900.0, 0.5, 3.5)
 	fx.rays_burst(at, 16, Color(1.0, 0.9, 0.6), 500.0, 0.45, 7.0)
@@ -712,7 +716,7 @@ func _dash_parry_feedback(p: Vector2, dir: Vector2) -> void:
 	hud.flash(0.18, Color(0.6, 1.0, 0.9))
 	hud.warp(0.4)
 	shake = maxf(shake, 20.0)
-	sfx.play("perfect", 2.0)
+	sfx.play("parry", 2.0)
 	sfx.play("dash", 0.0, 0.0)
 	fx.ring(p, mint, 240.0, 0.4, 7.0, true)
 	fx.ring(p, Color(1, 1, 1), 130.0, 0.25, 4.0)
@@ -734,7 +738,7 @@ func _graze(hb: Dictionary) -> void:
 	if heat < HEAT_MAX:
 		player.invuln = maxf(player.invuln, GRAZE_INVULN)
 		shake = maxf(shake, 5.0)
-		sfx.play("hurt", -10.0)
+		sfx.play("graze", -2.0)
 		hud.flash(0.08, Color(1.0, 0.55, 0.15))
 		fx.burst(p, 8, Color(1.0, 0.6, 0.2), 420.0, 0.25, 2.5)
 		return
@@ -864,7 +868,6 @@ func _parry_push_feedback(at: Vector2, away := Vector2.UP) -> void:
 	hitstop = maxf(hitstop, 0.06)
 	shake = maxf(shake, 8.0)
 	sfx.play("deflect", 2.0)
-	sfx.play("parry", -14.0)
 	var d := away.normalized() if away.length() > 0.1 else Vector2.UP
 	var steel := Color(0.7, 0.75, 0.82)
 	fx.arc(at, Color(0.85, 0.95, 1.0), 64.0, d.angle(), 2.0, 0.32, 7.0)
@@ -886,15 +889,14 @@ func _drain_boss_events() -> void:
 				fx.ring(pos, Color(1.0, 0.5, 0.2, 0.6), 360.0, 0.35, 6.0)
 			Ev.BEAM:                             # 패리 불가 레이저 발사
 				shake = maxf(shake, 16.0)
-				sfx.play("dash", 6.0, 0.0)
-				sfx.play("break", -4.0, 0.0)
+				sfx.play("beam", 2.0, 0.0)
 				hud.flash(0.12, Color(0.6, 0.1, 0.4))
 			Ev.ERUPT:
 				sfx.play("bolt", -6.0)
 				shake = maxf(shake, 5.0)
 			Ev.SWING:
 				shake = maxf(shake, 10.0)
-				sfx.play("dash", 4.0, 0.0)
+				sfx.play("dash_big", 0.0, 0.0)
 				sfx.play("stomp", -4.0)
 				fx.ring(pos, Color(0.9, 0.5, 0.4, 0.7), 260.0, 0.3, 6.0)
 			Ev.BOLT:
@@ -916,13 +918,13 @@ func _drain_boss_events() -> void:
 				hud.flash(0.12, Color(1.0, 0.8, 0.6))
 			Ev.PART_STAGE:                       # 부위 손상 단계 상승: 불꽃·파편이 튄다
 				shake = maxf(shake, 10.0)
-				sfx.play("break", -4.0)
+				sfx.play("crack", -4.0)
 				fx.burst(pos, 22, Color(1.0, 0.7, 0.35), 800.0, 0.5, 3.0)
 				fx.burst(pos, 10, Color(0.55, 0.58, 0.64), 500.0, 0.8, 5.0, 1200.0)
 			Ev.CORE_STAGE:                       # 코어 껍질이 한 단계 더 부서진다
 				hitstop = maxf(hitstop, 0.12)
 				shake = maxf(shake, 18.0)
-				sfx.play("break", 2.0)
+				sfx.play("crack", 4.0)
 				sfx.play("stomp", -6.0)
 				fx.burst(pos, 28, Color(0.6, 0.64, 0.72), 800.0, 0.9, 5.0, 1300.0)
 				fx.burst(pos, 14, Color(1.0, 0.6, 0.3), 800.0, 0.45, 3.0)
@@ -951,7 +953,7 @@ func _drain_boss_events() -> void:
 				hitstop = 0.25
 				shake = 26.0
 				sfx.play("stomp", 4.0)
-				sfx.play("win", -6.0, 0.0)
+				sfx.play("open", 2.0, 0.0)
 				fx.rays_burst(pos, 20, Color(1.0, 0.55, 0.3), 700.0, 0.8, 8.0)
 				fx.ring(pos, Color(1.0, 0.6, 0.35), 500.0, 0.7, 10.0)
 				hud.flash(0.2, Color(1.0, 0.6, 0.4))
@@ -963,7 +965,7 @@ func _drain_boss_events() -> void:
 				var dmg := int(reflect_carry)
 				reflect_carry -= dmg
 				shake = maxf(shake, 6.0 + rd * 2.0)
-				sfx.play("armor", -4.0)
+				sfx.play("hit_light", -2.0)
 				fx.burst(pos, int(10 + rd * 4), Color(0.75, 1.0, 1.0), 600.0, 0.3, 2.5)
 				fx.sprite(pos, 1, 90.0 + rd * 40.0, 0.3)
 				if dmg <= 0:
@@ -978,7 +980,7 @@ func _drain_boss_events() -> void:
 				fx.burst(Vector2(player.position.x, pos.y), 30, Color(0.7, 0.68, 0.64), 900.0, 0.6, 5.0, 1200.0, Vector2.DOWN, PI * 0.4)
 			Ev.RING:                            # 동심원 파동 하나가 퍼지기 시작
 				shake = maxf(shake, 8.0)
-				sfx.play("dash", 2.0, 0.0)
+				sfx.play("beam", -4.0, 0.0)
 				hud.flash(0.06, Color(0.6, 0.1, 0.4))
 			Ev.MINE:                            # 기뢰 폭발
 				shake = maxf(shake, 8.0)
@@ -996,26 +998,27 @@ func _drain_boss_events() -> void:
 func on_dash(pos: Vector2, dir: Vector2, kind := "dash") -> void:
 	if kind == "charge" and player.sync_charge:    # 완전 동조 차지: PERFECT 리버스 드라이브와 같은 출발 연출, 청록
 		drive_from = pos
-		sfx.play("dash", 4.0, 0.0)
+		sfx.play("dash_big", 4.0, 0.0)
+		sfx.play("sync", -4.0, 0.0)
 		shake = maxf(shake, 16.0)
 		hud.flash(0.14, Color(0.8, 1.0, 1.0))
 		fx.burst(pos, 40, Color(0.7, 1.0, 0.95), 1500.0, 0.45, 3.5, 0.0, -dir, 0.5)
 		fx.ring(pos, Color(0.7, 1.0, 0.95), 200.0, 0.35, 7.0)
 		return
 	if kind == "charge":
-		sfx.play("dash", 2.0)
+		sfx.play("dash_big", 0.0)
 		shake = maxf(shake, 8.0)
 		fx.burst(pos, 22, Color(1.0, 0.6, 0.3, 0.9), 700.0, 0.35, 3.0, 0.0, -dir, 0.5)
 		fx.ring(pos, Color(1.0, 0.6, 0.3), 160.0, 0.3, 5.0)
 	else:
-		sfx.play("dash", -6.0)
+		sfx.play("dash", -4.0)
 		fx.burst(pos, 12, Color(0.6, 0.85, 1.0, 0.6), 420.0, 0.25, 2.0, 0.0, -dir, 0.5)
 
 
 ## 차지 완료
 ## 차지 완료: 짧은 슬로우 + 링 (조준 슬로우 중에는 조준이 우선)
 func on_charged(pos: Vector2) -> void:
-	sfx.play("bolt", -2.0, 0.0)
+	sfx.play("charged", -2.0, 0.0)
 	shake = maxf(shake, 4.0)
 	slowmo = maxf(slowmo, CHARGED_SLOW)
 	hud.warp(0.12)
@@ -1034,8 +1037,7 @@ func on_launch(pos: Vector2) -> void:
 	plat_on = false
 	plat_dir = 1.0
 	shake = maxf(shake, 14.0)
-	sfx.play("perfect", -4.0, 0.0)
-	sfx.play("dash", 4.0, 0.0)
+	sfx.play("dash_big", 4.0, 0.0)
 	fx.burst(pos + Vector2(0, 20), 40, Color(1.0, 0.6, 0.3), 900.0, 0.6, 4.0, 900.0, Vector2.DOWN, 0.9)
 	fx.ring(pos, Color(0.85, 0.95, 1.0), 200.0, 0.35, 6.0)
 
@@ -1088,7 +1090,7 @@ func on_perfect_evade(pos: Vector2, strong := false) -> void:
 		slowmo = maxf(slowmo, 0.25)
 		_buzz(40)
 		hud.warp(0.25)
-		sfx.play("bolt", -4.0, 0.0)
+		sfx.play("sync", -8.0, 0.1)
 		fx.ring(pos, mint, 90.0, 0.3, 2.0, true)
 		fx.burst(pos, 6, Color(0.6, 1.0, 0.9), 320.0, 0.3, 2.0, 0.0, Vector2.ZERO, PI)
 		return
@@ -1096,8 +1098,8 @@ func on_perfect_evade(pos: Vector2, strong := false) -> void:
 	_buzz(90)
 	hud.warp(0.5)
 	shake = maxf(shake, 8.0)
-	sfx.play("perfect", 0.0, 0.0)
-	sfx.play("bolt", 0.0, 0.0)
+	sfx.play("sync", 2.0, 0.0)
+	sfx.play("perfect", -4.0, 0.0)
 	fx.ring(pos, mint, 240.0, 0.45, 5.0, true)
 	fx.ring(pos, Color(1.0, 0.92, 0.55), 150.0, 0.4, 4.0, true)
 	fx.ring(pos, Color(1.0, 0.95, 0.75), 80.0, 0.5, 3.0)
@@ -1126,11 +1128,11 @@ func on_power_dash_end(perfect := false) -> void:
 func on_parry_launch(pos: Vector2, dir: Vector2) -> void:
 	drive_from = pos
 	if not player.perfect_dash:                 # 일반 패리 드라이브: 작게
-		sfx.play("dash", 0.0, 0.0)
+		sfx.play("dash_big", -2.0, 0.0)
 		shake = maxf(shake, 6.0)
 		fx.burst(pos, 12, Color(0.8, 0.92, 1.0), 800.0, 0.3, 2.5, 0.0, -dir, 0.5)
 		return
-	sfx.play("dash", 4.0, 0.0)
+	sfx.play("dash_big", 4.0, 0.0)
 	shake = maxf(shake, 16.0)
 	hud.flash(0.14, Color(1.0, 0.92, 0.75))
 	fx.burst(pos, 40, Color(1.0, 0.92, 0.7), 1500.0, 0.45, 3.5, 0.0, -dir, 0.5)
@@ -1161,7 +1163,7 @@ func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, kind := "d
 		_perfect_impact(contact, dir, true)
 	elif buffed:                               # 퍼펙트 회피 버프가 실린 차지 일격
 		shake = maxf(shake, 20.0)
-		sfx.play("perfect", -2.0, 0.0)
+		sfx.play("sync", -2.0, 0.0)
 		fx.ring(contact, Color(0.75, 0.96, 1.0), 240.0, 0.35, 8.0)
 		fx.rays_burst(contact, 10, Color(0.8, 0.97, 1.0), 420.0, 0.35, 6.0)
 		fx.burst(contact, 22, Color(0.8, 0.97, 1.0), 1100.0, 0.5, 3.5, 0.0, -dir, 1.0)
@@ -1173,7 +1175,7 @@ func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, kind := "d
 			_cure_heat(contact)
 			hitstop = maxf(hitstop, 0.1)
 			shake = maxf(shake, 13.0)
-			sfx.play("armor", 3.0)
+			sfx.play("hit_drive", 3.0)
 			fx.rays_burst(contact, 8, Color(1.0, 0.85, 0.6), 320.0, 0.3, 5.0)
 			fx.ring(contact, Color(1, 0.9, 0.7), 150.0, 0.3, 7.0)
 			fx.burst(contact, 18, Color(1.0, 0.8, 0.5), 900.0, 0.4, 3.0, 0.0, -dir, 1.1)
@@ -1194,7 +1196,7 @@ func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, kind := "d
 			hitstop = maxf(hitstop, 0.1)
 			shake = maxf(shake, 13.0)
 			hud.flash(0.08, Color(1.0, 0.8, 0.55))
-			sfx.play("armor", 3.0)
+			sfx.play("hit_charge", 3.0)
 			fx.rays_burst(contact, 8, Color(1.0, 0.7, 0.35), 320.0, 0.3, 5.0)
 			fx.ring(contact, Color(1.0, 0.65, 0.3), 150.0, 0.3, 7.0)
 			fx.burst(contact, 18, Color(1.0, 0.7, 0.35), 900.0, 0.4, 3.0, 0.0, -dir, 1.1)
@@ -1203,7 +1205,7 @@ func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, kind := "d
 			hitstop = maxf(hitstop, 0.07)
 			shake = maxf(shake, 9.0)
 			hud.flash(0.05, Color(0.85, 0.93, 1.0))
-			sfx.play("armor", 0.0)
+			sfx.play("hit_light", 0.0)
 			fx.burst(contact, 14, Color(0.9, 0.95, 1.0), 800.0, 0.35, 3.0, 0.0, -dir, 1.1)
 			fx.rays_burst(contact, 6, Color(0.85, 0.93, 1.0), 260.0, 0.25, 4.0)
 			fx.ring(contact, Color(0.85, 0.92, 1.0), 100.0, 0.22, 4.0)
