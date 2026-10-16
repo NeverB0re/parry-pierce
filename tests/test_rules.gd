@@ -2343,6 +2343,27 @@ func _satellite_test() -> void:
 	p.buff_strong = true
 	_dash_dir("charge", Vector2.RIGHT)
 	_check("full-sync charge is near-instant like a PERFECT drive (speed %.0f), same reach" % p.vel.length(), p.sync_charge and p.vel.length() >= p.PARRY_DASH_SPEED_PERFECT - 1.0 and absf(p.dash_total * p.vel.length() - p.CHARGE_SPEED * p.CHARGE_DASH_TIME) < 5.0)
+	main.start_stage(0)                                       # 완전 동조 차지 적중: 차지 쿨다운 즉시 회복 + 잔탄 긁힘 한 칸 치료
+	var ob = main.boss
+	ob.next_t = 99.0
+	var tpp: Vector2 = ob.part_pos(0)
+	p = main.player
+	p.reset(tpp + Vector2(-160, 0), false)
+	p.invuln = 99.0
+	main.heat = 2
+	p.buffed = true
+	p.buff_strong = true
+	_dash_dir("charge", Vector2.RIGHT)
+	p.charge_cd = 1.0
+	for k in 10:
+		main._physics_process(DT)
+		if p.last_hit_strong:
+			break
+	_check("full-sync charge hit refunds the charge cooldown and cures one heat (cd %.2f, heat %d)" % [p.charge_cd, main.heat], p.last_hit_strong and p.charge_cd <= 0.0 and main.heat == 1)
+	main.heat = 0
+	main.start_stage(3)
+	b = main.boss
+	p = main.player
 	p.reset(Vector2(-700, -1500), false)
 	_check("recoil grows with the strike: dash < charge < normal drive < PERFECT / full sync",
 		p._recoil("dash", false) < p._recoil("charge", false) and p._recoil("charge", false) < p._recoil("power", false) and p._recoil("power", false) < p._recoil("charge", true))

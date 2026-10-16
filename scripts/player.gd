@@ -81,6 +81,7 @@ const PLAT_HALF := 90.0
 
 const C_BODY := Color(0.93, 0.94, 0.96)
 const C_TRIM := Color(0.45, 0.8, 1.0)
+const C_SYNC := Color(0.35, 1.0, 0.95)    # 완전 동조 (청록)
 const C_EVADE := Color(0.6, 0.85, 1.0)
 const C_ATTACK := Color(1.0, 0.55, 0.2)
 
@@ -770,6 +771,8 @@ func _on_strike(hit: Dictionary) -> void:
 	var dmg := _strike_damage()
 	var was_buffed := buffed and kind == "charge"
 	last_hit_strong = was_buffed and buff_strong
+	if last_hit_strong:                          # 완전 동조 차지 적중: 차지 쿨다운이 바로 돌아온다
+		charge_cd = 0.0
 	if was_buffed:                               # 퍼펙트 회피 버프는 차지 공격 한 번에 소모된다
 		_clear_buff()
 	main.on_strike(hit, dmg, position, dir, kind, was_buffed, last_hit_strong)
@@ -1007,13 +1010,15 @@ func _draw_flame(off: Vector2) -> void:
 
 
 ## 금빛 꼬리: 기체 뒤쪽(기수 반대)으로 길게 늘어지는 금빛 불꽃 (완전 동조 · 리버스 드라이브 중). k = 크기 배율
-func _draw_gold_tail(k: float) -> void:
+func _draw_gold_tail(k: float, sync := false) -> void:
 	var back := Vector2.from_angle(facing + PI)
 	var side := back.orthogonal()
 	var t := Time.get_ticks_msec() * 0.001
 	var flick := 0.9 + 0.1 * sin(t * 52.0) + 0.05 * sin(t * 29.0)
 	var base := back * SHIP_SIZE * 0.22
 	var layers := [[1.0, 1.0, Color(1.0, 0.72, 0.2)], [0.62, 0.8, Color(1.0, 0.86, 0.38)], [0.3, 0.55, Color(1.0, 0.97, 0.78)]]
+	if sync:                                        # 완전 동조: 같은 꼬리, 청록 계열
+		layers = [[1.0, 1.0, Color(0.2, 0.85, 1.0)], [0.62, 0.8, Color(0.45, 1.0, 0.9)], [0.3, 0.55, Color(0.85, 1.0, 1.0)]]
 	for L in layers:
 		var w := 17.0 * k * float(L[0])
 		var ln := 105.0 * k * float(L[1]) * flick
@@ -1024,7 +1029,7 @@ func _draw_gold_tail(k: float) -> void:
 	for j in 5:                                     # 뒤로 흩날리는 불똥
 		var ph := fmod(t * (1.6 + j * 0.37) + j * 0.31, 1.0)
 		var sp := base + back * (30.0 + 120.0 * k * ph) + side * sin(j * 2.1 + t * 9.0) * 12.0 * k * (0.4 + ph)
-		draw_circle(sp, 2.6 * (1.0 - ph) + 0.8, Color(1.0, 0.9, 0.5, 0.9 * (1.0 - ph)))
+		draw_circle(sp, 2.6 * (1.0 - ph) + 0.8, Color(0.7, 1.0, 1.0, 0.9 * (1.0 - ph)) if sync else Color(1.0, 0.9, 0.5, 0.9 * (1.0 - ph)))
 
 
 ## 무적이 남은 시간 (실드가 끝나기 직전 깜빡임용). 돌진·조준·발사 중엔 넉넉하게 본다
@@ -1089,8 +1094,19 @@ func _draw() -> void:
 			draw_circle(Vector2(cos(ba), sin(ba)) * 34.0, 2.6, Color(1, 1, 1, 0.9))
 	if dash_t > 0.0 and dash_kind == "power":
 		_draw_gold_tail((2.2 if perfect_dash else 0.9) * (1.3 if power_boost else 1.0))   # 일반 패리 드라이브는 가늘게, PERFECT 는 굵게
+	elif sync_charge and dash_t > 0.0:
+		_draw_gold_tail(2.2, true)                   # 완전 동조 차지: 굵은 청록 꼬리
 	elif buffed and buff_strong and fade_ok:
-		_draw_gold_tail(1.0)
+		_draw_gold_tail(1.2, true)
+	if buffed and buff_strong and fade_ok:           # 완전 동조: 청록 빛 + 맥동 링 + 도는 갈고리 셋 (요격 성공의 주황 갈고리와 같은 모양, 색으로 구분)
+		var sp := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.018)
+		draw_circle(Vector2.ZERO, 34.0, Color(C_SYNC, 0.16 + 0.12 * sp))
+		draw_arc(Vector2.ZERO, 46.0 + 4.0 * sp, 0.0, TAU, 40, Color(C_SYNC, 0.45 + 0.4 * sp), 3.5)
+		var sa := Time.get_ticks_msec() * 0.014
+		for k in 3:
+			var a0 := sa + k * TAU / 3.0
+			draw_arc(Vector2.ZERO, 38.0, a0, a0 + 1.0, 10, Color(C_SYNC, 0.95), 4.5)
+			draw_circle(Vector2.from_angle(a0 + 1.0) * 38.0, 4.5, Color(0.9, 1.0, 1.0))
 
 	_ship_col = "r" if attack else "b"
 	_draw_flame(jitter)

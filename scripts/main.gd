@@ -596,7 +596,7 @@ func try_clash(p: Vector2) -> bool:
 	return false
 
 
-## 리버스 드라이브 성공: 쌓인 잔탄 긁힘(과열) 한 칸을 치료한다. 5초 식는 시계도 다시 시작
+## 리버스 드라이브·동조 일격 성공: 쌓인 잔탄 긁힘(과열) 한 칸을 치료한다. 5초 식는 시계도 다시 시작
 func _cure_heat(at: Vector2) -> void:
 	if heat <= 0:
 		return
@@ -1143,6 +1143,7 @@ func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, kind := "d
 	tele.hit(kind, dmg)
 	if buffed:
 		tele.add("sync_strong_hit" if strong else "sync_hit")
+		_cure_heat(contact)                      # 동조 일격도 잔탄 긁힘 한 칸 치료 (리버스 드라이브와 같이)
 	if strong:                                 # 완전 동조(패리 불가 공격을 퍼펙트 회피) 4배 일격: 퍼펙트 패리와 같은 연출, 청록
 		_perfect_impact(contact, dir, true)
 	elif buffed:                               # 퍼펙트 회피 버프가 실린 차지 일격
