@@ -2352,6 +2352,14 @@ func _satellite_test() -> void:
 			main._physics_process(DT)
 		main.touch_ui.stick = Vector2.ZERO
 		return p.vel.x
+	p.reset(Vector2(-700, -1500), false)                    # 적중 직후 튕겨 나올 때: 마우스가 표적(반대쪽)을 가리켜도 BOUNCE_FREE 까지는 브레이크 없음
+	p.bounce_off(Vector2.RIGHT, "charge")
+	var vx0: float = p.vel.x
+	main.touch_ui.stick = Vector2(1, 0)
+	for k in 6:
+		main._physics_process(DT)
+	main.touch_ui.stick = Vector2.ZERO
+	_check("bounce after a hit is not braked right away (vx %.0f -> %.0f, %.0f px)" % [vx0, p.vel.x, p.position.distance_to(p.bounce_from)], p.vel.x < vx0 * 0.6 and p.position.distance_to(p.bounce_from) < p.BOUNCE_FREE)
 	var v_brake: float = drift.call(true)
 	var v_free: float = drift.call(false)
 	_check("reverse thrust brakes leftover dash speed quickly (%.0f vs %.0f)" % [v_brake, v_free], v_brake < v_free - 250.0 and v_brake >= p.BRAKE_FROM - 600.0)

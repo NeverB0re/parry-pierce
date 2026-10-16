@@ -13,6 +13,8 @@ const GRAVITY := 900.0
 const BASE_FALL := 480.0         # 마우스가 수평일 때 낙하 속도 상한
 const DIVE_FALL := 1000.0        # 마우스를 아래로: 빨리 떨어진다
 const BRAKE := 2600.0            # 역추진: 반대쪽 조준 시 초당 줄이는 속도
+const BOUNCE_FREE := 260.0       # 적중 후 이만큼 튕겨 나올 때까지는 브레이크·표적 쪽 조종이 걸리지 않는다
+const BOUNCE_LOCK_MAX := 0.6     # 그래도 이 시간이 지나면 풀린다
 const BRAKE_FROM := 500.0        # 이 속도보다 빠를 때만 줄인다 (돌진 뒤 남은 관성. 평소 비행·낙하는 그대로)
 const THRUST := 560.0            # 약한 무한 추진(좌우/하강)
 const AIR_DRAG := 0.9
@@ -137,6 +139,8 @@ var aim_boost := false           # 돌진패리 성공 → 이어지는 리버�
 var power_boost := false         # 지금 리버스 드라이브가 돌진패리에서 나왔다 (연출만)
 var invuln := 0.0                # 피격 후 무적
 var bouncing := false            # 직격 후 튕겨나는 중
+var bounce_from := Vector2.ZERO  # 튕겨나기 시작한 자리 (BOUNCE_FREE 만큼 멀어질 때까지는 브레이크·표적 쪽 조종이 걸리지 않는다)
+var bounce_lock_t := 0.0         # 그 잠금이 남은 시간 (BOUNCE_LOCK_MAX 안전장치)
 var bounce_rise := 0.0           # 직격 튕김의 처음 솟구치는 속도 (0 = 직격 튕김 아님). 통제 회복 판정용
 var parry_hit := false           # 이번 패리 판정에서 무언가를 막았다 → 판정이 끝나도 패리 쿨다운 없음
 var shield_t := 0.0              # 돌진/직격 후 무적
@@ -578,6 +582,7 @@ func step(dt: float) -> void:
 	if shield_t <= 0.0:
 		bouncing = false
 	launch_t = maxf(0.0, launch_t - dt)
+	bounce_lock_t = maxf(0.0, bounce_lock_t - dt)
 	parry_flash = maxf(0.0, parry_flash - dt * 4.0)
 	if chain > 0:
 		chain_t -= dt
@@ -651,12 +656,14 @@ func step(dt: float) -> void:
 		if stun > 0.0:
 			fall_cap = DIVE_FALL
 		elif m.length() > AIM_DEADZONE:
+			var bounce_lock := bounce_lock_t > 0.0 and position.distance_to(bounce_from) < BOUNCE_FREE   # 적중 직후엔 마우스가 아직 표적을 가리켜도 충분히 튕겨 나온다
 			var opp := -vel.dot(aim)                   # 역추진: 날아가는 반대쪽을 조준하면 그 방향 속도를 빨리 죽인다 (돌진 뒤 미끄러짐 제어)
-			if opp > 0.0 and not bouncing and vel.length() > BRAKE_FROM:   # 평소 비행 속도 아래로는 안 줄인다 (위를 조준해 공중에 멈추지 않게)
+			if opp > 0.0 and not bouncing and not bounce_lock and vel.length() > BRAKE_FROM:   # 평소 비행 속도 아래로는 안 줄인다 (위를 조준해 공중에 멈추지 않게)
 				vel += aim * minf(minf(opp, BRAKE * dt), vel.length() - BRAKE_FROM)
-			if aim.x * vel.x < 0.0:                    # 좌우 방향 전환(낙하 중 포함): 가로 속도는 속도와 상관없이 빨리 꺾인다
+			if aim.x * vel.x < 0.0 and not bounce_lock:   # 좌우 방향 전환(낙하 중 포함): 가로 속도는 속도와 상관없이 빨리 꺾인다
 				vel.x = move_toward(vel.x, 0.0, BRAKE * absf(aim.x) * dt)
-			vel.x += aim.x * THRUST * (BOUNCE_THRUST if bouncing else 1.0) * dt
+			if not (bounce_lock and aim.x * vel.x < 0.0):   # 튕겨 나오는 쪽 반대로(표적 쪽) 미는 조종도 BOUNCE_FREE 까지는 막는다
+				vel.x += aim.x * THRUST * (BOUNCE_THRUST if bouncing else 1.0) * dt
 			if aim.y > 0.0:
 				vel.y += aim.y * THRUST * dt
 				fall_cap = lerpf(BASE_FALL, DIVE_FALL, aim.y)
@@ -869,6 +876,8 @@ func bounce_off(dir: Vector2, kind := "dash", intercept := false) -> void:
 	dash_t = 0.0
 	_end_dash()
 	bouncing = true
+	bounce_from = position
+	bounce_lock_t = BOUNCE_LOCK_MAX
 	if kind == "power" and not perfect and not intercept:   # 일반 패리 드라이브: 짧은 무적
 		shield_t = NORMAL_DRIVE_SHIELD
 		shield_max = NORMAL_DRIVE_SHIELD

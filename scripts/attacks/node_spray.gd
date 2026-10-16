@@ -17,7 +17,7 @@ var mode := "fan"                    # fan = 아래쪽 노드의 부채 / ring =
 const RING_N := 26
 const RING_R := 380.0
 const RING_SPEED := 220.0
-const RING_MAIN_EVERY := 6          # 고리에서 이만큼마다 주탄 하나
+const RING_MAIN_EVERY := 13         # 고리에서 이만큼마다 주탄 하나 (26발 중 2발)
 
 
 func _init(mode_ := "fan") -> void:
@@ -37,18 +37,19 @@ func step(_dt: float, _ppos: Vector2) -> void:
 			var ro := (0.5 if done % 2 == 1 else 0.0) * TAU / RING_N
 			for k in RING_N:
 				var d := Vector2.from_angle(ro + k * TAU / RING_N)
-				var main_k := (k + done) % RING_MAIN_EVERY == 0       # 고리마다 몇 방향에 주탄
+				var main_k := (k + done * 5) % RING_MAIN_EVERY == 0   # 고리마다 두 방향에만 주탄 (차례마다 자리가 바뀐다)
 				boss.shots.spawn(o + d * RING_R, d * RING_SPEED * m, 8.0, 0.0, 0.0, Projectiles.Kind.BOLT if main_k else Projectiles.Kind.SMALL)
 			boss.emit(Ev.BOLT, o)
 			done += 1
 			continue
 		var off := (0.5 if done % 2 == 1 else 0.0) * SPREAD / (FAN_N - 1)
+		var main_node: int = ids[done % ids.size()] if not ids.is_empty() else -1   # 한 차례에 주탄은 노드 하나에서만
 		for i in ids:
 			var o: Vector2 = boss.node_pos(i)
 			var base: float = (o - boss.CORE_POS).angle() - SPREAD * 0.5 + off
 			for k in FAN_N:
 				var a: float = base + k * SPREAD / (FAN_N - 1)
-				var main_k := k == FAN_N / 2 and done % 2 == 0          # 부채 가운데 = 금색 주탄 (차례 걸러)
+				var main_k := k == FAN_N / 2 and i == main_node        # 부채 가운데 = 금색 주탄 (한 차례에 하나)
 				boss.shots.spawn(o, Vector2.from_angle(a) * SPEED * m, 8.0, 0.0, 0.0, Projectiles.Kind.BOLT if main_k else Projectiles.Kind.SMALL)
 			boss.set_glow(i, 1.0)
 		boss.emit(Ev.BOLT, boss.CORE_POS)
