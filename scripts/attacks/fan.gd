@@ -20,6 +20,7 @@ var waves := 0
 var wave_n := WAVES
 var count := COUNT
 var interval := INTERVAL
+var fixed := false                   # 고정: 플레이어를 겨누지 않고 aim 방향으로, 부채마다 반 칸씩 어긋나게 (틈이 번갈아 생긴다)
 
 
 func _init(c: int, o: Vector2, ppos: Vector2, hard := false) -> void:
@@ -37,14 +38,17 @@ func _init(c: int, o: Vector2, ppos: Vector2, hard := false) -> void:
 func step(_dt: float, ppos: Vector2) -> void:
 	if t < WIND:
 		boss.set_glow(cannon, t / WIND)
-		aim = (ppos - origin).angle()
+		if not fixed:
+			aim = (ppos - origin).angle()
 		return
 	if t >= WIND + waves * interval:
-		aim = (ppos - origin).angle()
+		if not fixed:
+			aim = (ppos - origin).angle()
+		var shift := (0.5 * SPREAD / (count - 1)) if fixed and waves % 2 == 1 else 0.0
 		var m: float = boss.bolt_mult()
 		var half := (count - 1) / 2
 		for k in count:
-			var a := aim + (k - half) * SPREAD / (count - 1)
+			var a := aim + shift + (k - half) * SPREAD / (count - 1)
 			if k == half:
 				boss.shots.spawn(origin, Vector2.from_angle(a) * MAIN_SPEED * m, 9.0)
 			else:

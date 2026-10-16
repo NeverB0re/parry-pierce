@@ -45,29 +45,29 @@ static func tag(ci: CanvasItem, pos: Vector2, level: int, now: float, order := -
 		ci.draw_circle(q, 6.0, Color(1, 1, 1, a))
 
 
-## 휘두르는 방향 화살표: center 를 축으로 반지름 r 의 호를 a0 → a1 로 따라가는 굵은 화살 (끝에 화살촉).
-## 빛이 a0 에서 a1 쪽으로 흘러 방향이 한눈에 보인다
-static func arc_arrow(ci: CanvasItem, center: Vector2, r: float, a0: float, a1: float, level: int, now: float) -> void:
-	var n := 20
-	var pts := PackedVector2Array()
-	for q in n + 1:
-		pts.append(center + Vector2.from_angle(lerpf(a0, a1, q / float(n))) * r)
-	var a := 0.55 if level == 0 else 0.9
-	ci.draw_polyline(pts, Color(0.05, 0.02, 0.02, 0.5 * a), 22.0)
-	ci.draw_polyline(pts, Color(C, 0.75 * a), 13.0)
-	var flow := fposmod(now * 1.6, 1.0)                     # 흐르는 빛
-	for k in 3:
-		var f := fposmod(flow + k / 3.0, 1.0)
-		var p := center + Vector2.from_angle(lerpf(a0, a1, f)) * r
-		ci.draw_circle(p, 9.0, Color(C_HOT, a * (1.0 - f * 0.5)))
-	var tip := pts[n]
-	var dir := (pts[n] - pts[n - 1]).normalized()
-	var side := dir.orthogonal()
-	var head := PackedVector2Array([tip + dir * 62.0, tip + side * 40.0, tip - side * 40.0])
-	ci.draw_colored_polygon(head, Color(C, 0.9 * a))
-	var ol := head.duplicate()
-	ol.append(head[0])
-	ci.draw_polyline(ol, Color(1, 1, 1, 0.8 * a), 3.0)
+## 휘두르는 방향: 흐릿한 점선이 시작점(속이 빈 작은 원)에서 끝까지 TRACE_TIME 동안 한 번 그어진다 (prog = 0~1).
+## 다 그어지면 끝에 작은 꺾쇠. 화면 밖으로 일부가 잘려도 시작점과 그어지는 방향으로 읽힌다
+const TRACE_TIME := 0.6
+const C_TRACE := Color(1.0, 0.93, 0.82)
+
+static func arc_trace(ci: CanvasItem, center: Vector2, r: float, a0: float, a1: float, prog: float) -> void:
+	var n := 28
+	var pr := clampf(prog, 0.0, 1.0)
+	var at := func(f: float) -> Vector2: return center + Vector2.from_angle(lerpf(a0, a1, f)) * r
+	for q in n:
+		var f0 := q / float(n)
+		if f0 >= pr:
+			break
+		if q % 2 == 0:
+			ci.draw_line(at.call(f0), at.call(minf((q + 1) / float(n), pr)), Color(C_TRACE, 0.4), 4.0)
+	ci.draw_arc(at.call(0.0), 10.0, 0.0, TAU, 14, Color(C_TRACE, 0.55), 2.5)
+	if pr < 1.0:
+		ci.draw_circle(at.call(pr), 6.0, Color(C_TRACE, 0.85))
+	else:
+		var e: Vector2 = at.call(1.0)
+		var d: Vector2 = (e - at.call(0.96)).normalized()
+		var sd := d.orthogonal()
+		ci.draw_polyline(PackedVector2Array([e - d * 22.0 + sd * 14.0, e, e - d * 22.0 - sd * 14.0]), Color(C_TRACE, 0.5), 3.5)
 
 
 ## 공격하는 촉수·팔 강조: 척추를 따라 진홍 테두리 (어느 몸통이 치는지 보인다)

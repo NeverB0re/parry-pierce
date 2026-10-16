@@ -27,6 +27,7 @@ const Net := preload("res://scripts/attacks/net.gd")
 const Fan := preload("res://scripts/attacks/fan.gd")
 const Spiral := preload("res://scripts/attacks/spiral.gd")
 const Barrage := preload("res://scripts/attacks/barrage.gd")
+const Rings := preload("res://scripts/attacks/rings.gd")
 
 # ── 구조 ───────────────────────────────────────────────
 const DROP := 640.0                          # 몸을 천장에서 이만큼 내려 걸었다 (튕겨 올라가도 천장에 붙지 않게)
@@ -65,10 +66,10 @@ const ZAP_TIME := 0.4                        # 요격 피해가 촉수 뿌리에
 const GAP := Vector2(0.45, 0.8)               # 근접 뒤 쉬는 시간
 const GAP_CORE := Vector2(0.3, 0.55)
 const GAP_FIRE := Vector2(0.25, 0.5)         # 탄막 뒤 (멍때릴 틈을 주지 않는다)
-const RANGED_KINDS := ["ink", "spray", "fan", "spiral", "tips", "ring", "cross"]
+const RANGED_KINDS := ["ink", "spray", "fan", "spiral", "tips", "ring", "cross", "snipe"]
 const RANGED_SHARE := 0.62                   # 탄막 : 근접 = 6 : 4 (근접은 시그니처 패턴 위주)
 const DUO_CHANCE := [0.0, 0.15, 0.3]         # 스테이지별: 작은 탄막 두 개를 겹쳐 쏠 확률 (근접과는 절대 겹치지 않는다)
-const DUOS := [["ring", "tips"], ["cross", "tips"], ["ink", "tips"]]
+const DUOS := [["ring", "snipe"], ["cross", "tips"], ["ink", "snipe"]]     # 고정 탄막 + 저격(작게) 또는 고정 둘
 const CLEAR_R := 900.0                       # 근접 패턴은 플레이어 이 거리 안에 날아오는 탄이 없을 때만 시작한다
 const CLEAR_WAIT := 2.5                      # 그래도 이 시간이 지나면 시작한다 (탄이 오래 남아 있을 때)
 const SPECIAL_EVERY := 4                     # 방전 그물(패리 불가)은 공격 이만큼마다 (드물게)
@@ -98,6 +99,7 @@ var debris: Array[Dictionary] = []           # 떨어져 나간 촉수 조각
 var last := ""
 var want := ""                               # 탄이 걷히길 기다리는 근접 패턴
 var want_t := 0.0
+var eye_charge := 0.0                         # 코어 단계: 눈알이 패리 불가 동심원을 모으는 정도 (보라)
 var emit_glow: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]   # 발사점 발광 (0~5 촉수 끝, 6·7 배경 다리)
 var _ppos := Vector2(0, -400)
 var since_special := 0
@@ -425,6 +427,7 @@ func _on_attack_finished() -> void:
 func _step_phase(dt: float) -> void:
 	for k in 8:
 		emit_glow[k] = move_toward(emit_glow[k], 0.0, dt * 2.5)
+	eye_charge = move_toward(eye_charge, 0.0, dt * 1.5)
 	shield_flash = maxf(0.0, shield_flash - dt * 3.0)
 	for z in zaps.duplicate():
 		z["t"] = float(z["t"]) + dt
@@ -466,7 +469,9 @@ func emitter_pos(id: int) -> Vector2:
 
 
 func emit_glow_set(id: int, v: float) -> void:
-	if id < 0:
+	if id == -4:
+		eye_charge = v
+	elif id < 0:
 		siphon_glow = v
 	else:
 		emit_glow[id] = v
@@ -499,7 +504,9 @@ func _choose(ppos: Vector2) -> void:
 		since_special = 0
 		kind = "net"
 	else:
-		var fire: Array[String] = ["ink", "spray", "tips", "ring", "cross"]
+		var fire: Array[String] = ["ink", "spray", "tips", "ring", "cross", "snipe", "snipe"]
+		if hard:
+			fire.append_array(["eye", "eye"])                # 코어 단계: 눈알 동심원 (패리 불가)
 		var melee: Array[String] = []
 		for m in ["hammer", "chase", "sweep", "clap", "vortex", "march", "flurry", "vortex", "flurry", "constrict", "constrict", "constrict"]:
 			if _melee_ok(m, ready):
@@ -513,7 +520,7 @@ func _choose(ppos: Vector2) -> void:
 		while pool.size() > 1 and pool.has(last):
 			pool.erase(last)
 		kind = pool[randi() % pool.size()]
-	if not RANGED_KINDS.has(kind) and not _shots_clear(ppos):   # 근접·그물: 날아오는 탄이 걷힐 때까지 기다린다 (요격하려면 멈춰야 하므로)
+	if not RANGED_KINDS.has(kind) and kind != "eye" and not _shots_clear(ppos):   # 근접·그물: 날아오는 탄이 걷힐 때까지 기다린다 (요격하려면 멈춰야 하므로)
 		want = kind
 		want_t = 0.0
 		next_t = 0.2
@@ -537,6 +544,8 @@ func _melee_ok(m: String, ready: Array[int]) -> bool:
 
 ## 플레이어 가까이(CLEAR_R) 날아오는 적 탄이 없는가
 func _shots_clear(ppos: Vector2) -> bool:
+	if is_lingering("rings"):                                # 퍼지는 동심원이 남아 있으면 기다린다
+		return false
 	for k in shots.size():
 		if shots.mine[k] == 1:
 			continue
@@ -554,8 +563,20 @@ func _start(kind: String, ready: Array[int], ppos: Vector2, hard: bool) -> void:
 			_grab_start("hammer", Hammer.new(_nearest(ready, ppos.x)))
 		"chase":
 			_grab_start("chase", Chase.new(_nearest(ready, ppos.x)))
-		"sweep":
-			_grab_start("sweep", Lash.new(_sweeper(ready, ppos)))
+		"sweep":                                             # 아래 두 촉수가 함께 바깥에서 안으로 하단을 쓴다 (고정)
+			var sw: Array[int] = []
+			for i in SWEEPERS:
+				if ready.has(i):
+					sw.append(i)
+			if sw.size() == 2:
+				_pick("sweep", Combo.new("sweep", [func(): return Lash.new(sw[0], true), func(): return Lash.new(sw[1], true)], 0.0, true))
+			else:
+				_grab_start("sweep", Lash.new(sw[0], true))
+		"eye":                                               # 눈알이 보라 고리를 모았다가 동심원 셋을 내보낸다
+			var r = Rings.new(CORE_POS)
+			r.count = 3
+			r.wind = 1.5
+			_pick("eye", r)
 		"clap":
 			var lr := _outer_pair(ready)
 			_grab_start("clap", Clap.new(lr[0], lr[1]))
@@ -576,10 +597,13 @@ func _start(kind: String, ready: Array[int], ppos: Vector2, hard: bool) -> void:
 ## 탄막 모듈. light = 두 개를 겹쳐 쏠 때의 작은 판
 func _fire(kind: String, ppos: Vector2, hard: bool, light: bool):
 	match kind:
-		"spray":
-			return Spiral.new(-1, SIPHON, ppos, hard)
-		"ink":
-			var f = Fan.new(-1, SIPHON, ppos, hard and not light)
+		"spray":                                             # 고정: 분사구 아래 부채꼴을 휘두른다
+			var sp = Spiral.new(-1, SIPHON, SIPHON + Vector2(0, 1000), hard)
+			sp.fixed = true
+			return sp
+		"ink":                                               # 고정: 아래로 부채, 부채마다 반 칸 어긋난다
+			var f = Fan.new(-1, SIPHON, SIPHON + Vector2(0, 1000), hard and not light)
+			f.fixed = true
 			if light:
 				f.wave_n = 2
 			return f
@@ -616,7 +640,7 @@ func _combo(kind: String, ready: Array[int], ppos: Vector2) -> Combo:
 				"march":
 					return Hammer.new(i, true, 0.0, x)
 				"flurry":
-					var a = Lash.new(i)
+					var a = Lash.new(i, true)
 					a.pace = 0.7
 					return a
 			return Hammer.new(i, true))
@@ -790,30 +814,69 @@ func _draw_mech(sp: PackedVector2Array, ws: float, col: Color, revived: bool) ->
 		draw_polyline(PackedVector2Array([prong[1], prong[2], prong[0]]), rim, 2.0)
 
 
-## 외투막 (몸통): 천장 너머까지 이어진 둥근 머리 + 양쪽 지느러미 + 눈 + 아래 분사구
+## 머리 (기계 문어): 천장에서 내려온 줄기에 매달린 둥근 강철 돔. 위가 둥글고 아래로 좁아져 촉수가 모이는 목깃에서 끝난다 (지느러미 없음).
+## 장갑판 이음매(위도·경도선) + 리벳 + 줄지어 깜빡이는 표시등 + 양옆 유압 배관 + 정수리 배기구의 증기. 좌표는 DROP 전 기준
 func _draw_mantle() -> void:
 	draw_set_transform(Vector2(0, DROP))
-	var sway := sin(t * 0.7) * 14.0
 	draw_colored_polygon(PackedVector2Array([Vector2(-150, -3150), Vector2(150, -3150), Vector2(190, -3700), Vector2(-190, -3700)]), C_BODY_DARK)   # 천장에서 늘어진 줄기
 	for s2 in [-1.0, 1.0]:
 		draw_line(Vector2(s2 * 150, -3150), Vector2(s2 * 190, -3700), Color(C_RIM, 0.4), 3.0)
-	for s in [-1.0, 1.0]:                                 # 지느러미
-		var fin := PackedVector2Array([Vector2(s * 380, -2950), Vector2(s * (720 + sway), -3150), Vector2(s * (680 + sway), -2860), Vector2(s * 520, -2700)])
-		draw_colored_polygon(fin, C_BODY_DARK)
-		draw_polyline(PackedVector2Array([fin[0], fin[1], fin[2]]), Color(C_RIM, 0.4), 3.0)
-	var body := PackedVector2Array([
-		Vector2(-560, -2350), Vector2(-540, -2650), Vector2(-420, -2960), Vector2(-200, -3180), Vector2(200, -3180),
-		Vector2(420, -2960), Vector2(540, -2650), Vector2(560, -2350), Vector2(470, -2200), Vector2(300, -2135),
-		Vector2(0, -2105), Vector2(-300, -2135), Vector2(-470, -2200)])
-	draw_colored_polygon(body, C_BODY)
-	var ol := body.duplicate()
-	ol.append(body[0])
+	var cy := -2720.0                                    # 돔 중심
+	var rx := 540.0
+	var ry := 470.0
+	var dome := PackedVector2Array()
+	for k in 25:
+		var a := PI + k * PI / 24.0
+		dome.append(Vector2(cos(a) * rx, cy + sin(a) * ry))
+	dome.append_array(PackedVector2Array([Vector2(560, -2560), Vector2(530, -2380), Vector2(450, -2245), Vector2(300, -2160), Vector2(0, -2130),
+		Vector2(-300, -2160), Vector2(-450, -2245), Vector2(-530, -2380), Vector2(-560, -2560)]))
+	for s2 in [-1.0, 1.0]:                                # 양옆 유압 배관 (돔 뒤)
+		var pipe := PackedVector2Array([Vector2(s2 * 300, -3120), Vector2(s2 * 560, -3010), Vector2(s2 * 650, -2700), Vector2(s2 * 610, -2380), Vector2(s2 * 480, -2200)])
+		draw_polyline(pipe, C_BODY_DARK, 34.0)
+		draw_polyline(pipe, Color(C_RIM, 0.35), 3.0)
+		for q in range(1, pipe.size() - 1):
+			draw_circle(pipe[q], 24.0, C_BODY_DARK)
+			draw_arc(pipe[q], 24.0, 0.0, TAU, 12, Color(C_RIM, 0.5), 3.0)
+	draw_colored_polygon(dome, C_BODY)
+	var ol := dome.duplicate()
+	ol.append(dome[0])
 	draw_polyline(ol, Color(C_RIM, 0.55), 4.0)
-	for k in 5:                                          # 외투막 주름 (기계 판 이음매)
-		var y := -2300.0 - k * 150.0
-		var w := 520.0 - k * 40.0
-		draw_line(Vector2(-w, y), Vector2(-260, y - 30), Color(C_BODY_DARK, 1.0), 6.0)
-		draw_line(Vector2(260, y - 30), Vector2(w, y), Color(C_BODY_DARK, 1.0), 6.0)
+	for y in [-3060.0, -2900.0]:                          # 위도 이음매 (둥글게 휜다) + 리벳
+		var w := rx * sqrt(maxf(0.0, 1.0 - pow((y - cy) / ry, 2.0)))
+		var seam := PackedVector2Array()
+		for q in 17:
+			var x := lerpf(-w, w, q / 16.0)
+			seam.append(Vector2(x, y + 30.0 * (1.0 - pow(x / w, 2.0))))
+		draw_polyline(seam, C_BODY_DARK, 6.0)
+		draw_polyline(seam, Color(C_RIM, 0.25), 2.0)
+		for q in range(1, 16, 2):
+			draw_circle(seam[q] + Vector2(0, 12), 4.0, Color(C_RIM, 0.55))
+	for mx in [-0.62, -0.3, 0.3, 0.62]:                   # 경도 이음매 (정수리 → 목깃)
+		var mer := PackedVector2Array()
+		for q in 11:
+			var y := lerpf(cy - ry * 0.92, -2300.0, q / 10.0)
+			var w := rx * sqrt(maxf(0.0, 1.0 - pow(clampf((y - cy) / ry, -1.0, 1.0), 2.0))) if y < cy else lerpf(rx, 470.0, (y - cy) / (-2300.0 - cy))
+			mer.append(Vector2(mx * w, y))
+		draw_polyline(mer, C_BODY_DARK, 5.0)
+	for q in 7:                                           # 정수리 표시등: 한쪽에서 차례로 깜빡인다
+		var a := PI * 1.25 + q * PI * 0.5 / 6.0
+		var p := Vector2(cos(a) * rx * 0.78, cy + sin(a) * ry * 0.78)
+		var on := 0.5 + 0.5 * sin(t * 3.0 - q * 0.9)
+		draw_circle(p, 9.0, C_BODY_DARK)
+		draw_circle(p, 5.0, Color(C_GLOW, 0.25 + 0.65 * on))
+	for s2 in [-1.0, 1.0]:                                # 정수리 배기구 + 증기
+		var v := Vector2(s2 * 200, -3150)
+		draw_rect(Rect2(v.x - 34, v.y - 10, 68, 26), C_BODY_DARK)
+		for k in 4:
+			var life := fmod(t * 0.5 + k * 0.25 + (0.5 if s2 > 0.0 else 0.0), 1.0)
+			draw_circle(v + Vector2(s2 * life * 60.0 + sin(t * 2.0 + k) * 10.0, -life * 220.0), 16.0 + life * 36.0, Color(0.55, 0.58, 0.62, 0.2 * (1.0 - life)))
+	var collar := PackedVector2Array([Vector2(-450, -2245), Vector2(-300, -2160), Vector2(0, -2130), Vector2(300, -2160), Vector2(450, -2245)])   # 목깃: 촉수가 모이는 띠 + 볼트
+	draw_polyline(collar, C_BODY_DARK, 40.0)
+	draw_polyline(collar, Color(C_RIM, 0.45), 3.0)
+	for q in 9:
+		var p := collar[0].lerp(collar[4], q / 8.0)
+		p.y = -2130.0 - 115.0 * pow(absf(p.x) / 450.0, 2.0)
+		draw_circle(p, 6.0, Color(C_RIM, 0.6))
 	draw_set_transform(Vector2.ZERO)
 	# 분사구 (먹물 포)
 	draw_circle(SIPHON, 46.0, C_BODY_DARK)
@@ -876,6 +939,10 @@ func _draw_core() -> void:
 			draw_circle(hc + cr[cr.size() - 1] + Vector2(sin(t * 31.0 + k) * 10.0, -fmod(t * 300.0, 40.0)), 3.0, Color(1.0, 0.85, 0.5))
 	if core.broken:
 		draw_arc(hc, CORE_R + 22.0 + 6.0 * beat, 0.0, TAU, 40, Color(1.0, 0.95, 0.7, 0.55 + 0.4 * beat), 3.0)
+	if eye_charge > 0.0:                                     # 동심원을 모은다: 보라 빛이 눈알로 빨려 든다
+		var uc := Color(0.6, 0.08, 0.36)
+		draw_circle(hc, EYE_RX * (0.6 + 0.5 * eye_charge), Color(uc, 0.25 * eye_charge))
+		draw_arc(hc, EYE_RX * 1.6 * (1.0 - eye_charge) + EYE_RX * 0.7, 0.0, TAU, 48, Color(1.0, 0.62, 0.86, 0.7 * eye_charge), 5.0)
 	if focus_glow > 0.0 and phase == 3:
 		var in_reach := hc.distance_to(focus_from) <= focus_reach + 200.0
 		draw_arc(hc, EYE_RX + 40.0, 0.0, TAU, 48, Color(1.0, 0.85, 0.55, focus_glow * (0.6 if in_reach else 0.25)), 3.0)

@@ -1,6 +1,6 @@
 extends "res://scripts/attacks/tentacle.gd"
 ## 조이기 (근접, 회피 불가): 촉수 둘이 플레이어를 둘러싼 고리를 만들고(왼쪽 반원·오른쪽 반원, 위아래에 좁은 틈) 조여 든다.
-## 고리가 만들어진 뒤로는 고리에 닿으면 맞는다 → 위아래 틈으로 빠져나가거나, 한쪽 촉수를 요격하면 고리가 통째로 풀린다.
+## 고리가 만들어진 뒤로는 고리에 닿으면 맞는다. 틈 없이 감싼다 → 한쪽 촉수를 요격(또는 패리)해서 풀어야 한다.
 ## 촉수를 2개 이상 잃은 뒤(남은 촉수가 화가 났을 때)와 코어 페이즈에서만 쓴다.
 ## 단계: prep(고리를 만들며 중심이 플레이어를 따라감) → set(고리 완성, 판정) → warn(점멸) → squeeze(조여 듦) → hold → 끝
 ## 척추: 0~4 마디 = 뿌리에서 고리 윗끝으로 내려오는 곡선, 5~11 = 반원 (판정)
@@ -13,9 +13,8 @@ const SQUEEZE := 0.9
 const HOLD := 0.2
 const R0 := 520.0
 const R_END := 40.0
-const GAP := 0.23                     # 위아래 틈 반각 (라디안, 약 13도씩)
-# 반원 각도 (y 아래 = +): 왼쪽은 왼쪽 위 → 왼쪽 아래, 오른쪽은 오른쪽 위 → 오른쪽 아래
-const ARCS := [[PI * 1.5 - GAP, PI * 0.5 + GAP], [-PI * 0.5 + GAP, PI * 0.5 - GAP]]
+# 반원 각도 (y 아래 = +): 왼쪽은 맨 위 → 왼쪽 → 맨 아래, 오른쪽은 맨 위 → 오른쪽 → 맨 아래 (위아래에서 맞닿는다)
+const ARCS := [[PI * 1.5, PI * 0.5], [-PI * 0.5, PI * 0.5]]
 
 var center := Vector2.ZERO
 var r := R0
@@ -104,7 +103,7 @@ func melee_warning() -> bool:
 	return phase == "prep" or phase == "set" or phase == "warn"
 
 
-## 예고: 고리가 쓸고 지나갈 두 반원 부채꼴 (틈은 비어 있다)
+## 예고: 고리가 쓸고 지나갈 두 반원 부채꼴
 func draw() -> void:
 	if not (phase == "prep" or phase == "set" or phase == "warn"):
 		return

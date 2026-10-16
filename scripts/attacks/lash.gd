@@ -22,7 +22,11 @@ var _from := PackedVector2Array()
 var _area := PackedVector2Array()
 
 
-func _init(tent: int) -> void:
+var fixed := false                     # 고정 휩쓸기: 플레이어를 겨누지 않고 바깥 수평 → 바로 아래(가운데)까지 하단을 쓴다
+
+
+func _init(tent: int, fixed_ := false) -> void:
+	fixed = fixed_
 	kind = "sweep"
 	_grab([tent], "prep")
 	hit_from = 3
@@ -31,6 +35,12 @@ func _init(tent: int) -> void:
 ## 플레이어 방향을 가운데 두고, 바깥쪽(촉수가 달린 쪽)에서 안쪽으로 SPAN 만큼
 func aim_at(ppos: Vector2) -> void:
 	var root: Vector2 = boss.ROOTS[tents[0]]
+	if fixed:
+		th0 = PI + 0.25 if root.x < 0.0 else -0.25
+		th1 = PI * 0.5 - 0.12 if root.x < 0.0 else PI * 0.5 + 0.12
+		th = th0
+		arrow_r = REACH * 0.55
+		return
 	var phi := (ppos - root).angle()
 	arrow_r = clampf(root.distance_to(ppos), REACH * 0.3, REACH * 0.85)
 	if phi < -PI * 0.5:                    # 왼쪽 위는 π 쪽으로 이어 붙인다
@@ -138,5 +148,5 @@ func draw() -> void:
 	MeleeWarn.zone(c, area, level, boss.t)
 	var root: Vector2 = boss.ROOTS[tents[0]]
 	MeleeWarn.limb(c, boss.spines[tents[0]], level, boss.t)
-	MeleeWarn.arc_arrow(c, root, arrow_r, th0 + (th1 - th0) * 0.08, th1, level, boss.t)
+	MeleeWarn.arc_trace(c, root, arrow_r, th0, th1, trace_t / MeleeWarn.TRACE_TIME)
 	MeleeWarn.tag(c, root + Vector2.from_angle((th0 + th1) * 0.5) * REACH * 0.6, level, boss.t, order)

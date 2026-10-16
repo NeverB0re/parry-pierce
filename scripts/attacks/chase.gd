@@ -125,5 +125,5 @@ func draw() -> void:
 	var level := 1 if phase == "set" else 2
 	MeleeWarn.zone(c, _area, level, boss.t)
 	MeleeWarn.limb(c, boss.spines[tents[0]], level, boss.t)
-	MeleeWarn.arc_arrow(c, pivot, REACH * 0.7, th0 + (th1 - th0) * 0.08, th1, level, boss.t)
+	MeleeWarn.arc_trace(c, pivot, REACH * 0.7, th0, th1, trace_t / MeleeWarn.TRACE_TIME)
 	MeleeWarn.tag(c, pivot + Vector2.from_angle((th0 + th1) * 0.5) * REACH * 0.55, level, boss.t)

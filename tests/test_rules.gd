@@ -1449,11 +1449,11 @@ func _kraken_shield_test() -> void:
 	var sh: Dictionary = b.strike_hit(b.CORE_POS + Vector2(0, b.SHIELD_R + 10.0), 20.0)
 	_check("kraken: the shield around the core is the only target", sh.get("kind", "") == "shield")
 	_check("kraken: assist sees only the core (no tentacle targets)", b.assist_targets(Vector2(0, -1500)).size() == 1)
-	for kind in ["tips", "ring", "cross", "spray", "ink"]:      # 탄막 5종: 발사점이 사방에 있고, 끝까지 돌아 탄을 쏜다
+	for kind in ["tips", "ring", "cross", "snipe", "spray", "ink"]:      # 탄막 5종: 발사점이 사방에 있고, 끝까지 돌아 탄을 쏜다
 		b.reset()
 		b.next_t = 99.0
 		b._ppos = Vector2(300, -700)
-		b.start_attack(b.Barrage.new(kind, b.emitters(), b._ppos) if kind in ["tips", "ring", "cross"] else (b.Spiral.new(-1, b.SIPHON, b._ppos) if kind == "spray" else b.Fan.new(-1, b.SIPHON, b._ppos)))
+		b.start_attack(b.Barrage.new(kind, b.emitters(), b._ppos) if kind in ["tips", "ring", "cross", "snipe"] else b._fire(kind, b._ppos, false, false))
 		var spawned := 0
 		for k in 600:
 			b.step(DT, b._ppos)
@@ -1464,6 +1464,19 @@ func _kraken_shield_test() -> void:
 	b.reset()
 	b.next_t = 99.0
 	_check("kraken emitters: siphon + tentacle tips + legs", b.emitters().size() == 9)
+	var fixed_a: Array = []                                 # 고정 탄막: 플레이어가 어디 있든 같은 방향으로 쏜다
+	for pp in [Vector2(-800, -400), Vector2(800, -1200)]:
+		b.reset()
+		b.next_t = 99.0
+		b.start_attack(b._fire("ink", pp, false, false))
+		for k in 80:
+			b.step(DT, pp)
+		fixed_a.append(b.shots.vel[0].angle() if b.shots.size() > 0 else 99.0)
+	_check("ink is fixed (same first-shot angle wherever the player is: %s)" % str(fixed_a), absf(fixed_a[0] - fixed_a[1]) < 0.001)
+	var lsw = b.Lash.new(4, true)                           # 고정 휩쓸기: 바깥 수평 → 아래
+	lsw.boss = b
+	lsw.aim_at(Vector2(900, -300))
+	_check("fixed sweep: left-low tentacle sweeps from outer horizontal to straight down (%.2f -> %.2f)" % [lsw.th0, lsw.th1], lsw.th0 > PI and lsw.th1 < PI * 0.5)
 	main.debug.god = true
 	p.reset(b.CORE_POS + Vector2(0, b.SHIELD_R + 200.0), false)
 	var a0: int = b.core.armor_hp
@@ -1822,7 +1835,7 @@ func _v047_test() -> void:
 	_check("constrict: touching the ring hurts", ring_hb2.size() == 2 and (b.overlaps(ring_hb2[0], on_ring, 12.0) or b.overlaps(ring_hb2[1], on_ring, 12.0)))
 	var top_gap: Vector2 = c0 + Vector2(0, -con.r)
 	var ring_hb3: Array = b.hitboxes(top_gap).filter(func(h): return h["id"] == "arm")
-	_check("constrict: gap at the top", not b.overlaps(ring_hb3[0], top_gap, 12.0) and not b.overlaps(ring_hb3[1], top_gap, 12.0))
+	_check("constrict: no gap, the top is closed too", b.overlaps(ring_hb3[0], top_gap, 12.0) or b.overlaps(ring_hb3[1], top_gap, 12.0))
 	var hb0: Dictionary = b.clash_box(on_ring)
 	var hp0: int = b.part_hp[0]
 	p.dash_kind = "charge"
@@ -1900,6 +1913,18 @@ func _v047_test() -> void:
 	_check("core phase: the core is the target", not b.strike_hit(b.CORE_POS, 10.0).is_empty() and b.strike_hit(b.CORE_POS, 10.0)["kind"] == "core")
 	var ca: int = b.core.armor_hp
 	_check("core phase: intercepting a tentacle cuts it and hurts the core (%d)" % ca, not b.intercept_core(2, 8) and b.core.armor_hp == ca - 8 - b.CUT_BONUS and not b.part_alive(2))
+
+	var eye = b.Rings.new(b.CORE_POS)                      # 코어 단계: 눈알 동심원 (패리 불가)
+	eye.count = 3
+	b.start_attack(eye)
+	var ringed := false
+	for k in 300:
+		b.step(DT, Vector2(0, -900))
+		if b.beam_hit(Vector2(0, -900), 12.0) != Vector2.ZERO:
+			ringed = true
+	_check("eye rings reach the player (unparryable)", ringed)
+	b.lingering.clear()
+	b.atk = null
 
 	_kraken_shield_test()
 	b = main.boss

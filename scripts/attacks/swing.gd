@@ -25,6 +25,7 @@ var th0 := 0.0                       # 휩쓰는 각도 범위 (팔 방향 = (s*
 var th1 := 0.0
 var th := 0.0
 var th_from := 0.0                   # 밀려나기 시작한 각도
+var trace_t := 0.0                   # 방향 점선이 그어진 시간
 var _area_key := Vector3.INF          # 예고 범위 캐시 (위치가 고정된 뒤엔 다시 계산하지 않는다)
 var _area := PackedVector2Array()
 
@@ -54,6 +55,8 @@ func fist_at(a: float) -> Vector2:
 
 
 func step(dt: float, ppos: Vector2) -> void:
+	if phase == "set" or phase == "warn":
+		trace_t += dt
 	match phase:
 		"prep":
 			var k := minf(1.0, t / PREP)
@@ -157,7 +160,7 @@ func draw() -> void:
 	MeleeWarn.limb(c, PackedVector2Array([sh, boss.elbow_of(arm), boss.fists[arm]]), level, boss.t)   # 어느 팔이 치는지
 	var a0: float = th0 if s > 0.0 else PI - th0            # 휩쓰는 방향: 호를 따라 흐르는 큰 화살표 (팔 각도 → 화면 각도)
 	var a1: float = th1 if s > 0.0 else PI - th1
-	MeleeWarn.arc_arrow(c, sh, boss.SWING_L * 0.8, lerpf(a0, a1, 0.08), a1, level, boss.t)
+	MeleeWarn.arc_trace(c, sh, boss.SWING_L * 0.8, a0, a1, trace_t / MeleeWarn.TRACE_TIME)
 
 
 ## 같은 각도면 계산을 재사용한다 (예고 중 매 프레임 다각형 합치기를 하지 않게)

@@ -28,6 +28,7 @@ var arms := 1
 var rate := RATE
 var duration := DURATION
 var main_every := MAIN_EVERY
+var fixed := false                   # 고정: 부채꼴 방향을 처음 정한 대로 두고, 주탄도 부채꼴 가운데로 쏜다
 
 
 func _init(c: int, o: Vector2, ppos := Vector2(0.0, -1500.0), hard := false) -> void:
@@ -47,7 +48,8 @@ func _init(c: int, o: Vector2, ppos := Vector2(0.0, -1500.0), hard := false) -> 
 func step(_dt: float, ppos: Vector2) -> void:
 	if t < WIND:
 		boss.set_glow(cannon, t / WIND)
-		center = (ppos - origin).angle()        # 부채꼴이 플레이어를 따라가다가 쏘기 직전에 고정된다
+		if not fixed:
+			center = (ppos - origin).angle()        # 부채꼴이 플레이어를 따라가다가 쏘기 직전에 고정된다
 		return
 	var ft := t - WIND
 	var m: float = boss.bolt_mult()
@@ -59,7 +61,8 @@ func step(_dt: float, ppos: Vector2) -> void:
 			boss.shots.spawn(origin, Vector2.from_angle(a) * SMALL_SPEED * m, 9.0, 0.0, 0.0, Projectiles.Kind.SMALL)
 		smalls += 1
 	while mains * main_every <= ft and mains * main_every < duration:
-		boss.shots.spawn(origin, (ppos - origin).normalized() * MAIN_SPEED * m, 9.0)
+		var md := Vector2.from_angle(center) if fixed else (ppos - origin).normalized()
+		boss.shots.spawn(origin, md * MAIN_SPEED * m, 9.0)
 		boss.emit(Ev.BOLT, origin)
 		mains += 1
 	boss.set_glow(cannon, 1.0)

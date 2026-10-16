@@ -10,9 +10,11 @@ var makers: Array = []
 var interval := 0.15
 var started := false
 var kids: Array = []
+var together := false                # true = 모두 함께 친다 (순서 없음, 예고도 모두)
 
 
-func _init(name: String, list: Array, gap: float) -> void:
+func _init(name: String, list: Array, gap: float, together_ := false) -> void:
+	together = together_
 	kind = name
 	makers = list
 	interval = gap
@@ -26,8 +28,8 @@ func step(_dt: float, _ppos: Vector2) -> void:
 			var a = mk.call()
 			if a == null:
 				continue
-			a.order = kids.size()
-			if prev != null:
+			a.order = -1 if together else kids.size()
+			if prev != null and not together:
 				a.after = prev
 				a.after_gap = interval
 				a.lead = false

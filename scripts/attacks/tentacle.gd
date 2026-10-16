@@ -20,6 +20,7 @@ var pace := 1.0                       # 박자 배율 (연타 패턴은 빠르�
 var order := -1                       # 연타 순번 (0 = 첫 타, -1 = 연타 아님). 예고 표지 아래 점으로 보인다
 var after = null                      # 연타: 앞 타 모듈. 앞 타가 내려치거나(판정) 요격·끊길 때까지 "set" 에서 기다린다 (예고는 윤곽만)
 var after_gap := 0.0                  # 앞 타가 풀린 뒤 이만큼 더 기다린다
+var trace_t := 0.0                    # 방향 점선이 그어진 시간 (예고가 보이는 동안 쌓인다)
 var fired_t := -1.0                   # 판정이 처음 나오거나 요격당한 시각 (boss.t)
 var lead := true                      # 아직 첫 타 전 (첫 판정이 나오거나 요격당하면 false). 연타의 두 번째부터는 false 로 시작
 var _recoil_from: Array = []          # 움츠러들기 시작한 척추들
@@ -52,6 +53,8 @@ func step(dt: float, ppos: Vector2) -> void:
 		lead = false
 	if fired_t < 0.0 and _harmful():
 		fired_t = boss.t
+	if (phase == "prep" or phase == "set" or phase == "warn") and delay <= 0.0 and not queued():
+		trace_t += dt
 	if delay > 0.0:
 		delay -= dt
 		t = 0.0

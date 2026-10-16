@@ -15,6 +15,8 @@ const C_UNPARRY_CORE := Color(1.0, 0.62, 0.86)
 
 var origin := Vector2.ZERO
 var started := 0
+var count := COUNT
+var wind := WIND
 
 
 func _init(o: Vector2) -> void:
@@ -23,18 +25,18 @@ func _init(o: Vector2) -> void:
 
 
 func _radius(k: int) -> float:
-	return (t - WIND - k * GAP) * SPEED
+	return (t - wind - k * GAP) * SPEED
 
 
 func step(_dt: float, _ppos: Vector2) -> void:
-	if started < COUNT:
-		boss.set_glow(-4, minf(1.0, t / WIND))
-	while started < COUNT and _radius(started) >= 0.0:
+	if started < count:
+		boss.set_glow(-4, minf(1.0, t / wind))
+	while started < count and _radius(started) >= 0.0:
 		boss.emit(Ev.RING, origin)
 		started += 1
-		if started == COUNT:
+		if started == count:
 			boss.detach_attack()
-	if _radius(COUNT - 1) > MAX_R:
+	if _radius(count - 1) > MAX_R:
 		boss.finish_attack()
 
 
@@ -42,7 +44,7 @@ func step(_dt: float, _ppos: Vector2) -> void:
 func unparry_point(ppos: Vector2) -> Vector2:
 	var d := ppos - origin
 	var best := -1.0
-	for k in COUNT:
+	for k in count:
 		var r := _radius(k)
 		if r < d.length():
 			best = maxf(best, maxf(r, 0.0))
@@ -55,7 +57,7 @@ func unparry_point(ppos: Vector2) -> Vector2:
 func beam_hit(p: Vector2, r: float) -> Vector2:
 	var rel := p - origin
 	var dist := rel.length()
-	for k in COUNT:
+	for k in count:
 		var rr := _radius(k)
 		if rr >= 0.0 and absf(dist - rr) < HALF + r:
 			return rel / dist if dist > 1.0 else Vector2.UP
@@ -65,12 +67,12 @@ func beam_hit(p: Vector2, r: float) -> Vector2:
 func draw() -> void:
 	var c: CanvasItem = boss
 	var bt: float = boss.t
-	if t < WIND:                                  # 예고: 심장부에서 보라 고리가 맥동하며 모인다
-		var k := t / WIND
+	if t < wind:                                  # 예고: 심장부에서 보라 고리가 맥동하며 모인다
+		var k := t / wind
 		var blink := 0.6 + 0.4 * sin(bt * 22.0)
 		c.draw_circle(origin, 60.0 + 80.0 * k, Color(C_UNPARRY, 0.2 * k))
 		c.draw_arc(origin, 300.0 * (1.0 - k) + 70.0, 0.0, TAU, 64, Color(C_UNPARRY_CORE, (0.3 + 0.5 * k) * blink), 4.0)
-	for k in COUNT:
+	for k in count:
 		var rr := _radius(k)
 		if rr < 0.0 or rr > MAX_R:
 			continue

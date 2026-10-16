@@ -32,9 +32,14 @@ var plan := [
 	["flurry", "flurry", 150, Vector2(300, -1300), Vector2(0, -1600), 0.24],
 	["march_q", "march", 70, Vector2(-300, -900), Vector2(0, -1100), 0.5],
 	["flurry_q", "flurry", 70, Vector2(300, -900), Vector2(0, -1100), 0.5],
+	["k_sweep", "k_sweep", 75, Vector2(300, -700), Vector2(0, -1100), 0.42],
+	["k_constrict", "k_constrict", 75, Vector2(0, -900), Vector2(0, -1100), 0.42],
+	["k_snipe", "k_snipe", 70, Vector2(300, -800), Vector2(0, -1300), 0.42],
+	["k_tips", "k_tips", 110, Vector2(300, -800), Vector2(0, -1300), 0.42],
+	["k_eye", "k_eye", 80, Vector2(300, -800), Vector2(0, -1500), 0.42],
 	["new_idle", "", 30, Vector2(250, -700), Vector2(0, -1500), 0.42],
 	["tips", "tips", 70, Vector2(250, -700), Vector2(0, -1100), 0.5],
-	["tips_fire", "tips", 100, Vector2(250, -700), Vector2(0, -1100), 0.5],
+	["tips_fire", "tips", 130, Vector2(250, -700), Vector2(0, -1300), 0.42],
 	["ring", "ring", 120, Vector2(250, -700), Vector2(0, -1100), 0.5],
 	["cross", "cross", 120, Vector2(250, -700), Vector2(0, -1100), 0.5],
 	["spray", "spray", 100, Vector2(250, -700), Vector2(0, -1100), 0.5],
@@ -84,6 +89,9 @@ func _process(_d: float) -> bool:
 		b.next_t = 999.0
 		p.reset(pl[3], false)
 		var a = null
+		if (pl[1] as String).begins_with("k_"):
+			var rr: Array[int] = [0, 1, 2, 3, 4, 5]
+			b._start((pl[1] as String).substr(2), rr, pl[3], false)
 		match pl[1]:
 			"hammer": a = b.Hammer.new(1)
 			"clap": a = b.Clap.new(0, 1)
