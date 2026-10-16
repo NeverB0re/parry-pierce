@@ -81,7 +81,8 @@ func _append_md(d: Dictionary) -> void:
 	var lines := PackedStringArray()
 	lines.append("## %s · %s · %s · %d분 %02d초" % [str(d["date"]).replace("T", " "), str(d.get("stage", "?")), str(d["result"]), int(gt) / 60, int(gt) % 60])
 	lines.append("")
-	lines.append("- 버전 %s · 남은 실드 %d · 끝난 페이즈 %s · 코어 %s · 외부 시스템 %s" % [str(d["version"]), int(d["lives_left"]), str(d.get("phase", "?")), str(d.get("armor_hp", "?")), str(d.get("part_hp", "?"))])
+	var build := md_path.get_file().trim_suffix("_log.md")       # 실행 파일 이름 (예: ParryPierce0.50-dev08)
+	lines.append("- 빌드 %s · 남은 실드 %d · 끝난 페이즈 %s · 코어 %s · 외부 시스템 %s" % [build, int(d["lives_left"]), str(d.get("phase", "?")), str(d.get("armor_hp", "?")), str(d.get("part_hp", "?"))])
 	lines.append("- 피격: %s" % _fmt(d["hurt"]))
 	lines.append("- 준 피해: %s" % _fmt(d["damage"]))
 	var pats := {}
