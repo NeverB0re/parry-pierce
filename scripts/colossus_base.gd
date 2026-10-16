@@ -45,6 +45,9 @@ var look_at := Vector2(0, -1200)       # 플레이어 위치 (그림 전용: 대
 # 체력 게이지: 코어를 두른 링 (모든 보스 공통, _draw 에서 _draw_gauge 를 부른다)
 const GAUGE_W := 10.0
 const GAUGE_HOLD := 0.45                     # 깎인 몫(흰 꼬리)이 머무는 시간
+const GAUGE_SHOW := 2.2                      # 맞은 뒤 게이지가 보이는 시간 (평소에는 숨는다)
+const GAUGE_FADE := 0.6                      # 그중 마지막 이만큼 서서히 사라진다
+var gauge_vis := 0.0                         # 게이지가 보일 남은 시간
 var gauge_lag := -1.0                        # 흰 꼬리: 방금 깎인 만큼 잠깐 남았다가 따라 내려온다 (-1 = 아직 모름)
 var gauge_hit := 0.0                         # 방금 깎임 (번쩍·두꺼워짐)
 var gauge_seen := -1.0
@@ -76,6 +79,7 @@ func reset() -> void:
 	gauge_seen = -1.0
 	gauge_hit = 0.0
 	gauge_hold = 0.0
+	gauge_vis = 0.0
 	queue_redraw()
 
 
@@ -256,9 +260,11 @@ func _step_gauge(dt: float) -> void:
 	if gauge_seen < 0.0:
 		gauge_seen = hp
 		gauge_lag = hp
-	if hp < gauge_seen - 0.01:                   # 깎임: 번쩍 + 흰 꼬리가 잠깐 머문다
+	if hp < gauge_seen - 0.01:                   # 깎임: 게이지가 나타나 번쩍이고 흰 꼬리가 잠깐 머문다
 		gauge_hit = 1.0
 		gauge_hold = GAUGE_HOLD
+		gauge_vis = GAUGE_SHOW
+	gauge_vis = maxf(0.0, gauge_vis - dt)
 	gauge_seen = hp
 	gauge_hold -= dt
 	if gauge_hold <= 0.0:
@@ -267,12 +273,13 @@ func _step_gauge(dt: float) -> void:
 	gauge_hit = maxf(0.0, gauge_hit - dt * 3.0)
 
 
-## 체력 게이지: 코어를 두른 링. 12시에서 시계 방향으로 남은 체력만큼 찬다.
+## 체력 게이지: 코어를 두른 링. 맞을 때만 GAUGE_SHOW 동안 나타난다. 12시에서 시계 방향으로 남은 체력만큼 찬다.
 ## 보호 단계(페이즈 1)에는 보호 몫(외부 시스템·방어막)이 청록으로 먼저 깎이고, 코어가 열리는 지점에 흰 눈금, 그 아래가 붉은 코어 몫.
 ## 깎이면 번쩍이고 깎인 자리에 흰 꼬리가 잠깐 남는다
 func _draw_gauge() -> void:
-	if dead or core == null:
+	if dead or core == null or gauge_vis <= 0.0:
 		return
+	var vis := minf(1.0, gauge_vis / GAUGE_FADE)                                # 맞을 때만 보이고 서서히 사라진다
 	var g := gauge_values()
 	var hp := g.x
 	var full := maxf(1.0, g.y)
@@ -281,21 +288,23 @@ func _draw_gauge() -> void:
 	var R := gauge_radius()
 	var top := -PI * 0.5
 	var w := GAUGE_W * (1.0 + 0.5 * gauge_hit)
-	draw_arc(hc, R, 0.0, TAU, 96, Color(0.03, 0.04, 0.05, 0.75), w + 6.0)         # 바탕
+	draw_arc(hc, R, 0.0, TAU, 96, Color(0.03, 0.04, 0.05, 0.75 * vis), w + 6.0)   # 바탕
 	if gauge_lag > hp:                                                         # 방금 깎인 몫 (흰 꼬리)
-		draw_arc(hc, R, top + TAU * hp / full, top + TAU * gauge_lag / full, 48, Color(1, 1, 1, 0.85), w)
+		draw_arc(hc, R, top + TAU * hp / full, top + TAU * gauge_lag / full, 48, Color(1, 1, 1, 0.85 * vis), w)
 	var red := Color(C_HEART, 0.95).lerp(Color.WHITE, gauge_hit * 0.6)
 	var cyan := Color(0.45, 0.95, 1.0, 0.95).lerp(Color.WHITE, gauge_hit * 0.6)
+	red.a *= vis
+	cyan.a *= vis
 	if phase == 1:
 		draw_arc(hc, R, top, top + TAU * minf(hp / full, floor_f), 64, red, w)
 		if hp / full > floor_f:
 			draw_arc(hc, R, top + TAU * floor_f, top + TAU * hp / full, 64, cyan, w)
 		var tick := Vector2.from_angle(top + TAU * floor_f)                   # 코어가 열리는 눈금
-		draw_line(hc + tick * (R - w), hc + tick * (R + w), Color(1, 1, 1, 0.9), 3.0)
+		draw_line(hc + tick * (R - w), hc + tick * (R + w), Color(1, 1, 1, 0.9 * vis), 3.0)
 	elif hp > 0.0:
 		draw_arc(hc, R, top, top + TAU * hp / full, 64, red, w)
 	else:                                                                      # 다 깎임: 한 발 더 (깜빡임)
-		draw_arc(hc, R, 0.0, TAU, 64, Color(1.0, 0.95, 0.7, 0.3 + 0.4 * float(int(t * 8.0) % 2)), 3.0)
+		draw_arc(hc, R, 0.0, TAU, 64, Color(1.0, 0.95, 0.7, (0.3 + 0.4 * float(int(t * 8.0) % 2)) * vis), 3.0)
 
 
 func _step_shards(dt: float) -> void:
