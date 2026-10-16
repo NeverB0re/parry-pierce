@@ -1461,7 +1461,7 @@ func _kraken_shield_test() -> void:
 		b.reset()
 		b.next_t = 99.0
 		b._ppos = Vector2(300, -700)
-		b.start_attack(b.Barrage.new(kind, b.emitters(), b._ppos) if kind in ["tips", "ring", "snipe"] else b._fire(kind, b._ppos, false, false))
+		b.start_attack(b.Barrage.new(kind, b.emitters(), b._ppos) if kind in ["tips", "ring", "snipe"] else b._fire(kind, b._ppos, false))
 		var spawned := 0
 		for k in 600:
 			b.step(DT, b._ppos)
@@ -1471,12 +1471,17 @@ func _kraken_shield_test() -> void:
 		_check("kraken barrage %s finishes and fires (%d shots)" % [kind, spawned], b.atk == null and spawned >= (1 if kind == "snipe" else 4))
 	b.reset()
 	b.next_t = 99.0
+	b._start("ring", [0, 1, 2, 3, 4, 5] as Array[int], Vector2(300, -700), false)   # 탄막에는 저격 유도탄이 섞여 날아온다
+	_check("kraken barrage brings homing missiles along", b.atk != null and b.atk.kind == "ring" and b.is_lingering("snipe"))
+	_check("kraken melee waits while homing missiles are still coming", not b._shots_clear(Vector2(300, -700)))
+	b.reset()
+	b.next_t = 99.0
 	_check("kraken emitters: siphon + tentacle tips + legs", b.emitters().size() == 9)
 	var fixed_a: Array = []                                 # 고정 탄막: 플레이어가 어디 있든 같은 방향으로 쏜다
 	for pp in [Vector2(-150, -300), Vector2(120, -500), Vector2(-1000, -1200)]:   # 같은 구역(바로 아래) 두 곳 + 왼쪽
 		b.reset()
 		b.next_t = 99.0
-		b.start_attack(b._fire("ink", pp, false, false))
+		b.start_attack(b._fire("ink", pp, false))
 		for k in 80:
 			b.step(DT, pp)
 		fixed_a.append(b.shots.vel[0].angle() if b.shots.size() > 0 else 99.0)

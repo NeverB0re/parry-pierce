@@ -8,7 +8,8 @@ extends "res://scripts/colossus_base.gd"
 ##         3) 동력 코어 — 직접 노릴 수 있다
 ## 촉수 = 부가 목표: 근접공격을 요격하면 그 촉수가 곧바로 박살나고(코어에 피해 + CUT_BONUS) 그 촉수의 패턴·발사점이 사라진다.
 ##   REGROW_DELAY 뒤 천천히 다시 자란다 (다른 패턴이 한두 번 지나갈 무렵)
-## v0.50+: 탄막이 중심 (탄막 6 : 근접 4, 쉬는 시간 짧게). 촉수 끝·배경 다리·분사구가 모두 발사점 (barrage.gd). 근접 중에도 가끔 한 발씩 날아온다.
+## v0.50+: 탄막이 중심 (탄막 7 : 근접 3, 쉬는 시간 짧게). 촉수 끝·배경 다리·분사구가 모두 발사점 (barrage.gd).
+##   탄막마다 저격 유도탄(시그니처)이 한 발씩 섞여 날아온다 (따로 쏘지 않는다).
 ## 몸은 DROP 만큼 낮게 걸려 있다 (코어 작게, 튕겨 올라가도 천장에 붙지 않게).
 ## 공격: 몸통 내려치기 · 압착(촉수 둘) · 추적 감아치기 · 휩쓸기 · 조이기(촉수 2개 이상 잃은 뒤) · 먹물 포(부채 탄막, 가운데 주탄)
 ##       · 방전 그물(패리 불가, 드물게) · 연속 내려치기(combo.gd). 패턴 통합: 내려치기·소용돌이·행진 → 연속 내려치기, 휩쓸기·난타 → 휩쓸기,
@@ -65,10 +66,8 @@ const ZAP_TIME := 0.4                        # 요격 피해가 촉수 뿌리에
 const GAP := Vector2(0.45, 0.8)               # 근접 뒤 쉬는 시간
 const GAP_CORE := Vector2(0.3, 0.55)
 const GAP_FIRE := Vector2(0.25, 0.5)         # 탄막 뒤 (멍때릴 틈을 주지 않는다)
-const RANGED_KINDS := ["ink", "fan", "tips", "ring", "snipe"]
-const RANGED_SHARE := 0.62                   # 탄막 : 근접 = 6 : 4 (근접은 시그니처 패턴 위주)
-const DUO_CHANCE := [0.0, 0.15, 0.3]         # 스테이지별: 작은 탄막 두 개를 겹쳐 쏠 확률 (근접과는 절대 겹치지 않는다)
-const DUOS := [["ring", "snipe"], ["ink", "snipe"]]     # 고정 탄막 + 저격(작게) 또는 고정 둘
+const RANGED_KINDS := ["ink", "fan", "tips", "ring"]
+const RANGED_SHARE := 0.7                    # 탄막 : 근접 = 7 : 3 (근접은 시그니처 패턴 위주)
 const CLEAR_WAIT := 2.5                      # 그래도 이 시간이 지나면 시작한다 (탄이 오래 남아 있을 때)
 const SPECIAL_EVERY := 4                     # 방전 그물(패리 불가)은 공격 이만큼마다 (드물게)
 const COMBO_HITS := 3                        # 연타 타수
@@ -502,7 +501,7 @@ func _choose(ppos: Vector2) -> void:
 		since_special = 0
 		kind = "net"
 	else:
-		var fire: Array[String] = ["ink", "tips", "ring", "snipe", "snipe"]
+		var fire: Array[String] = ["ink", "tips", "ring"]     # 탄막마다 저격 유도탄이 함께 날아온다 (_start)
 		if hard:
 			fire.append_array(["eye", "eye"])                # 코어 단계: 눈알 동심원 (패리 불가)
 		var melee: Array[String] = []
@@ -536,9 +535,9 @@ func _melee_ok(m: String, ready: Array[int]) -> bool:
 	return ready.size() >= 2
 
 
-## 플레이어 가까이(CLEAR_R) 날아오는 적 탄이 없는가
+## 플레이어 가까이(CLEAR_R) 날아오는 적 탄이 없고, 유도탄도 더 쏠 게 없는가
 func _shots_clear(ppos: Vector2) -> bool:
-	return shots_clear(ppos)
+	return shots_clear(ppos) and not is_lingering("snipe")
 
 
 ## 구역 가중치: 플레이어가 그 패턴이 덮는 곳에 있으면 자주, 아니면 드물게 (y 아래 = +)
@@ -552,7 +551,7 @@ func _zone_w(kind: String, p: Vector2) -> float:
 			return 1.0 if absf(p.x) < 750.0 and p.y > -1900.0 else 0.4
 		"sweep":
 			return 1.4 if low else 0.05
-		"ring", "snipe", "eye":
+		"ring", "eye":
 			return 0.8
 	return 1.0
 
@@ -582,26 +581,21 @@ func _start(kind: String, ready: Array[int], ppos: Vector2, hard: bool) -> void:
 		"constrict":
 			var lr := _outer_pair(ready)
 			_grab_start("constrict", Constrict.new(lr[0], lr[1]))
-		_:
-			if randf() < DUO_CHANCE[mini(level, DUO_CHANCE.size() - 1)]:   # 작은 탄막 둘을 함께
-				var duo: Array = DUOS[randi() % DUOS.size()]
-				_pick(duo[0], _fire(duo[0], ppos, hard, true))
-				start_side(_fire(duo[1], ppos, hard, true))
-				return
-			_pick(kind, _fire(kind, ppos, hard, false))
+		_:                                                   # 고정 탄막 + 그 사이로 저격 유도탄 (탄막을 피하는 동안 압박)
+			_pick(kind, _fire(kind, ppos, hard))
+			if not is_lingering("snipe"):
+				start_side(Barrage.new("snipe", emitters(), ppos, hard))
 
 
-## 탄막 모듈. light = 두 개를 겹쳐 쏠 때의 작은 판
-func _fire(kind: String, ppos: Vector2, hard: bool, light: bool):
+## 탄막 모듈
+func _fire(kind: String, ppos: Vector2, hard: bool):
 	match kind:
 		"ink":                                               # 고정 방향(플레이어 쪽 선택지)으로 부채, 부채마다 반 칸 어긋난다
-			var f = Fan.new(-1, SIPHON, SIPHON + Vector2(0, 1000), hard and not light)
+			var f = Fan.new(-1, SIPHON, SIPHON + Vector2(0, 1000), hard)
 			f.fixed = true
 			f.aim = nearest_dir(SIPHON, ppos, DIRS_DOWN)
-			if light:
-				f.wave_n = 2
 			return f
-	return Barrage.new(kind, emitters(), ppos, hard, light)
+	return Barrage.new(kind, emitters(), ppos, hard)
 
 
 ## 연속 내려치기 (관측자 때의 행진·소용돌이·단발 내려치기를 하나로): 서로 다른 촉수가 처음부터 함께 올라와 차례로 내려친다.

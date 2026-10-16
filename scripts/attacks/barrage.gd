@@ -4,9 +4,10 @@ extends "res://scripts/attacks/attack.gd"
 ##  tips  = 촉수 끝 물결 — 발사점이 왼쪽 → 오른쪽(다음 바퀴는 반대) 차례로 경기장 가운데 쪽으로 넓은 부채를 쏜다. 바퀴마다 반 칸 어긋난다
 ##  ring  = 분사구에서 동심 고리 — 한 줄 걸러 반 칸씩 어긋난다 (고리 사이로 빠져나간다)
 ##  snipe = 저격 (시그니처, 유일하게 겨눈다) — 치켜든 두 촉수가 번갈아 조준선을 띄우고 빠른 유도탄을 한 발씩 쏜다.
+##          따로 쓰지 않고 다른 탄막과 함께 보조 공격으로 돈다 (탄막을 피하는 동안 압박).
 ##          한 발씩이고 주탄(유도탄)이라 패리 → 리버스 드라이브의 기회 (되돌리면 피해가 크다)
 ## 탄은 모두 패리할 수 있다 (주탄 = 리버스 드라이브).
-## light = 작은 탄막 두 개를 겹쳐 쏠 때의 작은 판. 스테이지(boss.level)가 뒤일수록 탄 수가 조금씩 는다.
+## 스테이지(boss.level)가 뒤일수록 탄 수가 조금씩 는다.
 ## boss 에 필요한 것: emitters() → [[번호, 위치], ...], emitter_pos(번호) (못 쓰면 Vector2.INF), set_glow(c, v), bolt_mult()
 
 const Projectiles := preload("res://scripts/projectiles.gd")
@@ -28,16 +29,15 @@ const RING_COUNT := 3                # + 1 (2스테이지부터)
 const RING_GAP := 0.7
 const RING_SPEED := 240.0
 # snipe
-const SNIPE_SHOTS := 2               # + 1 (3스테이지부터)
+const SNIPE_SHOTS := 1               # 탄막 하나에 곁들이는 유도탄 수 + 1 (3스테이지부터) + 1 (코어 단계)
 const SNIPE_CHARGE := 0.8            # 조준선이 보이는 시간
 const SNIPE_LOCK := 0.2              # 마지막 이만큼은 조준이 멈춘다 (피할 틈)
 const SNIPE_GAP := 1.1
 const SNIPE_SPEED := 460.0           # 유도탄 (보통 유도탄 270 보다 빠르다)
-const SNIPE_LIFE := 5.0
+const SNIPE_LIFE := 4.0
 
 var mode := "tips"
 var hard := false
-var light := false
 var em: Array = []
 var set_up := false
 var tips_rounds := TIPS_ROUNDS
@@ -51,16 +51,15 @@ var spin := 1.0
 var aims: Dictionary = {}            # snipe: 발 번호 → 조준 각 (조준 중인 것만)
 
 
-func _init(m: String, emitters_: Array, _ppos: Vector2, hard_ := false, light_ := false) -> void:
+func _init(m: String, emitters_: Array, _ppos: Vector2, hard_ := false) -> void:
 	kind = m
 	mode = m
 	hard = hard_
-	light = light_
 	em = emitters_
 	spin = 1.0 if randf() < 0.5 else -1.0
 
 
-## 첫 step 에서 (boss 가 채워진 뒤) 스테이지·light 에 맞춰 양을 정하고 발사점을 고른다
+## 첫 step 에서 (boss 가 채워진 뒤) 스테이지에 맞춰 양을 정하고 발사점을 고른다
 func _setup() -> void:
 	set_up = true
 	var lv: int = boss.level
@@ -68,10 +67,6 @@ func _setup() -> void:
 	ring_count = RING_COUNT + (1 if lv >= 1 else 0)
 	tips_n = TIPS_N + lv + (2 if hard else 0)
 	snipe_n = SNIPE_SHOTS + (1 if lv >= 2 else 0) + (1 if hard else 0)
-	if light:
-		tips_rounds = 1
-		ring_count = 2
-		snipe_n = 1
 	match mode:
 		"tips":
 			var tips := em.filter(func(e): return int(e[0]) >= 0)
