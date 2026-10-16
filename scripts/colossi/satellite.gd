@@ -5,7 +5,8 @@ extends "res://scripts/colossus_base.gd"
 ##   닫힘 — 코어는 결계에 싸여 돌진·차지·리버스 드라이브가 모두 튕긴다. 위성은 보라(패리 불가) 공격 + 잔탄을 던진다.
 ##          보라 공격을 퍼펙트 회피해 얻은 완전 동조(4배) 차지 강습, 또는 PERFECT 리버스 드라이브가 결계에 닿으면 결계에 금이 간다.
 ##          CRACKS_TO_OPEN 번 금이 가면 열린다 (마지막 일격의 피해는 코어에). 닫힌 동안 금색 주탄은 드물게 한 발씩만 (일부러 찾아가 패리해야 한다)
-##          보라 공격은 겉보기엔 화면을 가득 채우지만(넓은 빛무리) 실제 판정은 가는 심줄뿐. 큰 보라 공격 + 작은 보조 공격(잔탄 분사·두 번째 벽)이 겹친다
+##          보라 공격은 겉보기엔 화면을 가득 채우지만(넓은 빛무리) 실제 판정은 가는 심줄뿐. 보라 공격과 잔탄 탄막(노드 부채·외피 고리)이 번갈아 나온다.
+##          보라 공격을 퍼펙트 회피하면 그 줄기의 에너지를 빨아들여 사라진다 (일반 무적 회피로는 통과만)
 ##   열림 — 위성이 자기 보호 탄막(금색 주탄 나선 + 잔탄)을 쏟아낸다. 연속 패리 → 리버스 드라이브로 코어를 두드린다. OPEN_TIME 뒤 다시 닫히고,
 ##          닫힌 직후 SEAL_GUARD 동안은 결계가 단단해 무엇으로도 금이 가지 않는다 (남은 금색 탄으로 곧바로 다시 여는 것 방지)
 ## 표적은 코어 하나 (페이즈는 처음부터 3: 게이지는 코어 체력). 외부 시스템 없음.
@@ -39,8 +40,7 @@ const SEAL_GUARD := 2.5                      # 닫힌 직후 이 시간 동안�
 # ── 공격 고르기 ────────────────────────────────────────
 const GAP := Vector2(0.12, 0.3)              # 보라 공격을 자주 (완전 동조 기회)
 const BURST_BEAMS := 8                      # 결계 폭풍 줄기 수 (줄기 사이를 넓게)
-const SPRAY_SIDE := 0.6                      # 큰 보라 공격에 잔탄 분사가 겹칠 확률
-const SEED_EVERY := 4                        # 닫힌 동안 금색 주탄(한 발)은 공격 이만큼마다
+const SEED_EVERY := 2                        # 닫힌 동안 금색 주탄(한 발)은 공격 이만큼마다
 const SEED_SPEED := 170.0
 const SEED_LIFE := 9.0
 const SEED_TO := [Vector2(-700, -900), Vector2(700, -900), Vector2(-350, -500), Vector2(350, -500), Vector2(0, -1100)]   # 천천히 흘러갈 곳 (겨누지 않는다)
@@ -62,6 +62,8 @@ var open_k := 0.0                            # 결계가 열린 정도 (그림, 
 var pending_open := false                    # 이번 적중이 결계를 여는 일격인가 (blocks_strike → damage)
 var since_seed := 0
 var last := ""
+var last_fire := ""
+var fire_turn := true                        # 다음이 탄막 차례인가 (보라와 번갈아)
 var node_glow: Array[float] = []
 var opens := 0                               # 연 횟수 (텔레메트리)
 var cracks := 0                              # 결계에 간 금 (CRACKS_TO_OPEN 이면 열린다)
@@ -93,6 +95,8 @@ func reset() -> void:
 	pending_open = false
 	since_seed = 0
 	last = ""
+	last_fire = ""
+	fire_turn = true
 	opens = 0
 	cracks = 0
 	guard_t = 0.0
@@ -264,6 +268,16 @@ func _choose(ppos: Vector2) -> void:
 	if barrier_open:                             # 열린 동안은 열림 탄막뿐 (끝나면 다시 시작)
 		start_attack(OpenBarrage.new(CORE_POS, phase_hard()))
 		return
+	fire_turn = not fire_turn                     # 보라 공격 → 탄막(잔탄) → 보라 … 번갈아 (지루하지 않게)
+	if fire_turn:
+		var fk := weighted_pick({"fan": 1.0, "ring": 0.9}, last_fire)
+		last_fire = fk
+		start_attack(NodeSpray.new(fk))
+		since_seed += 1
+		if since_seed >= SEED_EVERY:             # 드물게: 금색 주탄 한 발이 천천히 흘러간다 (찾아가 PERFECT 패리 → 결계에 금)
+			since_seed = 0
+			_seed()
+		return
 	var w := {"burst": 1.0, "orbit": 0.8, "lattice": 0.8, "wall": 0.7}
 	var kind := weighted_pick(w, last)
 	last = kind
@@ -277,12 +291,7 @@ func _choose(ppos: Vector2) -> void:
 		"wall":                                  # 두 겹: 두 번째 벽이 조금 늦게 따라온다
 			start_attack(BarrierWall.new(ppos))
 			start_side(BarrierWall.new(ppos, 1.4))
-	if kind != "wall" and not is_lingering("spray") and randf() < SPRAY_SIDE:   # 작은 보조 공격: 노드 잔탄 분사가 겹친다
-		start_side(NodeSpray.new())
-	since_seed += 1
-	if since_seed >= SEED_EVERY:                 # 드물게: 금색 주탄 한 발이 천천히 흘러간다 (찾아가 PERFECT 패리 → 결계에 금)
-		since_seed = 0
-		_seed()
+
 
 
 func _seed() -> void:

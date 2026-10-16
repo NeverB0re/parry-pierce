@@ -94,6 +94,7 @@ var dash_t := 0.0
 var dash_kind := ""              # "dash" | "charge" | "power"
 var dash_total := 0.28
 var perfect_dash := false        # PERFECT 패리 돌진
+var sync_charge := false         # 완전 동조(4배) 차지 강습: PERFECT 드라이브처럼 빠르다
 var evade_window := 0.0          # 퍼펙트 회피 판정이 남은 시간
 var evade_inv_t := 0.0           # 퍼펙트 회피로 얻은 무적이 남은 시간 (회피 무적 판단용)
 var evade_rewarded := false      # 이번 돌진에서 이미 퍼펙트 회피 보상을 받음
@@ -166,6 +167,7 @@ func reset(pos: Vector2, platform := false) -> void:
 	dash_t = 0.0
 	dash_kind = ""
 	perfect_dash = false
+	sync_charge = false
 	charging = false
 	charge_t = 0.0
 	bouncing = false
@@ -310,6 +312,10 @@ func _dash(kind: String) -> void:
 	if kind == "charge":
 		spd = CHARGE_SPEED
 		dash_total = CHARGE_DASH_TIME
+		sync_charge = buffed and buff_strong
+		if sync_charge:                          # 완전 동조: 거의 순간이동 (사거리는 같다)
+			spd = PARRY_DASH_SPEED_PERFECT
+			dash_total = CHARGE_SPEED * CHARGE_DASH_TIME / PARRY_DASH_SPEED_PERFECT
 	dash_t = dash_total
 	dash_cd = stats.dash_cooldown
 	if kind == "charge":
@@ -728,6 +734,8 @@ func _move(dt: float) -> void:
 func _end_dash() -> void:
 	var was_power := dash_kind == "power"
 	var was_perfect := perfect_dash
+	var was_sync := sync_charge
+	sync_charge = false
 	dash_kind = ""
 	perfect_dash = false
 	power_boost = false
@@ -735,6 +743,8 @@ func _end_dash() -> void:
 	intercept_lock = false
 	if was_power:
 		main.on_power_dash_end(was_perfect)
+	if was_sync:
+		main.on_sync_charge_end()
 
 
 ## 이번 돌진의 피해량과 버프 소모
@@ -840,6 +850,7 @@ func _clear_buff() -> void:
 ## 튕김 무적(STRIKE_SHIELD)은 요격과 PERFECT 리버스 드라이브, 일반 리버스 드라이브는 짧게(NORMAL_DRIVE_SHIELD). 일반 돌진·차지 강습 적중은 잔탄만 잠깐 막는다
 func bounce_off(dir: Vector2, kind := "dash", intercept := false) -> void:
 	var perfect := kind == "power" and perfect_dash
+	var k := _recoil(kind, perfect or (kind == "charge" and sync_charge))
 	dash_t = 0.0
 	_end_dash()
 	bouncing = true
@@ -858,13 +869,24 @@ func bounce_off(dir: Vector2, kind := "dash", intercept := false) -> void:
 		dash_cd = 0.0
 		pending_kind = ""
 	parry_queue = 0.0
-	var k := 1.25 if kind == "power" else (1.1 if kind == "charge" else 1.0)
 	var m: Vector2 = main.aim_offset(position)    # 조준 보조가 아니라 실제 마우스(스틱) 방향으로 좌우 조종
 	var steer := 0.0
 	if m.length() > AIM_DEADZONE:
 		steer = m.normalized().x
-	vel = Vector2(-dir.x * BOUNCE_SIDE + steer * BOUNCE_STEER, -stats.bounce_up * k)
+	vel = Vector2(-dir.x * BOUNCE_SIDE * (1.0 + (k - 1.0) * 1.5) + steer * BOUNCE_STEER, -stats.bounce_up * k)
 	bounce_rise = stats.bounce_up * k
+
+
+## 튕겨나는 힘 (반작용): 공격이 셀수록 더 크게 튕긴다 — 일반 돌진 < 차지 < 일반 패리 드라이브 < PERFECT·완전 동조
+static func _recoil(kind: String, strongest: bool) -> float:
+	if strongest:
+		return 1.5
+	match kind:
+		"power":
+			return 1.22
+		"charge":
+			return 1.1
+	return 1.0
 
 
 ## 에임 어시스트: 사거리 안에서 조준선이 표적 가장자리 일정 각도(PC 24도, 터치 40도) 이내면 표적 중심으로 달라붙는다.

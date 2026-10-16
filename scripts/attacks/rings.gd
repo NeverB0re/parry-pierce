@@ -13,7 +13,7 @@ const MAX_R := 3400.0                # 경기장을 다 덮으면 끝
 const C_UNPARRY := Color(0.6, 0.08, 0.36)
 const C_UNPARRY_CORE := Color(1.0, 0.62, 0.86)
 
-var dodged_rings: Array[int] = []      # 회피 무적으로 통과한 고리 번호
+var dodged_rings: Array[int] = []      # 퍼펙트 회피로 빨아들인 고리 번호 (사라진다)
 var origin := Vector2.ZERO
 var started := 0
 var count := COUNT
@@ -90,7 +90,7 @@ func draw() -> void:
 		c.draw_arc(origin, 300.0 * (1.0 - k) + 70.0, 0.0, TAU, 64, Color(C_UNPARRY_CORE, (0.3 + 0.5 * k) * blink), 4.0)
 	for k in count:
 		var rr := _radius(k)
-		if rr < 0.0 or rr > MAX_R:
+		if rr < 0.0 or rr > MAX_R or dodged_rings.has(k):   # 빨아들인 고리는 사라진다
 			continue
 		c.draw_arc(origin, rr, 0.0, TAU, 160, Color(C_UNPARRY, 0.7), HALF * 2.0)
 		c.draw_arc(origin, rr, 0.0, TAU, 160, Color(C_UNPARRY_CORE, 0.9), 6.0)

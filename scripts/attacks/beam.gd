@@ -87,6 +87,8 @@ func _fan(from_th: float, to_th: float, a0: float, a1: float, n: int) -> void:
 
 
 func draw() -> void:
+	if dodged:                                   # 퍼펙트 회피로 빨아들였다: 사라진다
+		return
 	var c: CanvasItem = boss
 	var wind := phase == "wind"
 	var kk := clampf(t / WIND, 0.0, 1.0)

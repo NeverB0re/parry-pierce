@@ -1,7 +1,7 @@
 extends "res://scripts/attacks/attack.gd"
 ## 결계 폭풍 (결계 위성, 패리 불가 = 보라): 결계에서 광선 N 줄기가 사방으로 뻗어 천천히 돈다.
 ## 겉보기엔 화면을 가득 채우지만(넓고 옅은 빛무리) 실제 판정은 가는 심줄뿐 — 줄기 사이로 피하거나, 다가오는 줄기를 돌진으로 뚫는다 (완전 동조 기회).
-## 회피 처리는 줄기 단위 (뚫은 줄기만 더는 맞지 않는다)
+## 흡수는 줄기 단위 (퍼펙트 회피로 빨아들인 줄기만 사라진다)
 ## boss 에 필요한 것: CORE_POS, BARRIER_R, set_glow(i, v), node_toward(a)
 
 const WIND := 1.1
@@ -122,9 +122,10 @@ func draw() -> void:
 		var a := _angle(i)
 		var s := origin + Vector2.from_angle(a) * br
 		var e := end_at(a)
-		var dim := 0.35 if dodged_beams.has(i) else 1.0
-		c.draw_line(s, e, Color(C_UNPARRY, 0.08 * dim), 180.0 * fl)          # 넓은 빛무리 (판정 없음)
-		c.draw_line(s, e, Color(C_UNPARRY, 0.18 * dim), 70.0 * fl)
-		c.draw_line(s, e, Color(C_UNPARRY, 0.8 * dim), 24.0)
-		c.draw_line(s, e, Color(C_UNPARRY_CORE, 0.95 * dim), 7.0)
-		c.draw_circle(e, 40.0 * fl, Color(C_UNPARRY, 0.3 * dim))
+		if dodged_beams.has(i):                       # 퍼펙트 회피로 빨아들인 줄기는 사라진다
+			continue
+		c.draw_line(s, e, Color(C_UNPARRY, 0.08), 180.0 * fl)          # 넓은 빛무리 (판정 없음)
+		c.draw_line(s, e, Color(C_UNPARRY, 0.18), 70.0 * fl)
+		c.draw_line(s, e, Color(C_UNPARRY, 0.8), 24.0)
+		c.draw_line(s, e, Color(C_UNPARRY_CORE, 0.95), 7.0)
+		c.draw_circle(e, 40.0 * fl, Color(C_UNPARRY, 0.3))

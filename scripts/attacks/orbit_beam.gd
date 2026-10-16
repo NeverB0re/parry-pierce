@@ -99,6 +99,8 @@ func beam_hit(p: Vector2, r: float) -> Vector2:
 
 
 func draw() -> void:
+	if dodged:                                   # 퍼펙트 회피로 빨아들였다: 사라진다
+		return
 	var c: CanvasItem = boss
 	var br: float = boss.BARRIER_R
 	if phase == "wind":

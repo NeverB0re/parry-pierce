@@ -12,10 +12,15 @@ const SPREAD := 0.9
 const SPEED := 250.0
 
 var done := 0
+var mode := "fan"                    # fan = 아래쪽 노드의 부채 / ring = 외피에서 잔탄 고리 (한 줄 걸러 반 칸씩 어긋남)
+const RING_N := 26
+const RING_R := 380.0
+const RING_SPEED := 220.0
 
 
-func _init() -> void:
+func _init(mode_ := "fan") -> void:
 	kind = "spray"
+	mode = mode_
 
 
 func step(_dt: float, _ppos: Vector2) -> void:
@@ -25,6 +30,15 @@ func step(_dt: float, _ppos: Vector2) -> void:
 			boss.set_glow(i, minf(1.0, t / WIND))
 	while done < ROUNDS and t >= WIND + done * GAP:
 		var m: float = boss.bolt_mult()
+		if mode == "ring":
+			var o: Vector2 = boss.CORE_POS
+			var ro := (0.5 if done % 2 == 1 else 0.0) * TAU / RING_N
+			for k in RING_N:
+				var d := Vector2.from_angle(ro + k * TAU / RING_N)
+				boss.shots.spawn(o + d * RING_R, d * RING_SPEED * m, 8.0, 0.0, 0.0, Projectiles.Kind.SMALL)
+			boss.emit(Ev.BOLT, o)
+			done += 1
+			continue
 		var off := (0.5 if done % 2 == 1 else 0.0) * SPREAD / (FAN_N - 1)
 		for i in ids:
 			var o: Vector2 = boss.node_pos(i)

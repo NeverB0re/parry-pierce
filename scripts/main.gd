@@ -521,12 +521,12 @@ func _check_attacks() -> void:
 	var p: Vector2 = player.position
 	var graze: float = Player.RADIUS + Player.PERFECT_EVADE_GRAZE
 	if player.can_evade_reward() and boss.beam_hit(p, graze) != Vector2.ZERO:
-		player.try_evade_reward(true)                   # 패리 불가 레이저를 돌진 직후 스침 = 강한 퍼펙트 회피 (4배)
+		player.try_evade_reward(true)                   # 패리 불가 공격을 돌진 직후 스침 = 강한 퍼펙트 회피 (완전 동조, 4배)
+		_absorb_beam_fx(p)
+		boss.mark_beam_dodged(p, graze)                 # 그 공격(줄기)의 에너지를 빨아들인다 → 사라진다
 	var beam_push: Vector2 = boss.beam_hit(p, Player.RADIUS)   # 패리 불가: 돌진 무적으로만 피한다
 	if beam_push != Vector2.ZERO and player.can_refresh_evade():
 		player.refresh_evade_invuln()
-	if beam_push != Vector2.ZERO and player.dodge_immune():  # 회피 무적으로 통과한 광선·고리는 그 뒤로 맞지 않는다
-		boss.mark_beam_dodged(p, Player.RADIUS)
 	if beam_push != Vector2.ZERO and not player.is_immune():
 		hurt_player(beam_push, boss.attack_kind())
 		return
@@ -609,20 +609,25 @@ func _cure_heat(at: Vector2) -> void:
 
 
 ## 퍼펙트 패리 급 임팩트 (적에게 가하는 일격에 쓴다)
-func _perfect_impact(at: Vector2, dir: Vector2) -> void:
+## sync = 완전 동조(퍼펙트 회피 버프) 일격: 같은 규모, 색만 청록 계열
+func _perfect_impact(at: Vector2, dir: Vector2, sync := false) -> void:
 	_buzz(80)
-	hitstop = maxf(hitstop, 0.2)
-	shake = maxf(shake, 24.0)
-	hud.flash(0.28, Color(1.0, 0.95, 0.85))
-	fx.burst(at, 60, Color(1.0, 0.9, 0.6), 1500.0, 0.6, 4.5)
+	hitstop = maxf(hitstop, 0.3)
+	zoom_punch = 1.0
+	shake = maxf(shake, 26.0)
+	var hot := Color(0.75, 1.0, 0.95) if sync else Color(1.0, 0.9, 0.6)
+	var mid := Color(0.35, 0.9, 1.0) if sync else Color(1.0, 0.6, 0.3)
+	var pale := Color(0.85, 1.0, 1.0) if sync else Color(1.0, 0.95, 0.8)
+	hud.flash(0.28, Color(0.85, 1.0, 1.0) if sync else Color(1.0, 0.95, 0.85))
+	fx.burst(at, 60, hot, 1500.0, 0.6, 4.5)
 	fx.burst(at, 28, Color(1, 1, 1), 900.0, 0.4, 3.5)
-	fx.rays_burst(at, 18, Color(1.0, 0.95, 0.8), 520.0, 0.45, 7.0)
-	fx.rays_burst(at, 9, Color(1.0, 0.6, 0.3), 340.0, 0.35, 5.0)
-	fx.ring(at, Color(1, 0.95, 0.8), 300.0, 0.5, 10.0)
-	fx.ring(at, Color(1, 0.6, 0.3), 190.0, 0.4, 7.0)
-	fx.ring(at, Color(0.7, 0.9, 1.0), 110.0, 0.3, 5.0)
-	fx.sprite(at, 2, 440.0, 0.5)                 # 적이 입는 피해 표시
-	fx.sprite(at, 1, 300.0, 0.45, false, Color.WHITE, 0.05)
+	fx.rays_burst(at, 18, pale, 520.0, 0.45, 7.0)
+	fx.rays_burst(at, 9, mid, 340.0, 0.35, 5.0)
+	fx.ring(at, pale, 300.0, 0.5, 10.0)
+	fx.ring(at, mid, 190.0, 0.4, 7.0)
+	fx.ring(at, Color(1.0, 0.9, 0.6) if sync else Color(0.7, 0.9, 1.0), 110.0, 0.3, 5.0)
+	fx.sprite(at, 3 if sync else 2, 440.0, 0.5)  # 적이 입는 피해 표시 (청록 링 / 주황 링)
+	fx.sprite(at, 1, 300.0, 0.45, false, Color(0.7, 1.0, 1.0) if sync else Color.WHITE, 0.05)
 	sfx.play("perfect", 4.0)
 	sfx.play("parry", 0.0)
 
@@ -671,7 +676,7 @@ func _clash(hb: Dictionary, p: Vector2) -> void:
 		fx.rays_burst(at, 10, Color(1.0, 0.9, 0.6), 700.0, 0.35, 9.0)
 		sfx.play("stomp", 2.0)
 	if player.last_hit_strong:                   # 4배 버프가 실린 받아치기: 퍼펙트 패리 급
-		_perfect_impact(at, dir)
+		_perfect_impact(at, dir, true)
 
 
 ## 피격 = 목숨 −1 + 스턴. 잠시 조작을 잃고 추락 → 용암 위험
@@ -983,6 +988,14 @@ func _drain_boss_events() -> void:
 # ── player.gd 에서 호출 ───────────────────────────────
 ## kind: "dash"(일반 돌진, 청백·가볍게) / "charge"(차지 돌진, 주황·묵직하게)
 func on_dash(pos: Vector2, dir: Vector2, kind := "dash") -> void:
+	if kind == "charge" and player.sync_charge:    # 완전 동조 차지: PERFECT 리버스 드라이브와 같은 출발 연출, 청록
+		drive_from = pos
+		sfx.play("dash", 4.0, 0.0)
+		shake = maxf(shake, 16.0)
+		hud.flash(0.14, Color(0.8, 1.0, 1.0))
+		fx.burst(pos, 40, Color(0.7, 1.0, 0.95), 1500.0, 0.45, 3.5, 0.0, -dir, 0.5)
+		fx.ring(pos, Color(0.7, 1.0, 0.95), 200.0, 0.35, 7.0)
+		return
 	if kind == "charge":
 		sfx.play("dash", 2.0)
 		shake = maxf(shake, 8.0)
@@ -1085,7 +1098,19 @@ func on_perfect_evade(pos: Vector2, strong := false) -> void:
 	fx.burst(pos, 16, Color(1.0, 0.92, 0.6), 600.0, 0.5, 2.5, 0.0, Vector2.ZERO, PI)
 
 
+## 완전 동조로 보라 공격의 에너지를 빨아들임: 보라 → 청록 입자가 기체로 모여든다
+func _absorb_beam_fx(at: Vector2) -> void:
+	for k in 3:
+		fx.ring(at, Color(0.6, 0.08, 0.36).lerp(Color(0.5, 1.0, 0.88), k / 2.0), 160.0 + 90.0 * k, 0.35 + 0.1 * k, 4.0, true)
+	fx.burst(at, 20, Color(0.85, 0.5, 1.0), 500.0, 0.35, 3.0)
+
+
 ## 패리 돌진 종료(적중 또는 빗나감): 패리로 밀려난 팔은 바로 제자리로
+## 완전 동조 차지 종료(적중·빗나감): 출발점부터 청록 잔상 궤적
+func on_sync_charge_end() -> void:
+	fx.streak(drive_from, player.position, Color(0.5, 1.0, 0.9), 0.4)
+
+
 func on_power_dash_end(perfect := false) -> void:
 	boss.release_stagger()
 	if perfect:                                  # PERFECT 리버스 드라이브: 출발점부터 끝까지 금빛 잔상 궤적이 잠깐 남는다
@@ -1118,8 +1143,8 @@ func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, kind := "d
 	tele.hit(kind, dmg)
 	if buffed:
 		tele.add("sync_strong_hit" if strong else "sync_hit")
-	if strong:                                 # 패리 불가 공격을 퍼펙트 회피한 4배 일격: 퍼펙트 패리에 준하는 임팩트
-		_perfect_impact(contact, dir)
+	if strong:                                 # 완전 동조(패리 불가 공격을 퍼펙트 회피) 4배 일격: 퍼펙트 패리와 같은 연출, 청록
+		_perfect_impact(contact, dir, true)
 	elif buffed:                               # 퍼펙트 회피 버프가 실린 차지 일격
 		shake = maxf(shake, 20.0)
 		sfx.play("perfect", -2.0, 0.0)
@@ -1142,8 +1167,6 @@ func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, kind := "d
 		"power":                                 # PERFECT 리버스 드라이브: 크게 (긴 히트스톱 + 줌 펀치)
 			_cure_heat(contact)
 			_perfect_impact(contact, dir)
-			hitstop = maxf(hitstop, 0.3)
-			zoom_punch = 1.0
 			shake = maxf(shake, 26.0)
 			sfx.play("break", 4.0)
 			sfx.play("perfect", 0.0)

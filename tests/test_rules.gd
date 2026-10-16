@@ -2302,14 +2302,50 @@ func _satellite_test() -> void:
 	_check("barrier storm: a dodged beam no longer hits, others still do", bz.beam_hit(on_beam, 12.0) == Vector2.ZERO and bz.dodged_beams == [0])
 	_check("satellite: purple attacks reach the player", beam_hit)
 	var lt = b.Lattice.new()
-	var grows := true
-	for k in range(1, 4):
-		for x in lt._xs(k - 1):
-			grows = grows and lt._xs(k).has(x)
-		for y in lt._ys(k - 1):
-			grows = grows and lt._ys(k).has(y)
-	_check("lattice builds up: vertical first, then horizontal, then the in-between lines, earlier lines stay (%d/%d -> %d/%d)" % [lt._xs(0).size(), lt._ys(0).size(), lt._xs(3).size(), lt._ys(3).size()],
-		grows and lt._ys(0).is_empty() and not lt._xs(0).is_empty() and lt._xs(3).size() > lt._xs(1).size() and lt._ys(3).size() > lt._ys(1).size())
+	lt.boss = b
+	var cnt := func(at_t: float) -> int:
+		lt.t = at_t
+		var n := 0
+		for i in lt.lines.size():
+			if lt.t >= lt._on_at(i):
+				n += 1
+		return n
+	var c1: int = cnt.call(lt.WARN + 0.01)
+	var c4: int = cnt.call(lt.WARN + lt.STEP_T * 3 + 0.01)
+	_check("lattice: lines stay lit and keep adding up (first %d -> last %d), the first step is vertical only" % [c1, c4], c1 > 0 and c4 > c1 * 2 and lt.lines[0]["vert"])
+	lt.t = lt.WARN + 0.1
+	var lx: float = lt.lines[0]["at"]
+	_check("lattice: a lit line still hurts later in the pattern", lt.beam_hit(Vector2(lx, -900), 12.0) != Vector2.ZERO)
+	lt.mark_dodged(Vector2(lx, -900), 12.0)
+	_check("lattice: an absorbed line disappears (only that line)", lt.beam_hit(Vector2(lx, -900), 12.0) == Vector2.ZERO and lt.absorbed.size() == 1)
+	# 보라 공격: 일반 무적 회피는 통과만 (흡수 안 됨), 퍼펙트 회피(완전 동조)만 흡수
+	b.reset()
+	b.shots.clear()
+	var wl = b.BarrierWall.new(Vector2(500, -900))
+	b.start_attack(wl)
+	wl.phase = "move"
+	wl.x = -300.0
+	wl.x_prev = -300.0
+	p.reset(Vector2(-300, -900), false)
+	_dash_dir("dash", Vector2.RIGHT)
+	p.evade_window = 0.0                                      # 퍼펙트 회피 판정 시간은 지났다 (무적만)
+	p.dash_age = 0.05
+	main._check_attacks()
+	_check("purple: a plain invulnerable dash just passes, the wall is not absorbed", not wl.dodged and not p.buff_strong)
+	p.reset(Vector2(-300, -900), false)
+	_dash_dir("dash", Vector2.RIGHT)
+	main._check_attacks()
+	_check("purple: a perfect evade gives full sync and absorbs the wall (it vanishes)", wl.dodged and p.buffed and p.buff_strong)
+	b.atk = null
+	# 완전 동조 차지: PERFECT 드라이브처럼 빠르고 사거리는 같다 / 반작용은 공격 세기 순
+	p.reset(Vector2(-700, -1500), false)
+	p.buffed = true
+	p.buff_strong = true
+	_dash_dir("charge", Vector2.RIGHT)
+	_check("full-sync charge is near-instant like a PERFECT drive (speed %.0f), same reach" % p.vel.length(), p.sync_charge and p.vel.length() >= p.PARRY_DASH_SPEED_PERFECT - 1.0 and absf(p.dash_total * p.vel.length() - p.CHARGE_SPEED * p.CHARGE_DASH_TIME) < 5.0)
+	p.reset(Vector2(-700, -1500), false)
+	_check("recoil grows with the strike: dash < charge < normal drive < PERFECT / full sync",
+		p._recoil("dash", false) < p._recoil("charge", false) and p._recoil("charge", false) < p._recoil("power", false) and p._recoil("power", false) < p._recoil("charge", true))
 	var w = b.BarrierWall.new(Vector2(500, -900))
 	w.boss = b
 	_check("barrier wall starts on the far side from the player", w.x0 < 0.0 and w.x1 > 0.0)

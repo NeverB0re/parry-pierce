@@ -483,7 +483,7 @@ func beam_hit(p: Vector2, r: float) -> Vector2:
 	return Vector2.ZERO
 
 
-## 회피 무적으로 p 에서 패리 불가 판정을 통과했다: 닿은 공격(고리는 그 고리만)이 더는 맞지 않는다
+## 패리 불가 판정을 p 에서 퍼펙트 회피했다(완전 동조): 닿은 공격의 에너지를 빨아들여 사라진다 (여러 줄기 공격은 그 줄기만)
 func mark_beam_dodged(p: Vector2, r: float) -> void:
 	for a in active_attacks():
 		if not a.dodged and a.beam_hit(p, r) != Vector2.ZERO:
@@ -529,6 +529,8 @@ func unparry_points(ppos: Vector2) -> Array[Vector2]:
 	if dead:
 		return out
 	for a in active_attacks():
+		if a.dodged:
+			continue
 		var q: Vector2 = a.unparry_point(ppos)
 		if q.is_finite():
 			out.append(q)
