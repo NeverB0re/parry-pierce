@@ -316,10 +316,12 @@ func _step_debris(dt: float) -> void:
 
 # ── 그리기 ─────────────────────────────────────────────
 func _draw() -> void:
+	_draw_halo()
 	_draw_vents()
 	_draw_cloak()
 	_draw_legs()
 	_draw_torso()
+	_draw_seams()
 	_draw_chest()
 	_draw_arms()
 	_draw_head()
@@ -342,6 +344,13 @@ func _draw_cloak() -> void:
 		Vector2(-560 - sw, -1000), Vector2(-640 - sw, -860), Vector2(-700 - sw, -1000), Vector2(-640, -1700),
 	])
 	draw_colored_polygon(pts, C_CLOAK)
+	var hem := PackedVector2Array()                                     # 찢어진 끝단: 호박빛으로 달아오른 실밥
+	for k in range(3, pts.size() - 1):
+		hem.append(pts[k])
+	draw_polyline(hem, Color(C_EYE, 0.22 + 0.12 * sin(t * 2.0)), 4.0)
+	for k in 6:                                                         # 망토 주름
+		var x := -500.0 + k * 200.0
+		draw_line(Vector2(x * 0.8, -2300), Vector2(x + sw * 0.5, -1080), Color(0.02, 0.02, 0.04, 0.6), 10.0)
 
 
 func _draw_legs() -> void:
@@ -481,6 +490,11 @@ func _draw_arms() -> void:
 			_draw_stump(el, (el - sh).normalized(), 60.0)
 		draw_circle(sh, 140.0, C_BODY_DARK)
 		draw_arc(sh, 140.0, PI, TAU, 24, Color(C_BONE, 0.8), 7.0)
+		var so := 1.0 if a == 1 else -1.0
+		for q in 3:                                                     # 어깨 뼈 가시
+			var base_a := PI + 0.5 + q * 0.55 if so < 0.0 else TAU - 0.5 - q * 0.55
+			var bp := sh + Vector2.from_angle(base_a) * 130.0
+			_cap(bp, bp + Vector2.from_angle(base_a) * (90.0 + 30.0 * (1 - q % 2)) + Vector2(0, -40), 16.0, C_BONE)
 		# 어깨 포대
 		var base := cannon_base(a)
 		var mz: Vector2 = MUZZLES[a]
@@ -519,6 +533,57 @@ func _draw_debris() -> void:
 			draw_circle(half, 34.0, C_BODY)
 		draw_circle(-half, float(d["w"]) * 0.35, Color(C_HEART, 0.2))
 	draw_set_transform(Vector2.ZERO, 0.0)
+
+
+## 감시 후광 (관측자의 상징, 그림만): 머리 뒤에 걸린 거대한 렌즈 고리. 렌즈들이 차례로 깜빡이며 돌고,
+## 플레이어 쪽 렌즈가 가장 밝게 빛나 늘 지켜보는 느낌. 뒤로 옅은 호박빛 후광과 가는 주사선
+func _draw_halo() -> void:
+	var c := HEAD_POS + Vector2(0, 120)
+	var dim := 1.0 if not dead else maxf(0.0, 1.0 - death_t * 0.6)
+	_soft_glow(c, 1450.0, C_EYE, 0.12 * dim)
+	var r := 860.0
+	draw_arc(c, r, 0.0, TAU, 96, C_BODY_DARK, 46.0)                    # 고리 몸통
+	draw_arc(c, r + 23.0, 0.0, TAU, 96, Color(C_RIM, 0.35), 3.0)
+	draw_arc(c, r - 23.0, 0.0, TAU, 96, Color(C_RIM, 0.2), 2.0)
+	for k in 6:                                                         # 고리를 받치는 지지대 (몸 뒤로 사라진다)
+		var a := k * TAU / 6.0 + PI / 6.0
+		draw_line(c + Vector2.from_angle(a) * 380.0, c + Vector2.from_angle(a) * (r - 20.0), Color(C_BODY_DARK, 0.9), 22.0)
+	var to_p := (look_at - c).angle()
+	for k in 16:                                                        # 렌즈 16개: 천천히 돌며 차례로 깜빡, 플레이어 쪽이 가장 밝다
+		var a := k * TAU / 16.0 + t * 0.06
+		var p := c + Vector2.from_angle(a) * r
+		var seq := 0.5 + 0.5 * sin(t * 2.2 - k * 0.8)
+		var watch := maxf(0.0, cos(angle_difference(a, to_p))) ** 6
+		var g := (0.25 + 0.45 * seq + 0.6 * watch) * dim
+		draw_circle(p, 34.0, C_BODY)
+		draw_arc(p, 34.0, 0.0, TAU, 16, Color(C_RIM, 0.55), 3.0)
+		draw_circle(p, 14.0 + 8.0 * watch, Color(C_EYE, minf(1.0, g)))
+		if watch > 0.3:
+			draw_circle(p, 48.0 + 30.0 * watch, Color(C_EYE, 0.12 * watch * dim))
+	var sweep := fmod(t * 0.25, 1.0) * TAU                              # 주사선: 고리 안을 천천히 훑는다
+	draw_line(c, c + Vector2.from_angle(sweep) * r, Color(C_EYE, 0.06 * dim), 10.0)
+
+
+## 몸통의 빛나는 이음매와 테두리 빛 (그림만): 가슴 둘레 갈비뼈 판 + 맥동하는 호박빛 선 + 왼쪽 위에서 오는 푸른 테두리 빛
+func _draw_seams() -> void:
+	var pulse := 0.5 + 0.5 * sin(t * 1.8)
+	var lit := 1.0 if not dead else 0.2
+	for k in 4:                                                         # 갈비뼈 판 (가슴 문 양옆)
+		var y := -2180.0 + k * 150.0
+		for s in [-1.0, 1.0]:
+			var a := Vector2(s * 190.0, y)
+			var b := Vector2(s * (430.0 - k * 22.0), y + 70.0)
+			draw_line(a, b, C_BODY_DARK, 26.0)
+			draw_line(a + Vector2(0, -10), b + Vector2(0, -10), Color(C_RIM, 0.35), 3.0)
+			draw_line(a + Vector2(0, 9), b + Vector2(0, 9), Color(C_EYE, (0.25 + 0.3 * pulse) * lit), 2.5)
+	for s in [-1.0, 1.0]:                                               # 옆구리 호박빛 이음매
+		draw_polyline(PackedVector2Array([Vector2(s * 470, -2330), Vector2(s * 455, -2000), Vector2(s * 390, -1700), Vector2(s * 300, -1320)]),
+			Color(C_EYE, (0.18 + 0.25 * pulse) * lit), 4.0)
+	draw_polyline(PackedVector2Array([Vector2(-500, -2250), Vector2(-400, -1700), Vector2(-310, -1300)]), Color(0.6, 0.75, 1.0, 0.35), 5.0)   # 테두리 빛 (왼쪽)
+	for i in 2:
+		var hip: Vector2 = HIPS[i]
+		var knee := knee_of(i)
+		draw_line(hip + Vector2(-80, 0), knee + Vector2(-70, 0), Color(0.6, 0.75, 1.0, 0.25), 4.0)
 
 
 ## 어깨 배기구에서 주기적으로 증기가 뿜어져 오른다 (대기 모션)

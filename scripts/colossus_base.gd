@@ -586,6 +586,12 @@ static func _rect_hit(p: Vector2, r: float, rc: Rect2) -> Dictionary:
 
 # ── 표적 피해 ──────────────────────────────────────────
 ## 돌진이 표적(strike_hit 결과)에 적중. 동력 코어가 부서지면 true (= 승리)
+## 부드러운 빛무리: 반지름을 줄여 가며 옅은 원을 겹쳐 가운데가 밝고 가장자리가 사라지게 (후광·열기)
+func _soft_glow(c: Vector2, r: float, col: Color, peak: float) -> void:
+	for k in 8:
+		draw_circle(c, r * (1.0 - k * 0.11), Color(col, peak / 8.0))
+
+
 ## 방어막·결계({kind:"shield"})에 닿은 돌진이 튕겨 나오는가 (피해 없음). 기본(크라켄) = 리버스 드라이브와 완전 동조 차지만 뚫는다
 func blocks_strike(hit: Dictionary, kind: String, _perfect: bool, strong: bool) -> bool:
 	return hit.get("kind", "") == "shield" and kind != "power" and not (kind == "charge" and strong)

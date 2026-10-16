@@ -348,9 +348,7 @@ func _draw_rings(back: bool) -> void:
 
 ## 뒤쪽 후광: 위성 둘레의 옅은 보라 빛 (크기를 느끼게)
 func _draw_aura() -> void:
-	draw_circle(CORE_POS, 1500.0, Color(C_BARRIER, 0.035))
-	draw_circle(CORE_POS, 1000.0, Color(C_BARRIER, 0.045))
-	draw_circle(CORE_POS, 600.0, Color(C_BARRIER, 0.05))
+	_soft_glow(CORE_POS, 1500.0, C_BARRIER, 0.16)
 
 
 ## 양옆 태양 전지판 날개: 경기장 밖까지 뻗는 거대한 트러스 + 패널 격자 (천천히 기운다)

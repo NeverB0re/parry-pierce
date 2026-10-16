@@ -244,10 +244,15 @@ static func _glow_idx(c: int) -> int:
 
 # ── 그리기 ─────────────────────────────────────────────
 func _draw() -> void:
+	_draw_heat_aura()
 	_draw_searchlight()
+	_draw_stacks()
 	_draw_smoke()
 	_draw_spire()
+	_draw_radar()
 	_draw_hull()
+	_draw_bridge()
+	_draw_furnace()
 	_draw_running_lights()
 	_draw_doors()
 	_draw_batteries()
@@ -275,12 +280,82 @@ func _draw_searchlight() -> void:
 	draw_line(o, o + Vector2.from_angle(a) * 2600.0, Color(1.0, 0.92, 0.7, 0.05), 6.0)
 
 
+## 뒤쪽 열기 후광: 용광로처럼 달아오른 붉은 빛 (크기를 느끼게)
+func _draw_heat_aura() -> void:
+	var dim := 1.0 if not dead else maxf(0.0, 1.0 - death_t * 0.6)
+	var flick := 0.85 + 0.15 * sin(t * 3.1) * sin(t * 1.7)
+	_soft_glow(Vector2(0, -1400), 1500.0, Color(1.0, 0.38, 0.12), 0.13 * dim * flick)
+	_soft_glow(Vector2(0, -200), 950.0, Color(1.0, 0.4, 0.1), 0.12 * dim)       # 차대 아래 바닥 열기
+
+
+## 굴뚝 둘: 상부 장갑 양옆으로 높이 솟고, 끝에서 불꽃이 일렁인다 (연기는 _draw_smoke)
+func _draw_stacks() -> void:
+	for s in [-1.0, 1.0]:
+		var b := Vector2(s * 300.0, -2200.0)
+		var top := Vector2(s * 330.0, -2640.0)
+		var poly := PackedVector2Array([b + Vector2(-48, 0), b + Vector2(48, 0), top + Vector2(40, 0), top + Vector2(-40, 0)])
+		draw_colored_polygon(poly, C_HULL_DARK)
+		draw_line(b + Vector2(-s * 48, 0), top + Vector2(-s * 40, 0), Color(C_RIM, 0.4), 3.0)
+		for k in 3:                                                    # 띠
+			var y := lerpf(b.y, top.y, 0.25 + k * 0.25)
+			draw_line(Vector2(top.x - 46, y), Vector2(top.x + 46, y), C_HULL, 10.0)
+		draw_rect(Rect2(top.x - 52, top.y - 24, 104, 30), C_HULL)
+		if dead:
+			continue
+		for k in 4:                                                    # 불꽃
+			var ph := fmod(t * 2.4 + k * 0.27 + (0.5 if s > 0.0 else 0.0), 1.0)
+			var fp := top + Vector2(sin(t * 7.0 + k * 2.0) * 10.0, -30.0 - ph * 90.0)
+			draw_circle(fp, 26.0 * (1.0 - ph) + 6.0, Color(1.0, 0.55 + 0.35 * (1.0 - ph), 0.15, 0.55 * (1.0 - ph)))
+
+
+## 회전 레이더: 첨탑 옆에 달린 접시가 돌며 반짝인다
+func _draw_radar() -> void:
+	var o := Vector2(-150, -2470)
+	draw_line(o + Vector2(40, 60), o, C_HULL_DARK, 14.0)
+	var w := 90.0 * cos(t * 1.4)
+	draw_colored_polygon(PackedVector2Array([o + Vector2(-w, -10), o + Vector2(w, -10), o + Vector2(w * 0.7, 26), o + Vector2(-w * 0.7, 26)]), C_HULL)
+	draw_line(o + Vector2(-w, -10), o + Vector2(w, -10), Color(C_RIM, 0.6), 3.0)
+	if not dead and absf(cos(t * 1.4)) > 0.95:
+		draw_circle(o, 20.0, Color(1.0, 0.85, 0.5, 0.6))
+
+
+## 함교 창: 상부 장갑 위쪽에 줄지어 켜진 창 (가끔 하나씩 깜빡) + 그 아래 굵은 장갑 띠
+func _draw_bridge() -> void:
+	var y := -2120.0
+	draw_rect(Rect2(-380, y - 40, 760, 80), C_HULL_DARK)
+	draw_line(Vector2(-380, y - 40), Vector2(380, y - 40), Color(C_RIM, 0.5), 3.0)
+	for k in 10:
+		var x := -330.0 + k * 73.0
+		var on := 0.0 if dead else (0.35 if int(t * 0.7 + k * 3.1) % 7 == 0 else 1.0)
+		draw_rect(Rect2(x - 22, y - 14, 44, 26), Color(1.0, 0.82, 0.5, 0.75 * on))
+		draw_rect(Rect2(x - 30, y - 22, 60, 42), Color(1.0, 0.7, 0.35, 0.08 * on))
+	for k in 2:                                                       # 큰 장갑 띠
+		var yy := -1950.0 + k * 110.0
+		draw_line(Vector2(-560 + k * 20, yy), Vector2(560 - k * 20, yy), C_HULL_DARK, 18.0)
+		draw_line(Vector2(-560 + k * 20, yy - 9), Vector2(560 - k * 20, yy - 9), Color(C_RIM, 0.3), 2.0)
+
+
+## 선체 화구: 장갑 띠 사이로 용광로 불빛이 새어 나온다 (일렁임) + 테두리 빛
+func _draw_furnace() -> void:
+	var lit := 1.0 if not dead else 0.25
+	for row in 3:
+		var y := -760.0 - row * 130.0
+		for k in 9:
+			var x := -560.0 + k * 140.0
+			var fl := 0.55 + 0.45 * sin(t * (3.0 + k * 0.3) + row * 1.7 + k)
+			draw_rect(Rect2(x - 36, y - 10, 72, 20), Color(0.05, 0.02, 0.01))
+			draw_rect(Rect2(x - 30, y - 6, 60, 12), Color(1.0, 0.45 + 0.25 * fl, 0.12, (0.45 + 0.4 * fl) * lit))
+			draw_circle(Vector2(x, y), 46.0, Color(1.0, 0.4, 0.1, 0.06 * fl * lit))
+	draw_polyline(PackedVector2Array([Vector2(-780, -560), Vector2(-720, -1100), Vector2(-640, -2050), Vector2(-400, -2260)]), Color(0.6, 0.75, 1.0, 0.3), 5.0)   # 테두리 빛 (왼쪽 위)
+	draw_polyline(PackedVector2Array([Vector2(780, -560), Vector2(720, -1100), Vector2(640, -2050)]), Color(1.0, 0.5, 0.2, 0.3 * lit), 4.0)                      # 열기 반사 (오른쪽)
+
+
 ## 배기 연기: 상부 장갑 양쪽 굴뚝에서 피어오른다
 func _draw_smoke() -> void:
 	if dead:
 		return
 	for s in [-1.0, 1.0]:
-		var o := Vector2(s * 300.0, -2270.0)
+		var o := Vector2(s * 330.0, -2700.0)                            # 굴뚝 끝에서
 		for k in 6:
 			var life := fmod(t * 0.3 + k / 6.0 + (0.33 if s > 0.0 else 0.0), 1.0)
 			var p := o + Vector2(s * life * 120.0 + sin(t * 1.5 + k * 1.7) * 18.0, -life * 380.0)
