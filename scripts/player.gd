@@ -49,8 +49,7 @@ const ASSIST_SLACK := 60.0           # 사거리 여유
 const BOUNCE_THRUST := 2.0       # 튕겨나는 동안 좌우 추진 배율
 const NORMAL_DRIVE_SHIELD := 0.5 # 일반 패리 드라이브: 착지·적중 후 짧은 무적
 const STRONG_SHIELD := 1.0       # PERFECT 리버스 드라이브·완전 동조 차지 적중 후 튕겨나는 동안 무적 (돌진하면 끝)
-const BOUNCE_BACK := 700.0       # 적중 후 들어온 반대 방향으로 튕겨나는 속도 (× 반작용)
-const BOUNCE_UP_SHARE := 0.55    # 위로 솟는 몫 (bounce_up 의 비율, 아래에서 위로 때렸을 때는 0 → 아래로 떨어져 나온다)
+const BOUNCE_LIFT := 1.0         # 튕김 방향에 더하는 위쪽 몫 (표적 옆을 치면 45도로 솟구친다. 표적 아래에서 치면 0 → 아래로 떨어져 나온다)
 const STRIKE_SHIELD := 0.6       # 요격 후 튕겨나는 동안 무적 (돌진하면 끝)
                                  # 일반 돌진 적중은 무적 없이 튕기기만 한다 (잔탄만 막는 옅은 실드 SMALL_GUARD_HIT) — 일반 공격 연타로 무적을 도배하지 못하게
 const SMALL_GUARD_HIT := 0.3
@@ -795,7 +794,7 @@ func _on_strike(hit: Dictionary) -> void:
 	main.on_strike(hit, dmg, position, dir, kind, was_buffed, last_hit_strong)
 	if frozen:
 		return
-	bounce_off(dir, kind)
+	bounce_off(dir, kind, false, hit.get("n", Vector2.ZERO))
 	if hit.get("kind", "") == "core" or hit.get("kind", "") == "shield":   # 큰 코어·방어막: 튕김이 껍질 안쪽(예: 아래에서 맞혀 위로)을 향하면 바깥으로 되튄다 (코어 안에 박히지 않게)
 		var n: Vector2 = hit["n"]
 		var vn := vel.dot(n)
@@ -865,7 +864,8 @@ func _clear_buff() -> void:
 ## 직격 후 위로 솟구친다 (차지·패리 돌진일수록 조금 더 높이). 좌우는 마우스(스틱)로 조종.
 ## 차지 강습(요격 포함)·리버스 드라이브가 적중하면 돌진 쿨다운을 돌려준다 (튕겨나는 중에도 바로 돌진). 일반 돌진은 그대로
 ## 튕김 무적(STRIKE_SHIELD)은 요격과 PERFECT 리버스 드라이브, 일반 리버스 드라이브는 짧게(NORMAL_DRIVE_SHIELD). 일반 돌진·차지 강습 적중은 잔탄만 잠깐 막는다
-func bounce_off(dir: Vector2, kind := "dash", intercept := false) -> void:
+## n = 맞은 표면의 바깥 방향 (표적 → 기체). 없으면 들어온 반대 방향
+func bounce_off(dir: Vector2, kind := "dash", intercept := false, n := Vector2.ZERO) -> void:
 	var perfect := (kind == "power" and perfect_dash) or (kind == "charge" and sync_charge)   # 완전 동조 차지 = PERFECT 와 같은 튕김 무적·반작용
 	var k := _recoil(kind, perfect)
 	dash_t = 0.0
@@ -894,9 +894,12 @@ func bounce_off(dir: Vector2, kind := "dash", intercept := false) -> void:
 		steer = m.normalized().x
 	if steer * dir.x > 0.0:                      # 마우스가 아직 표적 쪽이면 그쪽으로는 조종하지 않는다 (먼저 충분히 튕겨 나온다)
 		steer = 0.0
-	# 튕김: 들어온 반대 방향으로 뒤로 + 위로 조금 (아래에서 위로 때렸으면 위로는 안 솟고 아래로 떨어져 나온다)
-	var up_k := clampf(1.0 + dir.y, 0.0, 1.0)
-	vel = -dir * BOUNCE_BACK * k + Vector2(steer * BOUNCE_STEER, -stats.bounce_up * k * BOUNCE_UP_SHARE * up_k)
+	# 튕김: 맞은 표면에서 바깥으로 + 위로 솟는 몫 (표적 아래를 쳤으면 솟지 않고 아래로 떨어져 나온다). 속도는 방향과 상관없이 같다 (× 반작용)
+	var out := n if n.length() > 0.1 else -dir
+	var bdir := (out.normalized() + Vector2(0, -BOUNCE_LIFT * (1.0 - maxf(out.normalized().y, 0.0)))).normalized()
+	if bdir.length() < 0.1:
+		bdir = Vector2.UP
+	vel = bdir * stats.bounce_up * k + Vector2(steer * BOUNCE_STEER, 0.0)
 	bounce_rise = stats.bounce_up * k if shield_t > 0.0 else 0.0
 
 
