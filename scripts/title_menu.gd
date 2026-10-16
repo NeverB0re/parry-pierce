@@ -1,6 +1,7 @@
 extends CanvasLayer
 ## 메인 화면: 시작 / 이어하기(ESC 메뉴에서 왔을 때: 멈춰 둔 판으로 돌아감) / 스테이지 선택 / 조작법 / 종료. 우하단의 미국·한국 국기 버튼으로 영어·한국어를 고른다.
-## 게임은 뒤에서 돌지만(보스가 대기 자세로 흔들린다) 입력은 막힌다 (main.gd 가 title.visible 을 본다).
+## 처음 켰을 때·항로도에서 돌아왔을 때는 전용 배경(우주·행성·리버스 드라이브 궤적·멀리 선 콜로서스 실루엣)이 게임을 완전히 가린다.
+## ESC 메뉴에서 왔을 때(이어하기)만 멈춘 판이 어둡게 비친다. 입력은 막힌다 (main.gd 가 title.visible 을 본다).
 ## 새 게임은 저장된 진행이 있으면 한 번 더 눌러야 시작한다 (확인).
 
 const Loc := preload("res://scripts/loc.gd")
@@ -57,10 +58,16 @@ func _build() -> void:
 	for c in root.get_children():                     # 누른 버튼 자신의 신호 처리 중일 수 있으니 바로 떼고 나중에 지운다
 		root.remove_child(c)
 		c.queue_free()
-	var dim := ColorRect.new()
-	dim.color = Color(0.02, 0.025, 0.04, 0.62)
-	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.add_child(dim)
+	if can_resume:                                    # ESC 메뉴에서: 멈춘 판이 어둡게 비친다
+		var dim := ColorRect.new()
+		dim.color = Color(0.02, 0.025, 0.04, 0.62)
+		dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+		root.add_child(dim)
+	else:                                             # 메인 화면: 전용 배경 (게임을 가린다)
+		var bd := Backdrop.new()
+		bd.set_anchors_preset(Control.PRESET_FULL_RECT)
+		bd.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		root.add_child(bd)
 
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -81,8 +88,11 @@ func _build() -> void:
 			_build())
 		back.custom_minimum_size = Vector2(560, 46) * ui_scale
 	else:
-		var t1 := _label("PARRY PIERCE", 78, Color(1.0, 0.93, 0.8))
+		var t1 := _label("PARRY PIERCE", 104, Color(1.0, 0.93, 0.8))
+		t1.add_theme_color_override("font_outline_color", Color(0.85, 0.45, 0.12, 0.9))
+		t1.add_theme_constant_override("outline_size", 14)
 		box.add_child(t1)
+		box.add_child(_label(Loc.t("막고, 되돌리고, 꿰뚫어라"), 24, Color(1.0, 0.82, 0.55)))
 		var ver := str(ProjectSettings.get_setting("application/config/version", ""))
 		box.add_child(_label("v" + ver, 16, Color(0.7, 0.75, 0.85, 0.8)))
 		var gap := Control.new()
@@ -187,6 +197,72 @@ func _button(parent: Control, text: String, cb: Callable) -> Button:
 	b.pressed.connect(cb)
 	parent.add_child(b)
 	return b
+
+
+# ═══ 메인 화면 배경 ═════════════════════════════════════
+## 코드로 그린 움직이는 배경: 짙은 우주 + 반짝이는 별 + 성운 + 아래 행성 곡면 + 멀리 선 거대한 콜로서스 실루엣(고리 위성)
+## + 가끔 화면을 가로지르는 금빛 리버스 드라이브 궤적
+class Backdrop extends Control:
+	var t := 0.0
+	var stars: Array[Vector3] = []
+
+	func _ready() -> void:
+		var rng := RandomNumberGenerator.new()
+		rng.seed = 2024
+		for i in 260:
+			stars.append(Vector3(rng.randf(), rng.randf(), rng.randf_range(0.2, 1.0)))
+
+	func _process(dt: float) -> void:
+		t += dt
+		queue_redraw()
+
+	func _draw() -> void:
+		var s := size
+		var top := Color(0.015, 0.02, 0.05)
+		var bot := Color(0.05, 0.06, 0.12)
+		draw_polygon(PackedVector2Array([Vector2.ZERO, Vector2(s.x, 0), s, Vector2(0, s.y)]), PackedColorArray([top, top, bot, bot]))
+		for i in 3:                                     # 성운
+			var c := Vector2(s.x * (0.15 + 0.35 * i), s.y * (0.22 + 0.12 * (i % 2)))
+			draw_circle(c, s.x * 0.26, Color(0.4, 0.12, 0.42, 0.045))
+			draw_circle(c + Vector2(60, 30), s.x * 0.14, Color(0.2, 0.35, 0.65, 0.05))
+		for st in stars:                                 # 별 (반짝임)
+			var tw := 0.6 + 0.4 * sin(t * (1.0 + st.z * 2.0) + st.x * 40.0)
+			var p := Vector2(st.x * s.x, st.y * s.y * 0.85)
+			draw_rect(Rect2(p, Vector2(2, 2) * (1.0 + st.z)), Color(0.85, 0.9, 1.0, (0.2 + 0.6 * st.z) * tw))
+		# 멀리 선 콜로서스: 기울어진 고리 셋 + 보라 결계 (어둡게, 천천히 돈다)
+		var cc := Vector2(s.x * 0.78, s.y * 0.36)
+		var rs := s.y * 0.22
+		draw_circle(cc, rs * 2.2, Color(0.5, 0.1, 0.35, 0.05))
+		for k in 3:
+			var pts := PackedVector2Array()
+			for j in 49:
+				var a := j * TAU / 48.0
+				var q := Vector2(cos(a) * rs * (1.2 + 0.45 * k), sin(a) * rs * (1.2 + 0.45 * k) * (0.28 + 0.12 * k))
+				pts.append(cc + q.rotated(0.4 + k * 0.5 + t * 0.03 * (1.0 if k % 2 == 0 else -1.0)))
+			draw_polyline(pts, Color(0.25, 0.28, 0.38, 0.55), 6.0 - k)
+		draw_circle(cc, rs * 0.55, Color(0.08, 0.06, 0.12))
+		draw_arc(cc, rs * 0.55, 0.0, TAU, 48, Color(1.0, 0.62, 0.86, 0.35 + 0.15 * sin(t * 1.5)), 3.0)
+		draw_circle(cc, rs * 0.12, Color(0.55, 0.95, 1.0, 0.6))
+		# 아래 행성 곡면 (대기 띠가 빛난다)
+		var pr := s.x * 1.3
+		var pc := Vector2(s.x * 0.35, s.y + pr - s.y * 0.2)
+		draw_circle(pc, pr + 28.0, Color(0.35, 0.6, 1.0, 0.16))
+		draw_circle(pc, pr + 10.0, Color(0.5, 0.75, 1.0, 0.28))
+		draw_circle(pc, pr, Color(0.05, 0.08, 0.15))
+		draw_arc(pc, pr, PI * 1.2, PI * 1.8, 96, Color(0.6, 0.85, 1.0, 0.7), 3.0)
+		# 리버스 드라이브: 3.6초마다 금빛 궤적이 화면을 대각선으로 꿰뚫고 사라진다
+		var cyc := fmod(t, 3.6)
+		if cyc < 1.2:
+			var k := cyc / 1.2
+			var a0 := Vector2(-s.x * 0.1, s.y * 0.92)
+			var a1 := cc
+			var head := a0.lerp(a1, minf(1.0, k * 4.0))
+			var tail := a0.lerp(a1, maxf(0.0, k * 4.0 - 1.0) * 0.4 + k * 0.6)
+			var fade := 1.0 - k
+			draw_line(tail, head, Color(1.0, 0.8, 0.35, 0.25 * fade), 26.0)
+			draw_line(tail, head, Color(1.0, 0.95, 0.75, 0.8 * fade), 5.0)
+			if k * 4.0 >= 1.0:                           # 꽂힌 자리의 섬광
+				draw_circle(a1, rs * 0.3 * fade + 6.0, Color(1.0, 0.9, 0.6, 0.5 * fade))
 
 
 # ═══ 국기 버튼 ═══════════════════════════════════════════

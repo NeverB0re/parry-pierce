@@ -654,6 +654,8 @@ func step(dt: float) -> void:
 			var opp := -vel.dot(aim)                   # 역추진: 날아가는 반대쪽을 조준하면 그 방향 속도를 빨리 죽인다 (돌진 뒤 미끄러짐 제어)
 			if opp > 0.0 and not bouncing and vel.length() > BRAKE_FROM:   # 평소 비행 속도 아래로는 안 줄인다 (위를 조준해 공중에 멈추지 않게)
 				vel += aim * minf(minf(opp, BRAKE * dt), vel.length() - BRAKE_FROM)
+			if aim.x * vel.x < 0.0:                    # 좌우 방향 전환(낙하 중 포함): 가로 속도는 속도와 상관없이 빨리 꺾인다
+				vel.x = move_toward(vel.x, 0.0, BRAKE * absf(aim.x) * dt)
 			vel.x += aim.x * THRUST * (BOUNCE_THRUST if bouncing else 1.0) * dt
 			if aim.y > 0.0:
 				vel.y += aim.y * THRUST * dt

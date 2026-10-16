@@ -112,6 +112,7 @@ const EN := {
 	"뒤로": "Back",
 	"항로도 — 퇴각 항로": "Route Map — Retreat Route",
 	"결계 위성": "Barrier Satellite",
+	"막고, 되돌리고, 꿰뚫어라": "Block it. Turn it back. Pierce it.",
 	"퇴각 항로 4구간 — 궤도": "Retreat Route — Leg 4 (Orbit)",
 	"동조 코어": "Sync Core",
 	"퍼펙트 회피에 성공하면 기체 둘레의 적 탄이 사라진다": "A Perfect Evade clears enemy bullets around your ship",
