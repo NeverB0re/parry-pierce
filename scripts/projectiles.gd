@@ -34,6 +34,7 @@ var age := PackedFloat64Array()
 var grav := PackedFloat64Array()
 var kind := PackedByteArray()
 var mine := PackedByteArray()         # 1 = 플레이어 것 (반사됨)
+var dodged := PackedByteArray()       # 1 = 플레이어가 회피 무적으로 통과한 탄 (그 뒤로는 맞지 않는다)
 
 static var _tex_bolt: Texture2D
 static var _tex_lava: Texture2D
@@ -57,6 +58,7 @@ func clear() -> void:
 	grav.clear()
 	kind.clear()
 	mine.clear()
+	dodged.clear()
 
 
 func spawn(p: Vector2, v: Vector2, lf: float, a := 0.0, g := 0.0, k := Kind.BOLT) -> void:
@@ -67,6 +69,7 @@ func spawn(p: Vector2, v: Vector2, lf: float, a := 0.0, g := 0.0, k := Kind.BOLT
 	grav.append(g)
 	kind.append(k)
 	mine.append(0)
+	dodged.append(0)
 
 
 func remove(i: int) -> void:
@@ -77,6 +80,7 @@ func remove(i: int) -> void:
 	grav.remove_at(i)
 	kind.remove_at(i)
 	mine.remove_at(i)
+	dodged.remove_at(i)
 
 
 func is_lava(i: int) -> bool:
@@ -108,6 +112,7 @@ func step(dt: float, player: Vector2, boss_target: Vector2) -> PackedVector2Arra
 		grav[w] = grav[i]
 		kind[w] = kind[i]
 		mine[w] = mine[i]
+		dodged[w] = dodged[i]
 		w += 1
 	if w < pos.size():
 		pos.resize(w)
@@ -117,6 +122,7 @@ func step(dt: float, player: Vector2, boss_target: Vector2) -> PackedVector2Arra
 		grav.resize(w)
 		kind.resize(w)
 		mine.resize(w)
+		dodged.resize(w)
 	return popped
 
 

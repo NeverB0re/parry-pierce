@@ -13,6 +13,7 @@ const MAX_R := 3400.0                # 경기장을 다 덮으면 끝
 const C_UNPARRY := Color(0.6, 0.08, 0.36)
 const C_UNPARRY_CORE := Color(1.0, 0.62, 0.86)
 
+var dodged_rings: Array[int] = []      # 회피 무적으로 통과한 고리 번호
 var origin := Vector2.ZERO
 var started := 0
 var count := COUNT
@@ -55,13 +56,28 @@ func unparry_point(ppos: Vector2) -> Vector2:
 
 ## 고리에 닿으면 바깥쪽으로 밀려난다
 func beam_hit(p: Vector2, r: float) -> Vector2:
+	var k := _ring_at(p, r)
+	if k < 0:
+		return Vector2.ZERO
 	var rel := p - origin
-	var dist := rel.length()
+	return rel / rel.length() if rel.length() > 1.0 else Vector2.UP
+
+
+## p 에 닿은 고리 번호 (회피로 통과한 고리는 빼고, 없으면 -1)
+func _ring_at(p: Vector2, r: float) -> int:
+	var dist := (p - origin).length()
 	for k in count:
 		var rr := _radius(k)
-		if rr >= 0.0 and absf(dist - rr) < HALF + r:
-			return rel / dist if dist > 1.0 else Vector2.UP
-	return Vector2.ZERO
+		if rr >= 0.0 and absf(dist - rr) < HALF + r and not dodged_rings.has(k):
+			return k
+	return -1
+
+
+## 회피로 통과한 고리만 더는 맞지 않는다 (다음 고리는 그대로)
+func mark_dodged(p: Vector2, r: float) -> void:
+	var k := _ring_at(p, r)
+	if k >= 0:
+		dodged_rings.append(k)
 
 
 func draw() -> void:

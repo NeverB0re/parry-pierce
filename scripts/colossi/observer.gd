@@ -324,6 +324,7 @@ func _draw() -> void:
 	_draw_arms()
 	_draw_head()
 	_draw_part_marks()
+	_draw_gauge()
 	_draw_debris()
 	_draw_shards()
 	if atk != null:

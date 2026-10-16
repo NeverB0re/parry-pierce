@@ -9,6 +9,7 @@ var boss                     # 이 공격을 쓰는 콜로서스 (start_attack �
 var kind := ""               # 공격 이름 (튜토리얼·디버그·HUD 가 읽는다)
 var phase := ""              # 현재 단계 (모듈마다 다름. 단계가 하나뿐이면 "")
 var t := 0.0                 # 현재 단계에서 흐른 시간
+var dodged := false          # 플레이어가 회피 무적(일반 돌진·퍼펙트 회피)으로 통과한 공격: 그 뒤로는 맞지 않는다
 var part := -2               # 이 공격이 쓰는 외부 시스템 번호. 그 부위가 부서지면 공격이 끊긴다 (-2 = 없음)
 
 
@@ -50,6 +51,11 @@ func melee_warning() -> bool:
 ## 패리 불가 판정 → 밀려날 방향 (안 맞으면 ZERO)
 func beam_hit(_p: Vector2, _r: float) -> Vector2:
 	return Vector2.ZERO
+
+
+## 회피 무적으로 통과했다 (p 에 닿은 판정). 기본 = 공격 전체가 더는 맞지 않는다. 여러 줄기 공격은 닿은 줄기만 (rings.gd)
+func mark_dodged(_p: Vector2, _r: float) -> void:
+	dodged = true
 
 
 func on_parried(_hb: Dictionary) -> void:

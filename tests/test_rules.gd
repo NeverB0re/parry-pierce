@@ -686,6 +686,31 @@ func _v034_test() -> void:
 	var early_immune: bool = p.is_immune()
 	_step(int(p.DASH_INVULN / DT))
 	_check("plain dash: invulnerable only at the start (early %s, late %s, dash left %.2f)" % [early_immune, p.is_immune(), p.dash_t], early_immune and p.dash_t > 0.0 and not p.is_immune())
+	_air(Vector2(-700, -1500))                           # 회피 무적으로 통과한 탄은 그 뒤로 맞지 않는다
+	p.invuln = 0.0
+	main.debug.god = false
+	_dash_dir("dash", Vector2.RIGHT)
+	_step(1)
+	b.shots.clear()
+	b.shots.spawn(p.position, Vector2.ZERO, 5.0)
+	main._check_attacks()
+	_check("bullet touched during dash invulnerability is marked dodged", b.shots.dodged[0] == 1)
+	p.dash_t = 0.0
+	p.dash_kind = ""
+	p.invuln = 0.0
+	p.shield_t = 0.0
+	p.small_guard = 0.0
+	var lv_d: int = main.lives
+	b.shots.pos[0] = p.position
+	main._check_attacks()
+	_check("the dodged bullet no longer hits afterwards (lives %d -> %d)" % [lv_d, main.lives], main.lives == lv_d)
+	b.shots.clear()
+	var dring = load("res://scripts/attacks/rings.gd").new(p.position)   # 고리는 닿은 고리만 회피 처리, 다음 고리는 그대로
+	dring.boss = b
+	dring.count = 2
+	dring.t = dring.wind + 0.0001
+	dring.mark_dodged(p.position, p.RADIUS)
+	_check("only the touched ring is marked dodged and it no longer hits (%s)" % str(dring.dodged_rings), dring.dodged_rings == [0] and dring._ring_at(p.position, p.RADIUS) == -1)
 	_air(pp + Vector2(-140, 0))
 	_dash_dir("charge", Vector2.RIGHT)
 	_step(6)

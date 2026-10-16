@@ -254,6 +254,7 @@ func _draw() -> void:
 	_draw_silos()
 	_draw_base()
 	_draw_part_marks()
+	_draw_gauge()
 	_draw_debris()
 	_draw_shards()
 	for a in active_attacks():

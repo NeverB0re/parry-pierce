@@ -511,6 +511,8 @@ func _check_attacks() -> void:
 	var beam_push: Vector2 = boss.beam_hit(p, Player.RADIUS)   # 패리 불가: 돌진 무적으로만 피한다
 	if beam_push != Vector2.ZERO and player.can_refresh_evade():
 		player.refresh_evade_invuln()
+	if beam_push != Vector2.ZERO and player.dodge_immune():  # 회피 무적으로 통과한 광선·고리는 그 뒤로 맞지 않는다
+		boss.mark_beam_dodged(p, Player.RADIUS)
 	if beam_push != Vector2.ZERO and not player.is_immune():
 		hurt_player(beam_push, boss.attack_kind())
 		return
@@ -521,10 +523,14 @@ func _check_attacks() -> void:
 			if _press(hb):
 				return
 			continue
-		if not melee and player.can_evade_reward() and boss.overlaps(hb, p, graze):
+		var dodged: bool = boss.hb_dodged(hb)          # 이미 회피 무적으로 통과한 공격: 맞지 않고 회피 보상도 다시 주지 않는다 (패리는 된다)
+		if not dodged and not melee and player.can_evade_reward() and boss.overlaps(hb, p, graze):
 			player.try_evade_reward()                   # 돌진 직후 공격이 스침 = 퍼펙트 회피
-		if not melee and player.can_refresh_evade() and boss.overlaps(hb, p, Player.RADIUS):
+		if not dodged and not melee and player.can_refresh_evade() and boss.overlaps(hb, p, Player.RADIUS):
 			player.refresh_evade_invuln()               # 퍼펙트 회피한 돌진 중 다른 탄에 닿을 때마다 추가 무적을 처음 길이로
+		if not dodged and player.dodge_immune(melee) and boss.overlaps(hb, p, Player.RADIUS):
+			boss.mark_hb_dodged(hb)                     # 회피 무적으로 통과: 이 탄·공격은 그 뒤로 맞지 않는다
+			dodged = true
 		if not boss.overlaps(hb, p, reach):
 			continue
 		if player.parry_active:
@@ -553,7 +559,7 @@ func _check_attacks() -> void:
 		var small: bool = hb.get("small", false)
 		if small and player.small_guard > 0.0:         # 일반 돌진이 끝난 직후 잠깐: 잔탄은 맞지 않는다
 			continue
-		var immune: bool = player.is_immune_melee() if melee else player.is_immune()
+		var immune: bool = dodged or (player.is_immune_melee() if melee else player.is_immune())
 		if not immune and boss.overlaps(hb, p, Player.RADIUS):
 			if small:                                  # 잔탄: 실드 셀이 바로 깨지지 않고 과열 게이지만 오른다 (제어 불능 없음)
 				_graze(hb)

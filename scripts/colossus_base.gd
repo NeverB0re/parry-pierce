@@ -42,6 +42,13 @@ var strike_glow := false             # 플레이어가 공격 돌진 중 = 타�
 var focus_glow := 0.0                # 방향 지정·차지 중: 노릴 수 있는 표적 강조 (0~1)
 var focus_from := Vector2.ZERO       # 강조 기준 위치(플레이어)
 var look_at := Vector2(0, -1200)       # 플레이어 위치 (그림 전용: 대기 모션이 바라본다. 판정에는 쓰지 않는다)
+# 체력 게이지: 코어를 두른 링 (모든 보스 공통, _draw 에서 _draw_gauge 를 부른다)
+const GAUGE_W := 10.0
+const GAUGE_HOLD := 0.45                     # 깎인 몫(흰 꼬리)이 머무는 시간
+var gauge_lag := -1.0                        # 흰 꼬리: 방금 깎인 만큼 잠깐 남았다가 따라 내려온다 (-1 = 아직 모름)
+var gauge_hit := 0.0                         # 방금 깎임 (번쩍·두꺼워짐)
+var gauge_seen := -1.0
+var gauge_hold := 0.0
 var focus_reach := 0.0               # 이 거리 안의 표적은 더 밝게
 
 
@@ -65,6 +72,10 @@ func reset() -> void:
 	events.clear()
 	if core != null:
 		core.reset()
+	gauge_lag = -1.0
+	gauge_seen = -1.0
+	gauge_hit = 0.0
+	gauge_hold = 0.0
 	queue_redraw()
 
 
@@ -183,6 +194,7 @@ func step(dt: float, ppos: Vector2) -> void:
 	if core != null:
 		core.step(dt)
 	_step_shards(dt)
+	_step_gauge(dt)
 	for i in part_flash.size():
 		part_flash[i] = maxf(0.0, part_flash[i] - dt * 4.0)
 	_step_effects(dt)
@@ -215,6 +227,75 @@ func step(dt: float, ppos: Vector2) -> void:
 		atk.t += dt
 		atk.step(dt, ppos)
 	queue_redraw()
+
+
+## 게이지 값 (남은 체력, 전체, 보호 몫이 끝나는 지점). 기본 = 외부 시스템 합 + 코어 장갑, 외부 시스템이 다 부서지면 코어가 열린다
+func gauge_values() -> Vector3:
+	if core == null:
+		return Vector3.ZERO
+	var hp := 0.0
+	var full := 0.0
+	for i in part_count():
+		hp += maxf(0.0, float(part_hp[i])) if i < part_hp.size() else 0.0
+		full += part_max_hp(i)
+	return Vector3(hp + core.armor_hp, full + core.armor_max, core.armor_max)
+
+
+## 게이지 링 반지름 (기본: 코어 껍질 바깥)
+func gauge_radius() -> float:
+	var r := 0.0
+	for q in core.shell_poly:
+		r = maxf(r, (q - core.center).length())
+	return r + 70.0
+
+
+func _step_gauge(dt: float) -> void:
+	if core == null:
+		return
+	var hp := gauge_values().x
+	if gauge_seen < 0.0:
+		gauge_seen = hp
+		gauge_lag = hp
+	if hp < gauge_seen - 0.01:                   # 깎임: 번쩍 + 흰 꼬리가 잠깐 머문다
+		gauge_hit = 1.0
+		gauge_hold = GAUGE_HOLD
+	gauge_seen = hp
+	gauge_hold -= dt
+	if gauge_hold <= 0.0:
+		gauge_lag = move_toward(gauge_lag, hp, dt * maxf(60.0, (gauge_lag - hp) * 3.0))
+	gauge_lag = maxf(gauge_lag, hp)
+	gauge_hit = maxf(0.0, gauge_hit - dt * 3.0)
+
+
+## 체력 게이지: 코어를 두른 링. 12시에서 시계 방향으로 남은 체력만큼 찬다.
+## 보호 단계(페이즈 1)에는 보호 몫(외부 시스템·방어막)이 청록으로 먼저 깎이고, 코어가 열리는 지점에 흰 눈금, 그 아래가 붉은 코어 몫.
+## 깎이면 번쩍이고 깎인 자리에 흰 꼬리가 잠깐 남는다
+func _draw_gauge() -> void:
+	if dead or core == null:
+		return
+	var g := gauge_values()
+	var hp := g.x
+	var full := maxf(1.0, g.y)
+	var floor_f := g.z / full
+	var hc: Vector2 = core.center
+	var R := gauge_radius()
+	var top := -PI * 0.5
+	var w := GAUGE_W * (1.0 + 0.5 * gauge_hit)
+	draw_arc(hc, R, 0.0, TAU, 96, Color(0.03, 0.04, 0.05, 0.75), w + 6.0)         # 바탕
+	if gauge_lag > hp:                                                         # 방금 깎인 몫 (흰 꼬리)
+		draw_arc(hc, R, top + TAU * hp / full, top + TAU * gauge_lag / full, 48, Color(1, 1, 1, 0.85), w)
+	var red := Color(C_HEART, 0.95).lerp(Color.WHITE, gauge_hit * 0.6)
+	var cyan := Color(0.45, 0.95, 1.0, 0.95).lerp(Color.WHITE, gauge_hit * 0.6)
+	if phase == 1:
+		draw_arc(hc, R, top, top + TAU * minf(hp / full, floor_f), 64, red, w)
+		if hp / full > floor_f:
+			draw_arc(hc, R, top + TAU * floor_f, top + TAU * hp / full, 64, cyan, w)
+		var tick := Vector2.from_angle(top + TAU * floor_f)                   # 코어가 열리는 눈금
+		draw_line(hc + tick * (R - w), hc + tick * (R + w), Color(1, 1, 1, 0.9), 3.0)
+	elif hp > 0.0:
+		draw_arc(hc, R, top, top + TAU * hp / full, 64, red, w)
+	else:                                                                      # 다 깎임: 한 발 더 (깜빡임)
+		draw_arc(hc, R, 0.0, TAU, 64, Color(1.0, 0.95, 0.7, 0.3 + 0.4 * float(int(t * 8.0) % 2)), 3.0)
 
 
 func _step_shards(dt: float) -> void:
@@ -385,10 +466,37 @@ func beam_hit(p: Vector2, r: float) -> Vector2:
 	if dead:
 		return Vector2.ZERO
 	for a in active_attacks():
+		if a.dodged:
+			continue
 		var push: Vector2 = a.beam_hit(p, r)
 		if push != Vector2.ZERO:
 			return push
 	return Vector2.ZERO
+
+
+## 회피 무적으로 p 에서 패리 불가 판정을 통과했다: 닿은 공격(고리는 그 고리만)이 더는 맞지 않는다
+func mark_beam_dodged(p: Vector2, r: float) -> void:
+	for a in active_attacks():
+		if not a.dodged and a.beam_hit(p, r) != Vector2.ZERO:
+			a.mark_dodged(p, r)
+
+
+## 이 판정은 이미 회피 무적으로 통과한 것인가 (탄 하나 / 공격 모듈)
+func hb_dodged(hb: Dictionary) -> bool:
+	if hb.has("idx"):
+		var i: int = hb["idx"]
+		return i < shots.dodged.size() and shots.dodged[i] == 1
+	var src = hb.get("src", null)
+	return src != null and src.dodged
+
+
+func mark_hb_dodged(hb: Dictionary) -> void:
+	if hb.has("idx"):
+		var i: int = hb["idx"]
+		if i < shots.dodged.size():
+			shots.dodged[i] = 1
+	elif hb.get("src", null) != null:
+		hb["src"].dodged = true
 
 
 ## 패리 / 요격당함: 탄은 사라지고, 공격 판정은 그 모듈(src, 없으면 지금 공격)이 처리한다 (팔은 밀려난다)

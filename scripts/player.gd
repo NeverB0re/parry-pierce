@@ -95,6 +95,7 @@ var dash_kind := ""              # "dash" | "charge" | "power"
 var dash_total := 0.28
 var perfect_dash := false        # PERFECT 패리 돌진
 var evade_window := 0.0          # 퍼펙트 회피 판정이 남은 시간
+var evade_inv_t := 0.0           # 퍼펙트 회피로 얻은 무적이 남은 시간 (회피 무적 판단용)
 var evade_rewarded := false      # 이번 돌진에서 이미 퍼펙트 회피 보상을 받음
 var evade_invuln := 0.0          # 이번 퍼펙트 회피로 얻은 추가 무적 길이 (돌진 중 다른 공격에 닿을 때마다 이 길이로 되돌린다)
 var assist_lock := false          # 에임 어시스트가 표적에 붙어 있음
@@ -479,6 +480,7 @@ func try_evade_reward(strong := false) -> void:
 	buff_t = stats.sync_time                       # 다시 얻으면 지속 시간 갱신
 	evade_invuln = PERFECT_EVADE_INVULN * (1.5 if strong else 1.0)
 	invuln = maxf(invuln, evade_invuln)            # 성공 직후 다른 공격에 맞지 않도록 무적 연장
+	evade_inv_t = evade_invuln
 	dash_cd = dash_t                               # 이 돌진이 끝나는 즉시 다시 돌진할 수 있다
 	main.on_perfect_evade(position, strong)
 
@@ -491,6 +493,14 @@ func can_refresh_evade() -> bool:
 
 func refresh_evade_invuln() -> void:
 	invuln = maxf(invuln, evade_invuln)
+	evade_inv_t = maxf(evade_inv_t, evade_invuln)
+
+
+## 회피 무적 중인가: 일반 돌진의 무적 구간 또는 퍼펙트 회피 무적. 이때 통과한 공격은 그 뒤로 맞지 않는다 (main.gd).
+## 근접공격은 일반 돌진 무적으로 못 피하므로 퍼펙트 회피 무적만 친다
+func dodge_immune(melee := false) -> bool:
+	var dash_window := dash_t > 0.0 and dash_kind == "dash" and dash_age < DASH_INVULN
+	return evade_inv_t > 0.0 or (dash_window and not melee)
 
 
 ## 피격: 잠시 조작 불가(스턴), 살짝 솟구친 뒤 추락
@@ -543,6 +553,7 @@ func step(dt: float) -> void:
 	small_guard = maxf(0.0, small_guard - dt)
 	strike_pass_t = maxf(0.0, strike_pass_t - dt)
 	evade_window = maxf(0.0, evade_window - dt)
+	evade_inv_t = maxf(0.0, evade_inv_t - dt)
 	parry_cd = maxf(0.0, parry_cd - dt)
 	invuln = maxf(0.0, invuln - dt)
 	dash_parry_t = maxf(0.0, dash_parry_t - dt)

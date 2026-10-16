@@ -61,8 +61,6 @@ const PART_AT := 3                           # 구동부가 달린 척추 마디
 const PART_HP := 16                          # (요격 한 번이면 끊어진다. 손상 단계 표시용)
 const PART_R := 52.0
 const GAUGE_R := 262.0                       # 체력 게이지 링 반지름 (방어막 바깥)
-const GAUGE_W := 14.0
-const GAUGE_HOLD := 0.45                     # 깎인 몫(흰 꼬리)이 머무는 시간
 const ZAP_TIME := 0.4                        # 요격 피해가 촉수 뿌리에서 코어로 흐르는 전류 줄기
 
 # ── 공격 고르기 ────────────────────────────────────────
@@ -106,10 +104,6 @@ var emit_glow: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]   # 발�
 var _ppos := Vector2(0, -400)
 var since_special := 0
 var zaps: Array[Dictionary] = []             # 코어로 흐르는 전류 줄기 {from, t}
-var gauge_lag := float(ARMOR_HP)              # 게이지의 흰 꼬리: 방금 깎인 만큼 잠깐 남았다가 따라 내려온다
-var gauge_hit := 0.0                         # 게이지가 방금 깎임 (번쩍·두꺼워짐)
-var gauge_seen := float(ARMOR_HP)            # 직전 프레임의 코어 체력
-var gauge_hold := 0.0                        # 흰 꼬리가 머무는 남은 시간
 var shield_flash := 0.0                      # 방어막에 무언가 부딪힘 (번쩍)
 var shield_hit_n := Vector2.UP               # 부딪힌 쪽
 var cracks: Array[PackedVector2Array] = []   # 코어 균열선 (피해가 쌓일수록 앞에서부터 더 많이 그린다)
@@ -169,10 +163,6 @@ func reset() -> void:
 	since_special = 0
 	zaps.clear()
 	shield_flash = 0.0
-	gauge_lag = float(ARMOR_HP)
-	gauge_hit = 0.0
-	gauge_seen = float(ARMOR_HP)
-	gauge_hold = 0.0
 
 
 # ── 방어막 · 외눈 코어 ─────────────────────────────────
@@ -439,16 +429,6 @@ func _step_phase(dt: float) -> void:
 		emit_glow[k] = move_toward(emit_glow[k], 0.0, dt * 2.5)
 	eye_charge = move_toward(eye_charge, 0.0, dt * 1.5)
 	shield_flash = maxf(0.0, shield_flash - dt * 3.0)
-	var hp := float(core.armor_hp)
-	if hp < gauge_seen - 0.01:                   # 깎임: 번쩍 + 흰 꼬리가 잠깐 머문다
-		gauge_hit = 1.0
-		gauge_hold = GAUGE_HOLD
-	gauge_seen = hp
-	gauge_hold -= dt
-	if gauge_hold <= 0.0:
-		gauge_lag = move_toward(gauge_lag, hp, dt * maxf(60.0, (gauge_lag - hp) * 3.0))
-	gauge_lag = maxf(gauge_lag, hp)
-	gauge_hit = maxf(0.0, gauge_hit - dt * 3.0)
 	for z in zaps.duplicate():
 		z["t"] = float(z["t"]) + dt
 		if z["t"] >= ZAP_TIME:
@@ -981,33 +961,13 @@ func _draw_shield() -> void:
 			draw_polyline(PackedVector2Array([p0, p0 + Vector2.from_angle(a + 2.6) * 60.0, p0 + Vector2.from_angle(a + 2.2) * 110.0]), Color(1, 1, 1, 0.8 * k), 3.0)
 
 
-## 체력 게이지: 눈알을 두른 링. 12시에서 시계 방향으로 남은 코어 체력만큼 찬다.
-## 방어막 단계에는 방어막이 깨지는 지점(SHIELD_FLOOR)까지가 청록, 그 아래가 붉은 코어 몫. 깎이면 번쩍이고 깎인 자리에 흰 꼬리가 잠깐 남는다
-func _draw_gauge() -> void:
-	if dead:
-		return
-	var hc := CORE_POS
-	var top := -PI * 0.5
-	var full := float(ARMOR_HP)
-	var hp := float(core.armor_hp)
-	var floor_f := float(SHIELD_FLOOR) / full
-	var w := GAUGE_W * (1.0 + 0.5 * gauge_hit)
-	draw_arc(hc, GAUGE_R, 0.0, TAU, 96, Color(0.03, 0.04, 0.05, 0.8), w + 8.0)         # 바탕
-	draw_arc(hc, GAUGE_R, 0.0, TAU, 96, Color(C_RIM, 0.25), 2.0)
-	if gauge_lag > hp:                                                              # 방금 깎인 몫 (흰 꼬리)
-		draw_arc(hc, GAUGE_R, top + TAU * hp / full, top + TAU * gauge_lag / full, 48, Color(1, 1, 1, 0.85), w)
-	var red := Color(C_HEART, 0.95).lerp(Color.WHITE, gauge_hit * 0.6)
-	var cyan := Color(0.45, 0.95, 1.0, 0.95).lerp(Color.WHITE, gauge_hit * 0.6)
-	if phase == 1:
-		draw_arc(hc, GAUGE_R, top, top + TAU * minf(hp / full, floor_f), 64, red, w)
-		if hp / full > floor_f:
-			draw_arc(hc, GAUGE_R, top + TAU * floor_f, top + TAU * hp / full, 64, cyan, w)
-		var tick := Vector2.from_angle(top + TAU * floor_f)                        # 방어막이 깨지는 눈금
-		draw_line(hc + tick * (GAUGE_R - w), hc + tick * (GAUGE_R + w), Color(1, 1, 1, 0.9), 4.0)
-	elif hp > 0.0:
-		draw_arc(hc, GAUGE_R, top, top + TAU * hp / full, 64, red, w)
-	else:                                                                           # 다 깎임: 한 발 더 (깜빡임)
-		draw_arc(hc, GAUGE_R, 0.0, TAU, 64, Color(1.0, 0.95, 0.7, 0.3 + 0.4 * float(int(t * 8.0) % 2)), 3.0)
+## 체력 게이지 (colossus_base.gd): 코어 체력만 보여 준다. 보호 몫 = 방어막이 깨지기 전까지 (SHIELD_FLOOR 위)
+func gauge_values() -> Vector3:
+	return Vector3(core.armor_hp, ARMOR_HP, SHIELD_FLOOR)
+
+
+func gauge_radius() -> float:
+	return GAUGE_R
 
 
 ## 요격 피해가 촉수 뿌리에서 코어로 흐르는 전류 줄기 (지그재그, 금빛 → 사라짐)
