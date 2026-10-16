@@ -1,6 +1,7 @@
 extends "res://scripts/attacks/attack.gd"
 ## 노드 분사 (결계 위성, 잔탄): 아래쪽에 있는 노드들이 바깥 방향으로 잔탄 부채를 몇 차례 뿌린다 (겨누지 않는다, 차례마다 반 칸 어긋남).
-## 잔탄 = 패리하면 흡수만 (리버스 드라이브 없음). 닫힌 동안의 기본 압박
+## 잔탄 = 패리하면 흡수만 (리버스 드라이브 없음). 닫힌 동안의 기본 압박. 피하기 힘든 만큼 부채마다(고리는 일정 간격마다) 금색 주탄을 하나씩 섞는다
+## (PERFECT 패리 → 리버스 드라이브로 결계에 금을 낼 기회)
 ## boss 에 필요한 것: NODES, CORE_POS, node_pos(i), set_glow(i, v), bolt_mult(), shots
 
 const Projectiles := preload("res://scripts/projectiles.gd")
@@ -16,6 +17,7 @@ var mode := "fan"                    # fan = 아래쪽 노드의 부채 / ring =
 const RING_N := 26
 const RING_R := 380.0
 const RING_SPEED := 220.0
+const RING_MAIN_EVERY := 6          # 고리에서 이만큼마다 주탄 하나
 
 
 func _init(mode_ := "fan") -> void:
@@ -35,7 +37,8 @@ func step(_dt: float, _ppos: Vector2) -> void:
 			var ro := (0.5 if done % 2 == 1 else 0.0) * TAU / RING_N
 			for k in RING_N:
 				var d := Vector2.from_angle(ro + k * TAU / RING_N)
-				boss.shots.spawn(o + d * RING_R, d * RING_SPEED * m, 8.0, 0.0, 0.0, Projectiles.Kind.SMALL)
+				var main_k := (k + done) % RING_MAIN_EVERY == 0       # 고리마다 몇 방향에 주탄
+				boss.shots.spawn(o + d * RING_R, d * RING_SPEED * m, 8.0, 0.0, 0.0, Projectiles.Kind.BOLT if main_k else Projectiles.Kind.SMALL)
 			boss.emit(Ev.BOLT, o)
 			done += 1
 			continue
@@ -45,7 +48,8 @@ func step(_dt: float, _ppos: Vector2) -> void:
 			var base: float = (o - boss.CORE_POS).angle() - SPREAD * 0.5 + off
 			for k in FAN_N:
 				var a: float = base + k * SPREAD / (FAN_N - 1)
-				boss.shots.spawn(o, Vector2.from_angle(a) * SPEED * m, 8.0, 0.0, 0.0, Projectiles.Kind.SMALL)
+				var main_k := k == FAN_N / 2 and done % 2 == 0          # 부채 가운데 = 금색 주탄 (차례 걸러)
+				boss.shots.spawn(o, Vector2.from_angle(a) * SPEED * m, 8.0, 0.0, 0.0, Projectiles.Kind.BOLT if main_k else Projectiles.Kind.SMALL)
 			boss.set_glow(i, 1.0)
 		boss.emit(Ev.BOLT, boss.CORE_POS)
 		done += 1

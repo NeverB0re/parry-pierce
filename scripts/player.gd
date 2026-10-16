@@ -12,6 +12,8 @@ const RADIUS := 12.0
 const GRAVITY := 900.0
 const BASE_FALL := 480.0         # 마우스가 수평일 때 낙하 속도 상한
 const DIVE_FALL := 1000.0        # 마우스를 아래로: 빨리 떨어진다
+const BRAKE := 2600.0            # 역추진: 반대쪽 조준 시 초당 줄이는 속도
+const BRAKE_FROM := 500.0        # 이 속도보다 빠를 때만 줄인다 (돌진 뒤 남은 관성. 평소 비행·낙하는 그대로)
 const THRUST := 560.0            # 약한 무한 추진(좌우/하강)
 const AIR_DRAG := 0.9
 const PLATFORM_SPEED := 260.0
@@ -314,9 +316,9 @@ func _dash(kind: String) -> void:
 		spd = CHARGE_SPEED
 		dash_total = CHARGE_DASH_TIME
 		sync_charge = buffed and buff_strong
-		if sync_charge:                          # 완전 동조: 거의 순간이동 (사거리는 같다)
+		if sync_charge:                          # 완전 동조: PERFECT 패리 드라이브처럼 거의 순간이동, 사거리 무제한
 			spd = PARRY_DASH_SPEED_PERFECT
-			dash_total = CHARGE_SPEED * CHARGE_DASH_TIME / PARRY_DASH_SPEED_PERFECT
+			dash_total = PARRY_DASH_TIME
 	dash_t = dash_total
 	dash_cd = stats.dash_cooldown
 	if kind == "charge":
@@ -433,9 +435,14 @@ func parry_dash_reach() -> float:
 	return UNLIMITED_REACH if aim_perfect else PARRY_DASH_SPEED * NORMAL_DRIVE_TIME
 
 
-## 사거리 무제한 돌진인가 (PERFECT 리버스 드라이브, 요격 고정된 리버스 드라이브·차지 강습)
+## 차지 강습 사거리 (완전 동조면 무제한: 조준선 길이)
+func charge_reach() -> float:
+	return UNLIMITED_REACH if buffed and buff_strong else CHARGE_SPEED * CHARGE_DASH_TIME
+
+
+## 사거리 무제한 돌진인가 (PERFECT 리버스 드라이브, 완전 동조 차지, 요격 고정된 리버스 드라이브·차지 강습)
 func _unlimited() -> bool:
-	return (dash_kind == "power" and perfect_dash) or ((dash_kind == "power" or dash_kind == "charge") and intercept_lock)
+	return (dash_kind == "power" and perfect_dash) or (dash_kind == "charge" and sync_charge) or ((dash_kind == "power" or dash_kind == "charge") and intercept_lock)
 
 
 ## 돌진 경로(지금 위치 → 조준 방향 reach)에 요격할 수 있는 공격 판정이 걸려 있는가
@@ -547,7 +554,7 @@ func step(dt: float) -> void:
 		if aim_phase:                                 # 에임 어시스트: 사거리 안 표적이 조준선 가까이 있으면 살짝 끌어당긴다
 			aim = _assisted(aim, parry_dash_reach(), POWER_RADIUS)
 		elif is_charged() or pending_kind == "charge":
-			aim = _assisted(aim, CHARGE_SPEED * CHARGE_DASH_TIME, 0.0)
+			aim = _assisted(aim, charge_reach(), 0.0)
 	if aim_phase:
 		facing = lerp_angle(facing, aim.angle(), 1.0 - exp(-ROT_SPEED * 2.0 * dt))
 		queue_redraw()
@@ -628,7 +635,7 @@ func step(dt: float) -> void:
 			dash_t -= dt
 		if dash_t <= 0.0:
 			vel = (vel * DASH_KEEP).limit_length(DRIVE_KEEP_MAX)   # 아주 빠른 PERFECT 드라이브가 끝나도 튕겨 날아가지 않게
-			var perfect_end := dash_kind == "power" and perfect_dash
+			var perfect_end := (dash_kind == "power" and perfect_dash) or (dash_kind == "charge" and sync_charge)   # 완전 동조 차지 = PERFECT 와 같은 착지 무적
 			if dash_kind == "dash" or dash_kind == "charge":   # 일반 돌진·차지 강습: 무적 없이 잔탄만 잠깐 막는다
 				small_guard = SMALL_GUARD
 				dash_parry_t = DASH_PARRY_GRACE
@@ -644,6 +651,9 @@ func step(dt: float) -> void:
 		if stun > 0.0:
 			fall_cap = DIVE_FALL
 		elif m.length() > AIM_DEADZONE:
+			var opp := -vel.dot(aim)                   # 역추진: 날아가는 반대쪽을 조준하면 그 방향 속도를 빨리 죽인다 (돌진 뒤 미끄러짐 제어)
+			if opp > 0.0 and not bouncing and vel.length() > BRAKE_FROM:   # 평소 비행 속도 아래로는 안 줄인다 (위를 조준해 공중에 멈추지 않게)
+				vel += aim * minf(minf(opp, BRAKE * dt), vel.length() - BRAKE_FROM)
 			vel.x += aim.x * THRUST * (BOUNCE_THRUST if bouncing else 1.0) * dt
 			if aim.y > 0.0:
 				vel.y += aim.y * THRUST * dt
@@ -852,8 +862,8 @@ func _clear_buff() -> void:
 ## 차지 강습(요격 포함)·리버스 드라이브가 적중하면 돌진 쿨다운을 돌려준다 (튕겨나는 중에도 바로 돌진). 일반 돌진은 그대로
 ## 튕김 무적(STRIKE_SHIELD)은 요격과 PERFECT 리버스 드라이브, 일반 리버스 드라이브는 짧게(NORMAL_DRIVE_SHIELD). 일반 돌진·차지 강습 적중은 잔탄만 잠깐 막는다
 func bounce_off(dir: Vector2, kind := "dash", intercept := false) -> void:
-	var perfect := kind == "power" and perfect_dash
-	var k := _recoil(kind, perfect or (kind == "charge" and sync_charge))
+	var perfect := (kind == "power" and perfect_dash) or (kind == "charge" and sync_charge)   # 완전 동조 차지 = PERFECT 와 같은 튕김 무적·반작용
+	var k := _recoil(kind, perfect)
 	dash_t = 0.0
 	_end_dash()
 	bouncing = true
@@ -1161,7 +1171,7 @@ func _draw() -> void:
 		if is_charged():               # 차지 완료: 몸이 살짝 빛나고 공격 사거리 레이저. (차지 중엔 떨림만)
 			draw_circle(Vector2.ZERO, 30.0, Color(C_ATTACK, 0.12 + 0.1 * pulse))
 			draw_circle(Vector2.ZERO, 19.0, Color(1.0, 0.85, 0.6, 0.12 + 0.12 * pulse))
-			_laser(aim, CHARGE_SPEED * CHARGE_DASH_TIME, C_ATTACK)
+			_laser(aim, charge_reach(), C_SYNC if buffed and buff_strong else C_ATTACK)
 
 	# 에임 어시스트: 붙은 표적을 고리로 표시
 	if assist_lock and (aim_phase or is_charged()):

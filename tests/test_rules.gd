@@ -2342,7 +2342,19 @@ func _satellite_test() -> void:
 	p.buffed = true
 	p.buff_strong = true
 	_dash_dir("charge", Vector2.RIGHT)
-	_check("full-sync charge is near-instant like a PERFECT drive (speed %.0f), same reach" % p.vel.length(), p.sync_charge and p.vel.length() >= p.PARRY_DASH_SPEED_PERFECT - 1.0 and absf(p.dash_total * p.vel.length() - p.CHARGE_SPEED * p.CHARGE_DASH_TIME) < 5.0)
+	_check("full-sync charge follows PERFECT drive rules: near-instant (speed %.0f), unlimited reach" % p.vel.length(), p.sync_charge and p.vel.length() >= p.PARRY_DASH_SPEED_PERFECT - 1.0 and p._unlimited() and p.charge_reach() >= p.UNLIMITED_REACH)
+	# 역추진: 돌진 뒤 남은 관성은 반대쪽 조준으로 빨리 멈추지만, 평소 비행 속도 아래로는 줄이지 않는다
+	var drift := func(aim_back: bool) -> float:
+		p.reset(Vector2(-700, -1500), false)
+		p.vel = Vector2(1100, 0)
+		main.touch_ui.stick = Vector2(-1, 0) if aim_back else Vector2.ZERO
+		for k in 20:
+			main._physics_process(DT)
+		main.touch_ui.stick = Vector2.ZERO
+		return p.vel.x
+	var v_brake: float = drift.call(true)
+	var v_free: float = drift.call(false)
+	_check("reverse thrust brakes leftover dash speed quickly (%.0f vs %.0f)" % [v_brake, v_free], v_brake < v_free - 250.0 and v_brake >= p.BRAKE_FROM - 600.0)
 	main.start_stage(0)                                       # 완전 동조 차지 적중: 차지 쿨다운 즉시 회복 + 잔탄 긁힘 한 칸 치료
 	var ob = main.boss
 	ob.next_t = 99.0
