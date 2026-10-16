@@ -34,6 +34,7 @@ const RESPAWN_DELAY := 1.3         # 용암에 빠진 뒤 재출격까지
 const RESPAWN_INVULN := 1.5
 const PLAT_SINK_TIME := 1.0        # 발사 후 발판이 가라앉는 시간
 const PLAT_RISE_TIME := 0.6
+const C_NUM_GOLD := Color(1.0, 0.86, 0.4)   # 큰 피해 숫자 (PERFECT 리버스 드라이브·요격)
 const HEAT_MAX := 3                # 잔탄에 이만큼 맞으면 실드 셀 1개가 깨진다 (과열 게이지)
 const HEAT_COOL := 4.0             # 이 시간 동안 잔탄에 안 맞으면 게이지가 한 칸 식는다
 const GRAZE_INVULN := 0.35         # 잔탄에 맞은 직후 무적
@@ -616,9 +617,11 @@ func _clash(hb: Dictionary, p: Vector2) -> void:
 	var at := p.lerp(contact, 0.4)
 	if hb.has("part"):                           # 부위에 달린 공격(팔·촉수)이면 그 부위에 피해. 프레스는 끊기만 한다
 		tele.hit("intercept_power" if kind == "power" else "intercept", dmg)
+		fx.number(at, dmg, C_NUM_GOLD, 56)
 		boss.damage_part(int(hb["part"]), dmg)
 	elif hb.has("core"):                         # 크라켄 코어 페이즈: 다시 자란 촉수 요격 → 코어에 바로 피해
 		tele.hit("intercept_power" if kind == "power" else "intercept", dmg)
+		fx.number(at, dmg, C_NUM_GOLD, 56)
 		if boss.intercept_core(int(hb["tent"]), dmg):
 			_core_destroyed(at)
 			return
@@ -926,6 +929,7 @@ func _drain_boss_events() -> void:
 					continue
 				var rd: float = ev["dmg"]                # 잔탄 0.5 · 주탄 1 · 유도탄 3 (소수점은 모아서 준다)
 				reflect_carry += rd
+				fx.number(pos, rd, Color(0.7, 1.0, 1.0), 34, "reflect")      # 반사탄 연타는 숫자 하나로 합친다
 				var dmg := int(reflect_carry)
 				reflect_carry -= dmg
 				shake = maxf(shake, 6.0 + rd * 2.0)
@@ -1096,6 +1100,17 @@ func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, kind := "d
 		fx.ring(contact, Color(0.75, 0.96, 1.0), 240.0, 0.35, 8.0)
 		fx.rays_burst(contact, 10, Color(0.8, 0.97, 1.0), 420.0, 0.35, 6.0)
 		fx.burst(contact, 22, Color(0.8, 0.97, 1.0), 1100.0, 0.5, 3.5, 0.0, -dir, 1.0)
+	if dmg > 0:                                # 피해 숫자: PERFECT 리버스 드라이브는 크고 금색, 일반 패리 드라이브는 흰색, 차지는 주황, 돌진은 작게
+		match kind:
+			"power":
+				if player.perfect_dash:
+					fx.number(contact, dmg, C_NUM_GOLD, 72)
+				else:
+					fx.number(contact, dmg, Color(0.92, 0.95, 1.0), 44)
+			"charge":
+				fx.number(contact, dmg, Color(1.0, 0.72, 0.4), 44 if buffed else 38)
+			_:
+				fx.number(contact, dmg, Color(0.85, 0.9, 1.0, 0.85), 28, "dash")
 	if boss.damage(hit, dmg):                  # 동력 코어가 부서짐 = 승리
 		_core_destroyed(contact)
 		return

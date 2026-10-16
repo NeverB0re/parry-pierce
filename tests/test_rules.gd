@@ -92,7 +92,7 @@ func _run() -> void:
 	main.touch_ui = FakeStick.new()
 
 	_check("numbers (cd %.2f, dmg %d/%d/%d/%d, part %d, core %d)" % [p.stats.dash_cooldown, p.DASH_DAMAGE, p.stats.charge_damage, p.stats.power_damage, p.stats.clash_damage, b.PART_HP, b.core.CORE_HP],
-		absf(p.stats.dash_cooldown - 0.9) < 0.001 and p.DASH_DAMAGE == 1 and p.stats.charge_damage == 3 and p.stats.power_damage == 6 and p.stats.power_damage_perfect == 16 and p.stats.clash_damage == 8 and b.PART_HP == 30 and b.ARMOR_HP == 160 and b.core.CORE_HP == 1)
+		absf(p.stats.dash_cooldown - 0.9) < 0.001 and p.DASH_DAMAGE == 1 and p.stats.charge_damage == 3 and p.stats.power_damage == 8 and p.stats.power_damage_perfect == 16 and p.stats.clash_damage == 8 and b.PART_HP == 30 and b.ARMOR_HP == 160 and b.core.CORE_HP == 1)
 
 	# ── 돌진: 짧게 = 돌진, 쿨다운 ──
 	_air(Vector2(-900, -1500))
@@ -225,8 +225,8 @@ func _run() -> void:
 	p.aim = Vector2.RIGHT
 	p.launch_parry_dash()
 	_step(6)
-	_check("normal parry drive: 6 dmg (hp %d)" % b.part_hp[0], b.part_hp[0] == b.PART_HP - 6)
-	_check("normal parry drive: no strike shield, only the small-bullet guard (shield %.2f)" % p.shield_t, p.shield_t <= 0.0 and p.small_guard > 0.0)
+	_check("normal parry drive: 8 dmg (hp %d)" % b.part_hp[0], b.part_hp[0] == b.PART_HP - 8)
+	_check("normal parry drive: short invulnerability after the hit (shield %.2f)" % p.shield_t, p.shield_t > 0.0 and p.shield_t <= p.NORMAL_DRIVE_SHIELD + 0.001)
 	_air(pp + Vector2(-200, 0))
 	p.aim_phase = true
 	p.aim_perfect = true
@@ -605,7 +605,8 @@ func _fortress_test() -> void:
 	p.reset(Vector2(-300, -1300), false)
 	p.invuln = 99.0
 	p.stats.reflect = true
-	p.dash_kind = "power"                              # 반사는 리버스 드라이브로 돌진하는 동안만
+	p.dash_kind = "power"                              # 반사는 PERFECT 리버스 드라이브로 돌진하는 동안만
+	p.perfect_dash = true
 	p.dash_t = 0.3
 	var tgt: Vector2 = b.target_pos(p.position)
 	var ti := -1
@@ -1107,8 +1108,15 @@ func _v037_test() -> void:
 	p.aim_phase = true
 	p.aim = Vector2.RIGHT
 	_check("reflect is off before the dash", not p.is_reflecting())
+	p.aim_perfect = false
 	p.launch_parry_dash()
-	_check("reflect is on during the reverse drive", p.is_reflecting())
+	_check("no reflect during a normal parry drive", not p.is_reflecting())
+	p.reset(b.part_pos(0) + Vector2(-200, 0), false)
+	p.aim_phase = true
+	p.aim_perfect = true
+	p.aim = Vector2.RIGHT
+	p.launch_parry_dash()
+	_check("reflect is on during the PERFECT reverse drive", p.is_reflecting())
 	_step(6)
 	_check("hit -> bouncing: reflect ends right away (bouncing %s)" % p.bouncing, p.bouncing and not p.is_reflecting())
 	b.shots.spawn(p.position + Vector2(30, 0), Vector2.ZERO, 5.0)

@@ -36,13 +36,14 @@ const PARRY_DASH_TIME := 0.22
 const NORMAL_DRIVE_TIME := 0.32  # 일반 패리 드라이브 사거리 ≈ 960px (차지 강습 정도). PERFECT 패리만 사거리 무제한
 const UNLIMITED_REACH := 3200.0  # 리버스 드라이브·요격: 사거리 무제한 (표적·벽·천장·바닥에 닿을 때까지). 조준선·어시스트는 이 거리까지 본다
 const UNLIMITED_MAX_T := 1.2     # 그래도 이 시간이 지나면 끝난다 (안전장치)
-const REFLECT_RADIUS := 70.0     # 반사 범위 (기체보다 넓게)
+const REFLECT_RADIUS := 95.0     # 반사 범위 (기체보다 넓게). PERFECT 리버스 드라이브 중에만
 const POWER_RADIUS := 8.0        # 패리 돌진은 타격 범위도 넓다
 # 직격 후: v0.6 방식 — 위로 솟구치고, 들어온 반대쪽으로 약간 밀리며, 마우스 좌우로 조종한다
 const BOUNCE_SIDE := 250.0       # 들어온 방향의 반대쪽으로 밀리는 가로 속도
 const BOUNCE_STEER := 750.0      # 튕길 때 마우스 좌우 방향으로 더하는 가로 속도 (좌우 조종)
 const ASSIST_SLACK := 60.0           # 사거리 여유
 const BOUNCE_THRUST := 2.0       # 튕겨나는 동안 좌우 추진 배율
+const NORMAL_DRIVE_SHIELD := 0.3 # 일반 패리 드라이브: 착지·적중 후 짧은 무적
 const STRIKE_SHIELD := 0.6       # 강한 직격(차지 강습·리버스 드라이브·요격) 후 튕겨나는 동안 무적 (최대). 통제를 되찾으면 바로 끝난다.
                                  # 일반 돌진 적중은 무적 없이 튕기기만 한다 (잔탄만 막는 옅은 실드 SMALL_GUARD_HIT) — 일반 공격 연타로 무적을 도배하지 못하게
 const SMALL_GUARD_HIT := 0.3
@@ -224,8 +225,9 @@ func is_attacking() -> bool:
 
 
 ## 반사 코어가 지금 탄을 되돌리는 중인가
+## 반사 코어: PERFECT 리버스 드라이브 중에만 둘레 탄을 되돌린다 (일반 패리 드라이브는 반사 없음)
 func is_reflecting() -> bool:
-	return stats.reflect and dash_kind == "power" and dash_t > 0.0
+	return stats.reflect and dash_kind == "power" and perfect_dash and dash_t > 0.0
 
 
 ## 카메라용: 차지가 절반 넘게 모였을 때부터 0 → 1 (짧게 누르는 연속 돌진에는 카메라가 움직이지 않게)
@@ -606,12 +608,11 @@ func step(dt: float) -> void:
 		if dash_t <= 0.0:
 			vel *= DASH_KEEP
 			var perfect_end := dash_kind == "power" and perfect_dash
-			if not perfect_end:               # 일반 돌진·차지 강습·일반 리버스 드라이브: 무적 없이 잔탄만 잠깐 막는다
+			if dash_kind == "dash" or dash_kind == "charge":   # 일반 돌진·차지 강습: 무적 없이 잔탄만 잠깐 막는다
 				small_guard = SMALL_GUARD
-			if dash_kind == "dash" or dash_kind == "charge":
 				dash_parry_t = DASH_PARRY_GRACE
-			var grace := stats.power_grace if perfect_end else 0.0
-			if grace > 0.0:                   # 착지 무적은 PERFECT 리버스 드라이브만
+			var grace := stats.power_grace if perfect_end else (NORMAL_DRIVE_SHIELD if dash_kind == "power" else 0.0)
+			if grace > 0.0:                   # 착지 무적: PERFECT 리버스 드라이브는 길게, 일반 패리 드라이브는 짧게
 				shield_max = grace
 				shield_t = grace
 			_end_dash()
@@ -821,13 +822,16 @@ func _clear_buff() -> void:
 
 ## 직격 후 위로 솟구친다 (차지·패리 돌진일수록 조금 더 높이). 좌우는 마우스(스틱)로 조종.
 ## 차지 강습(요격 포함)·리버스 드라이브가 적중하면 돌진 쿨다운을 돌려준다 (튕겨나는 중에도 바로 돌진). 일반 돌진은 그대로
-## 튕김 무적(STRIKE_SHIELD)은 요격과 PERFECT 리버스 드라이브만. 일반 돌진·차지 강습·일반 리버스 드라이브 적중은 잔탄만 잠깐 막는다
+## 튕김 무적(STRIKE_SHIELD)은 요격과 PERFECT 리버스 드라이브, 일반 리버스 드라이브는 짧게(NORMAL_DRIVE_SHIELD). 일반 돌진·차지 강습 적중은 잔탄만 잠깐 막는다
 func bounce_off(dir: Vector2, kind := "dash", intercept := false) -> void:
 	var perfect := kind == "power" and perfect_dash
 	dash_t = 0.0
 	_end_dash()
 	bouncing = true
-	if not intercept and not perfect:            # 무적 없음, 잔탄만 잠깐 막는다
+	if kind == "power" and not perfect and not intercept:   # 일반 패리 드라이브: 짧은 무적
+		shield_t = NORMAL_DRIVE_SHIELD
+		shield_max = NORMAL_DRIVE_SHIELD
+	elif not intercept and not perfect:          # 무적 없음, 잔탄만 잠깐 막는다
 		shield_t = 0.0
 		small_guard = maxf(small_guard, SMALL_GUARD_HIT)
 	else:

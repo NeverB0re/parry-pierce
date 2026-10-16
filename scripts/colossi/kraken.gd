@@ -508,7 +508,7 @@ func _choose(ppos: Vector2) -> void:
 	else:
 		var fire: Array[String] = ["ink", "tips", "ring"]     # 탄막마다 저격 유도탄이 함께 날아온다 (_start)
 		if hard:
-			fire.append_array(["eye", "eye"])                # 코어 단계: 눈알 동심원 (패리 불가)
+			fire.append("eye")                               # 코어 단계: 눈알 동심원 (패리 불가, 탄막 자리를 다 차지하지 않게 가끔)
 		var melee: Array[String] = []
 		for m in ["pound", "pound", "chase", "sweep", "constrict", "constrict"]:   # 시그니처: 연속 내려치기 · 조이기
 			if _melee_ok(m, ready):
@@ -556,8 +556,10 @@ func _zone_w(kind: String, p: Vector2) -> float:
 			return 1.0 if absf(p.x) < 750.0 and p.y > -1900.0 else 0.4
 		"sweep":
 			return 1.4 if low else 0.05
-		"ring", "eye":
+		"ring":
 			return 0.8
+		"eye":
+			return 0.5
 	return 1.0
 
 
