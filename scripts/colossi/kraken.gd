@@ -69,7 +69,9 @@ const GAP_FIRE := Vector2(0.25, 0.5)         # 탄막 뒤 (멍때릴 틈을 주�
 const RANGED_KINDS := ["ink", "fan", "tips", "ring"]
 const RANGED_SHARE := 0.7                    # 탄막 : 근접 = 7 : 3 (근접은 시그니처 패턴 위주)
 const CLEAR_WAIT := 2.5                      # 그래도 이 시간이 지나면 시작한다 (탄이 오래 남아 있을 때)
-const SPECIAL_EVERY := 4                     # 방전 그물(패리 불가)은 공격 이만큼마다 (드물게)
+const CROWD_R := 1300.0                      # 플레이어 둘레 이 안에
+const CROWD_CAP := 30                        # 적 탄이 이보다 많으면 다음 공격을 미룬다 (화면을 꽉 채우지 않는다)
+const SPECIAL_EVERY := 4                    # 방전 그물(패리 불가)은 공격 이만큼마다 (드물게)
 const COMBO_HITS := 3                        # 연타 타수
 const SWEEPERS := [4, 5]                     # 휩쓸기·난타는 아래로 늘어진 두 촉수만, 항상 바깥 → 안쪽으로 (방향을 가늠하기 쉽게)
 const MARCH_X := [-640.0, 0.0, 640.0]        # 행진: 이 자리를 한쪽 끝부터 차례로 내려친다
@@ -495,6 +497,9 @@ func _choose(ppos: Vector2) -> void:
 		if w == "net" or _melee_ok(w, ready):
 			_start(w, ready, ppos, hard)
 			return
+	if shots_near(ppos, CROWD_R) > CROWD_CAP:                 # 앞 탄막이 아직 화면에 많으면 걷힐 때까지 다음 탄막을 미룬다 (쉴 공간)
+		next_t = 0.2
+		return
 	since_special += 1
 	var kind := ""
 	if since_special >= SPECIAL_EVERY and randf() < 0.55:    # 드물게: 방전 그물 (패리 불가)

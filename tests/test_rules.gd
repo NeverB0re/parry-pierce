@@ -461,7 +461,8 @@ func _telemetry_test() -> void:
 	t.hit("charge", 3)
 	t.hurt_by("beam")
 	t.mark("part_break", 12.5)
-	t.add("atk_pound", 2)
+	t.pattern("pound", 3.0)
+	t.pattern("pound", 9.5)
 	t.md_path = "user://telemetry_test/log.md"                # 텔레메트리 빌드: 실행 파일 옆 md 요약 (여기서는 테스트 폴더)
 	t.finish("dead", 42.0, 0, {"phase": 1, "stage": "kraken"})
 	var ok := FileAccess.file_exists(t.last_path)
@@ -471,7 +472,7 @@ func _telemetry_test() -> void:
 	t.add("parry")
 	t.finish("win", 80.0, 2, {"phase": 3, "stage": "kraken"})
 	var md := FileAccess.get_file_as_string(t.md_path)
-	_check("telemetry md log: two runs appended, readable summary (%d chars)" % md.length(), md.count("\n## ") == 2 and md.contains("kraken · dead · 0분 42초") and md.contains("보스 패턴: pound ×2") and md.contains("피격: beam ×1"))
+	_check("telemetry md log: two runs appended, readable summary (%d chars)" % md.length(), md.count("\n## ") == 2 and md.contains("kraken · dead · 0분 42초") and md.contains("보스 패턴: pound ×2") and md.contains("패턴 순서: 0:03 pound, 0:09 pound") and md.contains("피격: beam ×1"))
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(t.md_path))
 	for fn in DirAccess.get_files_at("user://telemetry_test"):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path("user://telemetry_test/" + fn))
@@ -1474,6 +1475,11 @@ func _kraken_shield_test() -> void:
 	b._start("ring", [0, 1, 2, 3, 4, 5] as Array[int], Vector2(300, -700), false)   # 탄막에는 저격 유도탄이 섞여 날아온다
 	_check("kraken barrage brings homing missiles along", b.atk != null and b.atk.kind == "ring" and b.is_lingering("snipe"))
 	_check("kraken melee waits while homing missiles are still coming", not b._shots_clear(Vector2(300, -700)))
+	b.reset()
+	for k in b.CROWD_CAP + 5:                                # 화면에 탄이 많으면 다음 공격을 미룬다
+		b.shots.spawn(Vector2(300, -900), Vector2(0, 0), 10.0)
+	b._choose(Vector2(300, -700))
+	_check("kraken holds the next attack while the screen is crowded", b.atk == null and b.lingering.is_empty())
 	b.reset()
 	b.next_t = 99.0
 	_check("kraken emitters: siphon + tentacle tips + legs", b.emitters().size() == 9)

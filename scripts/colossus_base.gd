@@ -104,6 +104,15 @@ func shots_clear(ppos: Vector2) -> bool:
 	return true
 
 
+## 플레이어 둘레 r 안에 있는 적 탄 수 (화면이 탄으로 꽉 찼는지)
+func shots_near(ppos: Vector2, r: float) -> int:
+	var n := 0
+	for k in shots.size():
+		if shots.mine[k] != 1 and ppos.distance_to(shots.pos[k]) < r:
+			n += 1
+	return n
+
+
 ## 가중치 뽑기 {종류: 가중치}. avoid(직전 패턴)는 가중치를 크게 줄인다
 static func weighted_pick(w: Dictionary, avoid := "") -> String:
 	var total := 0.0

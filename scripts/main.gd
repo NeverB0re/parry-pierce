@@ -419,7 +419,7 @@ func _physics_body(delta: float) -> void:
 	var kd: String = boss.attack_kind()
 	if kd != tele_kd:
 		if kd != "" and state == State.PLAY:
-			tele.add("atk_" + kd)                        # 보스 패턴 사용 횟수
+			tele.pattern(kd, run_time)                     # 보스 패턴 사용 횟수·순서
 		tele_kd = kd
 	_drain_boss_events()
 	player.step(delta)

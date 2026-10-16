@@ -1,7 +1,8 @@
 extends "res://scripts/attacks/attack.gd"
 ## 크라켄 탄막 (사방에서 쏜다): 촉수 끝·배경 다리·분사구가 모두 발사점이다.
 ## 원칙: 탄막은 플레이어를 겨누지 않고 정해진 공간을 채운다 (빠져나갈 길을 미리 정해 두고 쏜다). 겨누는 것은 snipe 하나뿐.
-##  tips  = 촉수 끝 물결 — 발사점이 왼쪽 → 오른쪽(다음 바퀴는 반대) 차례로 경기장 가운데 쪽으로 넓은 부채를 쏜다. 바퀴마다 반 칸 어긋난다
+##  tips  = 촉수 끝 물결 — 발사점이 왼쪽 → 오른쪽(다음 바퀴는 반대) 차례로 경기장 가운데 쪽으로 넓은 부채를 쏜다. 바퀴마다 반 칸 어긋난다.
+##          한 바퀴에 발사점을 하나 걸러 쏜다 (다음 바퀴는 나머지) — 화면이 탄으로 꽉 차지 않게
 ##  ring  = 분사구에서 동심 고리 — 한 줄 걸러 반 칸씩 어긋난다 (고리 사이로 빠져나간다)
 ##  snipe = 저격 (시그니처, 유일하게 겨눈다) — 치켜든 두 촉수가 번갈아 조준선을 띄우고 빠른 유도탄을 한 발씩 쏜다.
 ##          따로 쓰지 않고 다른 탄막과 함께 보조 공격으로 돈다 (탄막을 피하는 동안 압박).
@@ -46,6 +47,8 @@ var ring_n := RING_N
 var ring_count := RING_COUNT
 var snipe_n := SNIPE_SHOTS
 var ids: Array[int] = []             # tips: 왼쪽 → 오른쪽 발사점 / snipe: 번갈아 쏠 두 발사점
+var seq: Array[int] = []             # tips: 쏘는 차례 (바퀴마다 발사점 하나 걸러)
+var seq_round: Array[int] = []       # tips: 그 차례의 바퀴 번호
 var done := 0                        # 쏜 횟수
 var spin := 1.0
 var aims: Dictionary = {}            # snipe: 발 번호 → 조준 각 (조준 중인 것만)
@@ -73,6 +76,16 @@ func _setup() -> void:
 			tips.sort_custom(func(a, b): return (a[1] as Vector2).x < (b[1] as Vector2).x)
 			for e in tips:
 				ids.append(int(e[0]))
+			for r in tips_rounds:
+				var row: Array[int] = []
+				for k in ids.size():
+					if k % 2 == r % 2:
+						row.append(ids[k])
+				if r % 2 == 1:                               # 다음 바퀴는 오른쪽 → 왼쪽
+					row.reverse()
+				for id in row:
+					seq.append(id)
+					seq_round.append(r)
 		"snipe":
 			for pair in [[0, 1], [6, 7]]:                # 치켜든 두 촉수, 없으면 배경 다리
 				for id in pair:
@@ -99,9 +112,9 @@ func step(_dt: float, ppos: Vector2) -> void:
 
 ## 물결: 바퀴마다 방향을 바꿔 차례로 아래쪽 반원 부채
 func _tips() -> void:
-	var total := ids.size() * tips_rounds
+	var total := seq.size()
 	var m: float = boss.bolt_mult()
-	for j in ids.size():                                  # 예고: 다음에 쏠 발사점이 달아오른다
+	for j in 3:                                           # 예고: 다음에 쏠 발사점이 달아오른다
 		var at := _tip_at(done + j) if done + j < total else INF
 		if at < INF:
 			boss.set_glow(_tip_id(done + j), clampf((t - (at - 0.5)) / 0.5, 0.0, 1.0))
@@ -109,7 +122,7 @@ func _tips() -> void:
 		var id := _tip_id(done)
 		var o: Vector2 = boss.emitter_pos(id)
 		if o != Vector2.INF:
-			var round_ := done / ids.size()
+			var round_ := seq_round[done]
 			var step_a := TIPS_SPREAD / (tips_n - 1)
 			var off := step_a * 0.5 if round_ % 2 == 1 else 0.0
 			var half := tips_n / 2
@@ -128,15 +141,11 @@ func _tips() -> void:
 
 
 func _tip_at(n: int) -> float:
-	var round_ := n / ids.size()
-	return WIND + n * TIPS_GAP + round_ * 0.5
+	return WIND + n * TIPS_GAP + seq_round[n] * 0.5
 
 
 func _tip_id(n: int) -> int:
-	var k := n % ids.size()
-	if (n / ids.size()) % 2 == 1:                          # 다음 바퀴는 오른쪽 → 왼쪽
-		k = ids.size() - 1 - k
-	return ids[k]
+	return seq[n]
 
 
 func _ring() -> void:
