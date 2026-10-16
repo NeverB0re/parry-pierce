@@ -518,6 +518,20 @@ func _meta_test() -> void:
 	pr2.path = pr.path
 	pr2.load_from_disk()
 	_check("profile saved and loaded (cores %s, stage %d)" % [pr2.cores, pr2.stage], pr2.cores == pr.cores and pr2.cleared == pr.cleared and pr2.stage == 1)
+	_check("one equip slot; the first core is equipped on pickup (%s)" % [pr.equipped], pr.slots() == 1 and pr.equipped == ["counter"] and pr2.equipped == ["counter"])
+	pr.record_clear(1)
+	_check("a new core is owned but not equipped while the slot is full (%s / %s)" % [pr.cores, pr.equipped], pr.cores.has("reflect") and pr.equipped == ["counter"])
+	pr.toggle_equip("reflect")
+	_check("equipping another core swaps it in (%s)" % [pr.equipped], pr.equipped == ["reflect"])
+	var eq_st = Up.build(base, pr.equipped)
+	_check("only the equipped core works (counter %s, reflect %s)" % [eq_st.counter, eq_st.reflect], eq_st.reflect and not eq_st.counter)
+	pr.toggle_equip("reflect")
+	pr.save()
+	var pr4 = main.Profile.new()
+	pr4.path = pr.path
+	pr4.load_from_disk()
+	_check("unequipping everything is kept after reload (%s)" % [pr4.equipped], pr.equipped.is_empty() and pr4.equipped.is_empty())
+	_check("cannot equip a core you do not own", not pr.toggle_equip("assault"))
 	# 구버전 저장: 노드·장착 코어·기동 코어 → 무시하고, 처리한 콜로서스의 코어는 모두 가진다
 	var cf := ConfigFile.new()
 	cf.set_value("run", "stage", 1)

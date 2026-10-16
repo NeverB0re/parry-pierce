@@ -1,7 +1,7 @@
 extends CanvasLayer
 ## 월드 맵 (스테이지 사이, ESC 메뉴에서도): 은하 9개(스테이지)와 목적지(10번째)를 점선 항로로 잇고, 기체가 고른 스테이지 위에 떠 있다.
 ## 깬 은하는 다시 골라 재전투할 수 있다. 안 깬 곳(다음 하나만 고를 수 있음)·아직 만들지 않은 곳은 회색.
-## 아래에는 얻은 동력 코어(모두 영구히 작동)를 보여 준다. FTL 도약 → 고른 스테이지.
+## 아래에는 얻은 동력 코어를 보여 주고, 눌러서(또는 숫자 키) 장착·교체한다 (장착 칸 수만큼만 작동). FTL 도약 → 고른 스테이지.
 
 const Loc := preload("res://scripts/loc.gd")
 signal jump_requested
@@ -12,6 +12,7 @@ const Stages := preload("res://scripts/stages.gd")
 const Sprites := preload("res://scripts/sprites.gd")
 const C_TAKEN := Color(1.0, 0.85, 0.45)
 const C_LOCKED := Color(0.5, 0.52, 0.58)
+const C_OWNED := Color(0.78, 0.8, 0.86)       # 얻었지만 장착하지 않은 코어
 
 var profile                          # main.gd 가 연결 (profile.gd)
 var ui_scale := 1.0
@@ -57,11 +58,15 @@ func _ready() -> void:
 	map.custom_minimum_size = Vector2(0, 280) * ui_scale
 	root.add_child(map)
 
-	core_head = _label(Loc.t("동력 코어 — 콜로서스를 처음 처리할 때마다 얻고, 얻은 코어는 모두 영구히 작동합니다."), 17, Color(1.0, 0.8, 0.55))
+	core_head = _label("", 17, Color(1.0, 0.8, 0.55))
 	root.add_child(core_head)
 	for id in Upgrades.CORES:
 		var l := _label("", 16, C_TAKEN)
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.mouse_filter = Control.MOUSE_FILTER_STOP              # 눌러서 장착·교체
+		l.gui_input.connect(func(e: InputEvent):
+			if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
+				equip(id))
 		root.add_child(l)
 		core_labels[id] = l
 
@@ -120,6 +125,14 @@ func jump() -> void:
 	jump_requested.emit()
 
 
+## 코어 장착·교체 (얻은 코어만)
+func equip(id: String) -> bool:
+	if not profile.toggle_equip(id):
+		return false
+	refresh()
+	return true
+
+
 ## 월드 맵에서 스테이지를 고른다 (고를 수 없는 곳이면 false)
 func select(i: int) -> bool:
 	if not profile.select_stage(i):
@@ -140,24 +153,34 @@ func _unhandled_input(e: InputEvent) -> void:
 			select(profile.stage - 1)
 		KEY_RIGHT:
 			select(profile.stage + 1)
+		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9:   # 숫자 키: 그 번째 코어 장착·교체
+			var ids := Upgrades.CORES.keys()
+			var k: int = e.keycode - KEY_1
+			if k < ids.size():
+				equip(ids[k])
 	get_viewport().set_input_as_handled()            # 맵을 연 동안엔 다른 키(ESC 메뉴 등)를 막는다. 나가는 길은 FTL 도약
 
 
 func refresh() -> void:
 	title_l.text = Loc.t("항로도 — 퇴각 항로")                 # 언어가 바뀌었을 수 있으니 열 때마다 다시
-	core_head.text = Loc.t("동력 코어 — 콜로서스를 처음 처리할 때마다 얻고, 얻은 코어는 모두 영구히 작동합니다.")
+	core_head.text = Loc.t("동력 코어 — 장착한 코어만 작동합니다 (장착 칸 %d개). 눌러서 장착·교체") % profile.slots()
 	jump_button.text = Loc.t("FTL 도약 ▶")
 	back_button.text = Loc.t("뒤로")
 	back_button.visible = allow_back
 	var st: Dictionary = Stages.LIST[profile.stage]
 	sub.text = Loc.t("도약지: %d. %s — 콜로서스 「%s」%s   ·   은하를 눌러 고르기 (깬 곳은 다시 싸울 수 있음)") % [
 		profile.stage + 1, Loc.t(st["coord"]), Loc.t(st["name"]), Loc.t(" (재전투)") if profile.is_cleared(profile.stage) else ""]
+	var n := 0
 	for id in core_labels:
+		n += 1
 		var l: Label = core_labels[id]
 		var c: Dictionary = Upgrades.CORES[id]
-		if profile.cores.has(id):
-			l.text = "✓ %s — %s" % [Loc.t(c["name"]), Loc.t(c["desc"])]
+		if profile.equipped.has(id):
+			l.text = "%d ◆ %s — %s   [%s]" % [n, Loc.t(c["name"]), Loc.t(c["desc"]), Loc.t("장착")]
 			l.add_theme_color_override("font_color", C_TAKEN)
+		elif profile.cores.has(id):
+			l.text = "%d ◇ %s — %s" % [n, Loc.t(c["name"]), Loc.t(c["desc"])]
+			l.add_theme_color_override("font_color", C_OWNED)
 		else:
 			l.text = Loc.t("??? — 콜로서스 「%s」를 처리하면 얻습니다") % _stage_name(c["from"])
 			l.add_theme_color_override("font_color", C_LOCKED)

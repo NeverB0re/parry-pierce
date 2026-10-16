@@ -1,6 +1,6 @@
 extends Node2D
 ## 프로토타입 메인: 루프, 입력, 패리/피격 판정, 카메라, 피드백(히트스톱/흔들림/플래시/사운드).
-## 메타 구조: 스테이지(콜로서스 하나) 클리어 → 그 동력 코어 획득(영구 강화) → 월드 맵(스테이지 선택) → FTL 도약. 진행은 profile 에 저장된다.
+## 메타 구조: 스테이지(콜로서스 하나) 클리어 → 그 동력 코어 획득 → 월드 맵(스테이지 선택·코어 장착) → FTL 도약. 진행은 profile 에 저장된다.
 
 const Loc := preload("res://scripts/loc.gd")
 const Player := preload("res://scripts/player.gd")
@@ -226,9 +226,9 @@ func reset_run() -> void:
 	cam.reset_smoothing()
 
 
-## 얻은 동력 코어를 모두 플레이어 수치에 반영 (영구 강화)
+## 장착한 동력 코어를 플레이어 수치에 반영
 func _apply_loadout() -> void:
-	player.stats = Upgrades.build(Player.BASE_STATS, profile.cores)
+	player.stats = Upgrades.build(Player.BASE_STATS, profile.equipped)
 
 
 ## 스테이지 시작: 콜로서스가 다르면 바꿔 끼우고, 개조를 반영해 처음부터
@@ -443,7 +443,7 @@ func _physics_body(delta: float) -> void:
 
 
 func _tele_extra() -> Dictionary:
-	return {"stage": Stages.LIST[stage_idx]["id"], "cores": Array(profile.cores),
+	return {"stage": Stages.LIST[stage_idx]["id"], "cores": Array(profile.equipped),
 		"phase": boss.phase, "part_hp": boss.part_hp.duplicate(), "armor_hp": boss.core.armor_hp}
 
 
@@ -1175,7 +1175,7 @@ func _core_destroyed(pos: Vector2) -> void:
 	var got: Dictionary = profile.record_clear(stage_idx)
 	var reward := ""
 	if got["core"] != "":
-		reward = Loc.t(" · 획득: %s (영구 강화)") % Loc.t(Upgrades.CORES[got["core"]]["name"])
+		reward = Loc.t(" · 획득: %s (항로도에서 장착)") % Loc.t(Upgrades.CORES[got["core"]]["name"])
 	hud.banner(Loc.t("코어 에너지 확보"), Loc.t("%.1f초 · 남은 실드 셀 %d%s · 클릭: 월드 맵 → FTL 도약 · R: 다시") % [run_time, lives, reward])
 
 

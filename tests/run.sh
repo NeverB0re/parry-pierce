@@ -23,6 +23,14 @@ run() {
 	echo "[$name] $(echo "$out" | grep -E "FAILS [0-9]|smoke ok|stages ok" | tail -1)"
 }
 
+# 먼저 게임이 뜨는지 확인한다: 스크립트 오류로 메인 씬이 못 뜨면 테스트들이 끝나지 않고 시간 제한까지 매달리므로 바로 멈춘다
+pre="$(timeout 60 "$G" --headless --path "$ROOT" --quit-after 5 2>&1)"
+if echo "$pre" | grep -qE "SCRIPT ERROR|Parse Error|Compile Error"; then
+	echo "[ERROR] 게임이 로드되지 않음 (스크립트 오류)"
+	echo "$pre" | grep -E "SCRIPT ERROR|Parse Error|Compile Error|at:" | head -10
+	exit 1
+fi
+
 run test_rules.gd
 run smoke.gd
 run smoke.gd -- --touch
