@@ -7,10 +7,7 @@ var parts: Array[Dictionary] = []
 var rings: Array[Dictionary] = []
 var rays: Array[Dictionary] = []
 var sprites: Array[Dictionary] = []
-var numbers: Array[Dictionary] = []    # 피해 숫자 {pos, val, color, size, life, max, key}
-
-const NUM_LIFE := 0.8
-const NUM_MERGE := 0.35                # 같은 종류가 이 시간 안에 또 맞으면 숫자를 합친다 (반사탄 연타)
+var streaks: Array[Dictionary] = []    # 잔상 궤적 {a, b, color, life, max}
 
 
 func _ready() -> void:
@@ -23,26 +20,18 @@ func clear() -> void:
 	rings.clear()
 	rays.clear()
 	sprites.clear()
-	numbers.clear()
-
-
-## 피해 숫자: 맞은 자리에서 튀어 올랐다 사라진다. key 가 같은 숫자가 방금 떴으면 그 숫자에 더한다
-func number(pos: Vector2, val: float, color: Color, size: int, key := "") -> void:
-	if key != "":
-		for n in numbers:
-			if n["key"] == key and float(n["max"]) - float(n["life"]) < NUM_MERGE:
-				n["val"] = float(n["val"]) + val
-				n["life"] = n["max"]
-				n["pop"] = 1.0
-				return
-	var off := Vector2(float(numbers.size() % 3 - 1) * 30.0, -40.0)   # 겹치지 않게 좌우로 (게임 난수는 쓰지 않는다)
-	numbers.append({"pos": pos + off, "val": val, "color": color, "size": size, "life": NUM_LIFE, "max": NUM_LIFE, "key": key, "pop": 1.0})
+	streaks.clear()
 
 
 ## 도트 폭발 애니메이션. kind 1(주황 불꽃)/2(주황 링)/3(청록 링), size = 화면에서 보이는 지름(px).
 ## reverse = 거꾸로 재생(안으로 모이는 연출, 퍼펙트 회피). 퍼펙트 패리·회피 등 큰 이벤트에 쓴다.
 func sprite(pos: Vector2, kind: int, size: float, life := 0.45, reverse := false, tint := Color.WHITE, delay := 0.0) -> void:
 	sprites.append({"pos": pos, "kind": kind, "size": size, "life": life, "max": life, "reverse": reverse, "tint": tint, "delay": delay})
+
+
+## 잔상 궤적: a → b 직선에 굵은 빛줄기 + 일정 간격 잔상 원이 남았다가 끝(b) 쪽부터 사라진다 (PERFECT 리버스 드라이브)
+func streak(a: Vector2, b: Vector2, color: Color, life := 0.4) -> void:
+	streaks.append({"a": a, "b": b, "color": color, "life": life, "max": life})
 
 
 ## 중심에서 사방으로 뻗는 빛줄기
@@ -94,6 +83,7 @@ func step(dt: float) -> void:
 		parts = parts.slice(parts.size() - MAX_PARTS)
 	_tick(rings, dt)
 	_tick(rays, dt)
+	_tick(streaks, dt)
 	i = sprites.size() - 1
 	while i >= 0:
 		var sp: Dictionary = sprites[i]
@@ -104,10 +94,6 @@ func step(dt: float) -> void:
 			if float(sp["life"]) <= 0.0:
 				sprites.remove_at(i)              # 스프라이트는 순서(겹침)가 보이므로 순서를 유지한다 (개수가 적다)
 		i -= 1
-	for n in numbers:
-		n["pos"] = (n["pos"] as Vector2) + Vector2(0, -90.0 * dt)
-		n["pop"] = maxf(0.0, float(n["pop"]) - dt * 6.0)
-	_tick(numbers, dt)
 	queue_redraw()
 
 
@@ -124,6 +110,20 @@ static func _tick(arr: Array[Dictionary], dt: float) -> void:
 
 
 func _draw() -> void:
+	for s in streaks:
+		var k := float(s["life"]) / float(s["max"])     # 1 → 0
+		var a: Vector2 = s["a"]
+		var b: Vector2 = s["b"]
+		var c: Color = s["color"]
+		var tail := a.lerp(b, 1.0 - k)                  # 출발점 쪽부터 걷힌다
+		draw_line(tail, b, Color(c, 0.35 * k), 34.0 * k + 4.0)
+		draw_line(tail, b, Color(1, 1, 1, 0.8 * k), 8.0 * k + 2.0)
+		var n := int(a.distance_to(b) / 90.0)
+		for q in n:
+			var p := a.lerp(b, (q + 0.5) / maxf(1.0, n))
+			if (p - a).length() < (tail - a).length():
+				continue
+			draw_circle(p, 26.0 * (0.4 + 0.6 * k), Color(c, 0.22 * k))
 	for sp in sprites:
 		if float(sp["delay"]) > 0.0:
 			continue
@@ -163,15 +163,3 @@ func _draw() -> void:
 			draw_arc(r["pos"], float(r["max_r"]) * (0.75 + 0.25 * ease(k, 0.35)), a0, a0 + float(r["span"]), 20, c, float(r["width"]) * (1.0 - k) + 1.0)
 			continue
 		draw_arc(r["pos"], float(r["max_r"]) * ease(k, 0.35), 0.0, TAU, 48, c, float(r["width"]) * (1.0 - k) + 1.0)
-	var font := ThemeDB.fallback_font
-	for n in numbers:
-		var k := float(n["life"]) / float(n["max"])
-		var v := float(n["val"])
-		var txt := str(int(v)) if is_equal_approx(v, roundf(v)) else "%.1f" % v
-		var fs := int(float(n["size"]) * (1.0 + 0.35 * float(n["pop"])))
-		var c: Color = n["color"]
-		c.a *= minf(1.0, k * 2.5)
-		var w := font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-		var at: Vector2 = (n["pos"] as Vector2) - Vector2(w * 0.5, 0)
-		draw_string_outline(font, at, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 8, Color(0, 0, 0, c.a * 0.8))
-		draw_string(font, at, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, c)

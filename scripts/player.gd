@@ -16,7 +16,8 @@ const THRUST := 560.0            # 약한 무한 추진(좌우/하강)
 const AIR_DRAG := 0.9
 const PLATFORM_SPEED := 260.0
 const DASH_SPEED := 2000.0       # 돌진: 무적 + 표적에 닿으면 피해 1. 사거리 약 560px. 자원 없이 쿨다운만
-const DASH_KEEP := 0.5           # 돌진이 끝난 뒤 남기는 속도 비율 (위쪽 관성은 남기지 않는다)
+const DRIVE_KEEP_MAX := 1800.0    # 돌진이 끝난 뒤 남는 속도 상한 (차지 강습까지는 그대로, PERFECT 드라이브만 걸린다)
+const DASH_KEEP := 0.5          # 돌진이 끝난 뒤 남기는 속도 비율 (위쪽 관성은 남기지 않는다)
 const DASH_DAMAGE := 1
 const CHARGE_HOVER := 0.15       # 이 시간 이상 누르면 차지 자세(공중 정지)로 들어간다
 const CHARGE_AUTO := 0.9         # 차지 완료 후 이 시간이 지나면 자동 발사 (v0.44: 1.3 → 0.9)
@@ -27,11 +28,11 @@ const PERFECT_EVADE_INVULN := 0.8   # 퍼펙트 회피 성공 시 추가 무적 
 const PARRY_PUSH := 1100.0          # 휩쓰는 팔을 그냥 패리하면: 피해 없이 반대쪽으로 튕겨나기만 한다
 const PARRY_PUSH_SHIELD := 0.5
 const PERFECT_WINDOW := 0.07     # 패리 누른 뒤 이 시간 안에 막으면 PERFECT
-const PARRY_MIN := 0.12          # 짧게 눌러도 이 시간만큼은 패리 유지
+const PARRY_MIN := 0.09          # 짧게 눌러도 이 시간만큼은 패리 유지
 const PARRY_COOLDOWN := 0.55     # 끝까지 버틴 뒤 재입력 대기 (남발 방지)
 const PARRY_RELEASE_CD := 0.25   # 중간에 뗐을 때 재입력 대기
 const PARRY_DASH_SPEED := 3000.0 # 일반 패리의 리버스 드라이브: 느리고 사거리가 있다 (NORMAL_DRIVE_TIME). 월드가 느려져도 플레이어는 실시간
-const PARRY_DASH_SPEED_PERFECT := 4000.0
+const PARRY_DASH_SPEED_PERFECT := 9000.0   # PERFECT: 거의 순간이동처럼 (끝나면 잔상 궤적, main.on_power_dash_end)
 const PARRY_DASH_TIME := 0.22
 const NORMAL_DRIVE_TIME := 0.32  # 일반 패리 드라이브 사거리 ≈ 960px (차지 강습 정도). PERFECT 패리만 사거리 무제한
 const UNLIMITED_REACH := 3200.0  # 리버스 드라이브·요격: 사거리 무제한 (표적·벽·천장·바닥에 닿을 때까지). 조준선·어시스트는 이 거리까지 본다
@@ -59,6 +60,7 @@ const CHAIN_BONUS := 2           # 연쇄 한 단계당 요격 피해 +2
 const CHAIN_MAX := 3
 const QUICK_TIME := 3.0          # 요격 성공: 이 시간 안의 다음 차지는 절반 시간에 모인다 (동조와 달리 피해 배율 없음)
 const STRIKE_PASS := 0.25         # 적중 직후 이 시간 안에 시작한 일반 돌진은, 방금 맞힌 표적의 원 안쪽에서만 충돌하지 않는다 (적 안에서 빠져나오는 돌진이 멈추지 않게)
+const DASH_INVULN := 0.16        # 일반 돌진(0.28초)의 무적 구간
 const SMALL_GUARD := 0.25        # 일반 돌진이 끝난 직후 이 시간 동안 잔탄에 맞지 않는다 (옅은 실드)
 const HEAT_RING_R := 64.0        # 잔탄 체력 링 (초기 빌드의 외부 시스템 원형 체력바 모양): 돌진 쿨다운 링 바깥
 const HEAT_RING_HOLD := 1.0      # 다 회복된 뒤 이만큼 보였다가
@@ -215,8 +217,9 @@ func is_immune_melee() -> bool:
 	return frozen or aim_phase or shield_t > 0.0 or invuln > 0.0 or launch_t > 0.0 or (dash_t > 0.0 and dash_kind != "dash")
 
 
+## 일반 돌진은 처음 DASH_INVULN 동안만 무적이다 (끝 무렵 탄 속에 들어가 있으면 맞는다 — 탄으로 파고드는 데 위험이 따르게)
 func is_immune() -> bool:
-	return frozen or aim_phase or dash_t > 0.0 or shield_t > 0.0 or invuln > 0.0 or launch_t > 0.0
+	return frozen or aim_phase or (dash_t > 0.0 and (dash_kind != "dash" or dash_age < DASH_INVULN)) or shield_t > 0.0 or invuln > 0.0 or launch_t > 0.0
 
 
 ## 모든 돌진은 표적에 닿으면 타격한다 (일반 돌진도 피해 1)
@@ -606,7 +609,7 @@ func step(dt: float) -> void:
 		else:
 			dash_t -= dt
 		if dash_t <= 0.0:
-			vel *= DASH_KEEP
+			vel = (vel * DASH_KEEP).limit_length(DRIVE_KEEP_MAX)   # 아주 빠른 PERFECT 드라이브가 끝나도 튕겨 날아가지 않게
 			var perfect_end := dash_kind == "power" and perfect_dash
 			if dash_kind == "dash" or dash_kind == "charge":   # 일반 돌진·차지 강습: 무적 없이 잔탄만 잠깐 막는다
 				small_guard = SMALL_GUARD
@@ -661,7 +664,7 @@ func step(dt: float) -> void:
 
 
 func _move(dt: float) -> void:
-	var steps := clampi(int(ceil(vel.length() * dt / 6.0)), 1, 12)
+	var steps := clampi(int(ceil(vel.length() * dt / 6.0)), 1, 28)
 	var sdt := dt / steps
 	for s in steps:
 		var prev_y := position.y
@@ -713,13 +716,14 @@ func _move(dt: float) -> void:
 ## 공격 돌진 종료(적중·빗나감 모두). 패리 돌진이 끝나면 슬로우가 풀리고 밀려난 팔이 돌아간다
 func _end_dash() -> void:
 	var was_power := dash_kind == "power"
+	var was_perfect := perfect_dash
 	dash_kind = ""
 	perfect_dash = false
 	power_boost = false
 	dash_pass = false
 	intercept_lock = false
 	if was_power:
-		main.on_power_dash_end()
+		main.on_power_dash_end(was_perfect)
 
 
 ## 이번 돌진의 피해량과 버프 소모

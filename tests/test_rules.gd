@@ -680,6 +680,12 @@ func _v034_test() -> void:
 	_dash_dir("dash", Vector2.RIGHT)
 	_step(6)
 	_check("plain dash strike: bounce without invulnerability, only a small-bullet guard (shield %.2f, guard %.2f)" % [p.shield_t, p.small_guard], p.shield_t <= 0.0 and p.small_guard > 0.0 and p.bouncing)
+	_air(Vector2(-700, -1500))                           # 일반 돌진은 처음 DASH_INVULN 동안만 무적 (끝 무렵 탄 속에선 맞는다)
+	_dash_dir("dash", Vector2.RIGHT)
+	_step(3)
+	var early_immune: bool = p.is_immune()
+	_step(int(p.DASH_INVULN / DT))
+	_check("plain dash: invulnerable only at the start (early %s, late %s, dash left %.2f)" % [early_immune, p.is_immune(), p.dash_t], early_immune and p.dash_t > 0.0 and not p.is_immune())
 	_air(pp + Vector2(-140, 0))
 	_dash_dir("charge", Vector2.RIGHT)
 	_step(6)
@@ -1269,7 +1275,7 @@ func _v038_test() -> void:
 	main.slowmo = 0.0
 	b.shots.clear()
 	p.parry_press()
-	_step(10)                                           # 패리를 누른 지 0.17초 (PERFECT 판정 0.07초는 지났다)
+	_step(6)                                            # 패리를 누른 지 0.1초 (PERFECT 판정 0.07초는 지났고, 패리 유지 0.14초 안)
 	_dash_dir("dash", Vector2.RIGHT)
 	_check("dash-parry state while dashing", p.is_dash_parry() and p.parry_active and p.parry_t > p.PERFECT_WINDOW)
 	b.shots.spawn(p.position + Vector2(40, 0), Vector2.ZERO, 5.0)
@@ -1299,8 +1305,15 @@ func _v038_test() -> void:
 	p.aim = Vector2.RIGHT
 	p.launch_parry_dash()
 	x0 = p.position.x
-	_step(int(0.9 / DT))
-	_check("and goes farther (%.0f px)" % (p.position.x - x0), p.position.x - x0 > normal_reach * 1.15 or p.position.x >= p.WALL_R - 20.0)
+	var far_x := x0
+	var after_v := 0.0                                  # 드라이브가 끝난 뒤 남은 속도 (빠른 드라이브가 끝나고 튕겨 날아가지 않게)
+	for k in int(0.9 / DT):
+		_step(1)
+		far_x = maxf(far_x, p.position.x)
+		if p.dash_kind == "":
+			after_v = maxf(after_v, p.vel.length())
+	_check("and goes farther (%.0f px)" % (far_x - x0), far_x - x0 > normal_reach * 1.15 or far_x >= p.WALL_R - 20.0)
+	_check("PERFECT drive leaves no runaway speed after it ends (%.0f)" % after_v, after_v < 2000.0)
 	p.parry_release()
 	p.aim_phase = false
 	# 돌진하지 않으면 같은 늦은 패리는 보통 판정
@@ -1309,7 +1322,7 @@ func _v038_test() -> void:
 	main.slowmo = 0.0
 	b.shots.clear()
 	p.parry_press()
-	_step(10)
+	_step(6)
 	_check("not dashing: no dash-parry", not p.is_dash_parry())
 	b.shots.spawn(p.position + Vector2(25, 0), Vector2.ZERO, 5.0)
 	_step(1)
@@ -1331,7 +1344,7 @@ func _v038_test() -> void:
 	main.slowmo = 0.0
 	b.shots.clear()
 	p.parry_press()
-	_step(10)
+	_step(6)
 	_dash_dir("charge", Vector2.RIGHT)
 	b.shots.spawn(p.position + Vector2(40, 0), Vector2.ZERO, 5.0)
 	_step(1)

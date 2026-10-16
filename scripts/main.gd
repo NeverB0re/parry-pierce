@@ -34,7 +34,6 @@ const RESPAWN_DELAY := 1.3         # 용암에 빠진 뒤 재출격까지
 const RESPAWN_INVULN := 1.5
 const PLAT_SINK_TIME := 1.0        # 발사 후 발판이 가라앉는 시간
 const PLAT_RISE_TIME := 0.6
-const C_NUM_GOLD := Color(1.0, 0.86, 0.4)   # 큰 피해 숫자 (PERFECT 리버스 드라이브·요격)
 const HEAT_MAX := 3                # 잔탄에 이만큼 맞으면 실드 셀 1개가 깨진다 (과열 게이지)
 const HEAT_COOL := 4.0             # 이 시간 동안 잔탄에 안 맞으면 게이지가 한 칸 식는다
 const GRAZE_INVULN := 0.35         # 잔탄에 맞은 직후 무적
@@ -63,6 +62,8 @@ var stage_idx := 0                    # 지금 싸우는 스테이지 (Stages.LI
 
 var state := State.PLAY
 var hitstop := 0.0
+var zoom_punch := 0.0                # PERFECT 리버스 드라이브 적중: 화면이 살짝 줌인했다 돌아온다
+var drive_from := Vector2.ZERO      # PERFECT 리버스 드라이브 출발점 (잔상 궤적)
 const CHARGED_SLOW := 0.12        # 차지 완료 순간 짧은 슬로우
 var slowmo := 0.0
 var shake := 0.0
@@ -496,8 +497,9 @@ func _update_camera(delta: float) -> void:
 	cam.position = cam.position.lerp(target, 1.0 - exp(-6.0 * delta))
 	cam.offset = Vector2(randf_range(-1, 1), randf_range(-1, 1)) * shake
 	shake = move_toward(shake, 0.0, 60.0 * delta)
-	var z := CAM_ZOOM * mode * _mobile_view_k()
-	cam.zoom = cam.zoom.lerp(Vector2(z, z), 1.0 - exp(-8.0 * delta))
+	var z := CAM_ZOOM * mode * _mobile_view_k() * (1.0 + 0.14 * zoom_punch)
+	zoom_punch = move_toward(zoom_punch, 0.0, delta * 2.5)
+	cam.zoom = cam.zoom.lerp(Vector2(z, z), 1.0 - exp(-(8.0 + 16.0 * zoom_punch) * delta))
 	bg.cam = cam.get_screen_center_position()
 
 
@@ -617,11 +619,9 @@ func _clash(hb: Dictionary, p: Vector2) -> void:
 	var at := p.lerp(contact, 0.4)
 	if hb.has("part"):                           # 부위에 달린 공격(팔·촉수)이면 그 부위에 피해. 프레스는 끊기만 한다
 		tele.hit("intercept_power" if kind == "power" else "intercept", dmg)
-		fx.number(at, dmg, C_NUM_GOLD, 56)
 		boss.damage_part(int(hb["part"]), dmg)
 	elif hb.has("core"):                         # 크라켄 코어 페이즈: 다시 자란 촉수 요격 → 코어에 바로 피해
 		tele.hit("intercept_power" if kind == "power" else "intercept", dmg)
-		fx.number(at, dmg, C_NUM_GOLD, 56)
 		if boss.intercept_core(int(hb["tent"]), dmg):
 			_core_destroyed(at)
 			return
@@ -929,7 +929,6 @@ func _drain_boss_events() -> void:
 					continue
 				var rd: float = ev["dmg"]                # 잔탄 0.5 · 주탄 1 · 유도탄 3 (소수점은 모아서 준다)
 				reflect_carry += rd
-				fx.number(pos, rd, Color(0.7, 1.0, 1.0), 34, "reflect")      # 반사탄 연타는 숫자 하나로 합친다
 				var dmg := int(reflect_carry)
 				reflect_carry -= dmg
 				shake = maxf(shake, 6.0 + rd * 2.0)
@@ -1063,11 +1062,14 @@ func on_perfect_evade(pos: Vector2, strong := false) -> void:
 
 
 ## 패리 돌진 종료(적중 또는 빗나감): 패리로 밀려난 팔은 바로 제자리로
-func on_power_dash_end() -> void:
+func on_power_dash_end(perfect := false) -> void:
 	boss.release_stagger()
+	if perfect:                                  # PERFECT 리버스 드라이브: 출발점부터 끝까지 금빛 잔상 궤적이 잠깐 남는다
+		fx.streak(drive_from, player.position, Color(1.0, 0.86, 0.45), 0.4)
 
 
 func on_parry_launch(pos: Vector2, dir: Vector2) -> void:
+	drive_from = pos
 	if not player.perfect_dash:                 # 일반 패리 드라이브: 작게
 		sfx.play("dash", 0.0, 0.0)
 		shake = maxf(shake, 6.0)
@@ -1100,17 +1102,6 @@ func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, kind := "d
 		fx.ring(contact, Color(0.75, 0.96, 1.0), 240.0, 0.35, 8.0)
 		fx.rays_burst(contact, 10, Color(0.8, 0.97, 1.0), 420.0, 0.35, 6.0)
 		fx.burst(contact, 22, Color(0.8, 0.97, 1.0), 1100.0, 0.5, 3.5, 0.0, -dir, 1.0)
-	if dmg > 0:                                # 피해 숫자: PERFECT 리버스 드라이브는 크고 금색, 일반 패리 드라이브는 흰색, 차지는 주황, 돌진은 작게
-		match kind:
-			"power":
-				if player.perfect_dash:
-					fx.number(contact, dmg, C_NUM_GOLD, 72)
-				else:
-					fx.number(contact, dmg, Color(0.92, 0.95, 1.0), 44)
-			"charge":
-				fx.number(contact, dmg, Color(1.0, 0.72, 0.4), 44 if buffed else 38)
-			_:
-				fx.number(contact, dmg, Color(0.85, 0.9, 1.0, 0.85), 28, "dash")
 	if boss.damage(hit, dmg):                  # 동력 코어가 부서짐 = 승리
 		_core_destroyed(contact)
 		return
@@ -1124,10 +1115,11 @@ func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, kind := "d
 			fx.ring(contact, Color(1, 0.9, 0.7), 150.0, 0.3, 7.0)
 			fx.burst(contact, 18, Color(1.0, 0.8, 0.5), 900.0, 0.4, 3.0, 0.0, -dir, 1.1)
 			fx.sprite(contact, 1, 200.0, 0.35)
-		"power":                                 # PERFECT 리버스 드라이브: 크게
+		"power":                                 # PERFECT 리버스 드라이브: 크게 (긴 히트스톱 + 줌 펀치)
 			_cure_heat(contact)
 			_perfect_impact(contact, dir)
-			hitstop = maxf(hitstop, 0.18)
+			hitstop = maxf(hitstop, 0.3)
+			zoom_punch = 1.0
 			shake = maxf(shake, 26.0)
 			sfx.play("break", 4.0)
 			sfx.play("perfect", 0.0)

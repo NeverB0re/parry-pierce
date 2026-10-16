@@ -24,7 +24,7 @@ extends Resource
 
 @export_group("패리·조준")
 @export var parry_buffer := 0.15            ## 패리 쿨다운 중 누른 입력을 이만큼 기억
-@export var parry_hold_max := 0.2           ## 꾹 누르고 있을 때 패리 판정 최대 유지 시간
+@export var parry_hold_max := 0.14          ## 꾹 누르고 있을 때 패리 판정 최대 유지 시간
 @export var parry_reach := 30.0             ## 패리 판정은 몸보다 이만큼 넓다 (px)
 @export var aim_time := 1.4                 ## 패리 성공 후 방향을 정하는 슬로우 시간(실시간 초) = 발사 유예
 @export var aim_time_perfect := 1.9
