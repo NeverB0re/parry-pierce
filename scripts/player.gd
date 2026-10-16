@@ -44,21 +44,20 @@ const UNLIMITED_MAX_T := 1.2     # 그래도 이 시간이 지나면 끝난다 (
 const REFLECT_RADIUS := 95.0     # 반사 범위 (기체보다 넓게). PERFECT 리버스 드라이브 중에만
 const POWER_RADIUS := 8.0        # 패리 돌진은 타격 범위도 넓다
 # 직격 후: v0.6 방식 — 위로 솟구치고, 들어온 반대쪽으로 약간 밀리며, 마우스 좌우로 조종한다
-const BOUNCE_SIDE := 250.0       # 들어온 방향의 반대쪽으로 밀리는 가로 속도
 const BOUNCE_STEER := 750.0      # 튕길 때 마우스 좌우 방향으로 더하는 가로 속도 (좌우 조종)
 const ASSIST_SLACK := 60.0           # 사거리 여유
 const BOUNCE_THRUST := 2.0       # 튕겨나는 동안 좌우 추진 배율
-const NORMAL_DRIVE_SHIELD := 0.3 # 일반 패리 드라이브: 착지·적중 후 짧은 무적
-const STRIKE_SHIELD := 0.6       # 강한 직격(차지 강습·리버스 드라이브·요격) 후 튕겨나는 동안 무적 (최대). 통제를 되찾으면 바로 끝난다.
+const NORMAL_DRIVE_SHIELD := 0.5 # 일반 패리 드라이브: 착지·적중 후 짧은 무적
+const STRONG_SHIELD := 1.0       # PERFECT 리버스 드라이브·완전 동조 차지 적중 후 튕겨나는 동안 무적 (돌진하면 끝)
+const BOUNCE_BACK := 700.0       # 적중 후 들어온 반대 방향으로 튕겨나는 속도 (× 반작용)
+const BOUNCE_UP_SHARE := 0.55    # 위로 솟는 몫 (bounce_up 의 비율, 아래에서 위로 때렸을 때는 0 → 아래로 떨어져 나온다)
+const STRIKE_SHIELD := 0.6       # 요격 후 튕겨나는 동안 무적 (돌진하면 끝)
                                  # 일반 돌진 적중은 무적 없이 튕기기만 한다 (잔탄만 막는 옅은 실드 SMALL_GUARD_HIT) — 일반 공격 연타로 무적을 도배하지 못하게
 const SMALL_GUARD_HIT := 0.3
-const BOUNCE_END := 0.25         # 솟구치는 속도가 처음의 이 비율 아래로 떨어지면 튕김 끝 = 통제 회복 (v0.37: 0.4 → 0.25, 무적이 조금 더 길다)
 const PRESS_PIN_SPEED := 2300.0  # 프레스(천장 근접공격)를 패리하면 이 속도로 아래로 내리꽂힌다
 const PRESS_PIN_TIME := 1.0
 const STUN_INVULN := 0.4         # 스턴이 끝난 뒤 추가 무적
 const DASH_PARRY_GRACE := 0.12   # 돌진패리: 일반 돌진이 끝난 직후에도 이만큼은 돌진 중으로 친다
-const CORE_REBOUND := 0.45       # 코어 안쪽으로 튕길 뻔한 속도를 바깥으로 이 비율만큼 되튕긴다
-const CORE_REBOUND_SHIELD := 0.5 # 그때의 튕김 무적
 const CHAIN_TIME := 4.0          # 강습 코어: 이 시간 안에 다음 요격이 없으면 연쇄가 끊긴다
 const CHAIN_BONUS := 2           # 연쇄 한 단계당 요격 피해 +2
 const CHAIN_MAX := 3
@@ -576,9 +575,8 @@ func step(dt: float) -> void:
 	invuln = maxf(0.0, invuln - dt)
 	dash_parry_t = maxf(0.0, dash_parry_t - dt)
 	shield_t = maxf(0.0, shield_t - dt)
-	if bounce_rise > 0.0 and vel.y > -bounce_rise * BOUNCE_END:   # 직격 튕김이 끝나 통제를 되찾음 → 무적도 끝
+	if shield_t <= 0.0:
 		bounce_rise = 0.0
-		shield_t = 0.0
 	if shield_t <= 0.0:
 		bouncing = false
 	launch_t = maxf(0.0, launch_t - dt)
@@ -801,11 +799,8 @@ func _on_strike(hit: Dictionary) -> void:
 	if hit.get("kind", "") == "core" or hit.get("kind", "") == "shield":   # 큰 코어·방어막: 튕김이 껍질 안쪽(예: 아래에서 맞혀 위로)을 향하면 바깥으로 되튄다 (코어 안에 박히지 않게)
 		var n: Vector2 = hit["n"]
 		var vn := vel.dot(n)
-		if vn < 0.0:
-			vel -= n * vn * (1.0 + CORE_REBOUND)
-			bounce_rise = 0.0                      # 솟구치지 않으므로 튕김 무적은 짧게 고정
-			shield_t = CORE_REBOUND_SHIELD
-			shield_max = CORE_REBOUND_SHIELD
+		if vn < 0.0:                               # 그대로 바깥으로 되튕긴다 (세기·무적은 그 일격 그대로)
+			vel -= n * vn * 2.0
 
 
 ## 요격 피해: 리버스 드라이브로 요격하면 리버스 드라이브 피해(12, PERFECT 16) 그대로, 차지 강습이면 clash_damage
@@ -885,8 +880,8 @@ func bounce_off(dir: Vector2, kind := "dash", intercept := false) -> void:
 		shield_t = 0.0
 		small_guard = maxf(small_guard, SMALL_GUARD_HIT)
 	else:
-		shield_t = STRIKE_SHIELD                 # 튕겨나는 동안 무적 (통제를 되찾으면 끝)
-		shield_max = STRIKE_SHIELD
+		shield_t = STRONG_SHIELD if perfect else STRIKE_SHIELD   # 튕겨나는 동안 무적 (돌진하면 끝)
+		shield_max = shield_t
 	strike_pass_t = STRIKE_PASS
 	parry_cd = 0.0                               # 튕겨나오는 즉시 패리 가능
 	if kind != "dash":
@@ -897,8 +892,12 @@ func bounce_off(dir: Vector2, kind := "dash", intercept := false) -> void:
 	var steer := 0.0
 	if m.length() > AIM_DEADZONE:
 		steer = m.normalized().x
-	vel = Vector2(-dir.x * BOUNCE_SIDE * (1.0 + (k - 1.0) * 1.5) + steer * BOUNCE_STEER, -stats.bounce_up * k)
-	bounce_rise = stats.bounce_up * k
+	if steer * dir.x > 0.0:                      # 마우스가 아직 표적 쪽이면 그쪽으로는 조종하지 않는다 (먼저 충분히 튕겨 나온다)
+		steer = 0.0
+	# 튕김: 들어온 반대 방향으로 뒤로 + 위로 조금 (아래에서 위로 때렸으면 위로는 안 솟고 아래로 떨어져 나온다)
+	var up_k := clampf(1.0 + dir.y, 0.0, 1.0)
+	vel = -dir * BOUNCE_BACK * k + Vector2(steer * BOUNCE_STEER, -stats.bounce_up * k * BOUNCE_UP_SHARE * up_k)
+	bounce_rise = stats.bounce_up * k if shield_t > 0.0 else 0.0
 
 
 ## 튕겨나는 힘 (반작용): 공격이 셀수록 더 크게 튕긴다 — 일반 돌진 < 차지 < 일반 패리 드라이브 < PERFECT·완전 동조

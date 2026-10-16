@@ -35,6 +35,7 @@ const OPEN_TIME := 7.0                       # 열려 있는 시간
 const CLOSE_WARN := 1.0                      # 닫히기 전 깜빡이는 시간
 const CLOSE_REST := 0.5                      # 닫힌 직후 첫 공격까지
 const CRACKS_TO_OPEN := 3                    # 완전 동조 차지·PERFECT 드라이브를 이만큼 꽂아야 열린다
+const STAGGER := 0.8                         # 금이 간 뒤 휘청이는 시간 (공격 없음)
 const SEAL_GUARD := 2.5                      # 닫힌 직후 이 시간 동안은 금이 가지 않는다
 
 # ── 공격 고르기 ────────────────────────────────────────
@@ -181,8 +182,11 @@ func damage(hit: Dictionary, dmg: int) -> bool:
 			return false
 		pending_open = false
 		cracks += 1
-		if cracks < CRACKS_TO_OPEN:              # 금만 간다 (크게 흔들리고 파편이 튄다)
+		if cracks < CRACKS_TO_OPEN:              # 금만 간다 (크게 흔들리고 파편이 튄다). 위성이 휘청여 진행 중인 공격이 끊기고 잠깐 쉰다
 			emit(Ev.CORE_STAGE, CORE_POS + Vector2(hit["n"]) * BARRIER_R, {"stage": cracks, "fell": 0})
+			atk = null
+			lingering.clear()
+			next_t = STAGGER
 			return false
 		_open()
 		return damage_core(dmg)

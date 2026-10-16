@@ -81,6 +81,7 @@ var spawn := SPAWN
 var spawn_on_platform := true
 var win_t := 0.0                   # 승리 후 흐른 시간 (바로 클릭해 정비로 넘어가는 실수 방지)
 var heat := 0                      # 과열 게이지 (잔탄 피격 횟수)
+var last_strike_t := -99.0         # 마지막으로 적을 때린 시각 (텔레메트리: 때린 직후 피격)
 var reflect_carry := 0.0           # 반사탄의 소수점 피해 (잔탄 0.5) 를 모아 둔다
 var heat_t := 0.0                  # 다음에 한 칸 식을 때까지
 
@@ -642,6 +643,7 @@ func _clash(hb: Dictionary, p: Vector2) -> void:
 	hb["dir"] = dir                              # 촉수는 부딪힌 방향으로 크게 튕겨 나간다
 	boss.on_parried(hb)                          # 팔: 휩쓸던 반대쪽으로 밀려나 잠시 멈춘다 (관절 노출) / 프레스: 걸려서 도로 올라간다
 	var at := p.lerp(contact, 0.4)
+	last_strike_t = run_time
 	if hb.has("part"):                           # 부위에 달린 공격(팔·촉수)이면 그 부위에 피해. 프레스는 끊기만 한다
 		tele.hit("intercept_power" if kind == "power" else "intercept", dmg)
 		boss.damage_part(int(hb["part"]), dmg)
@@ -683,7 +685,10 @@ func _clash(hb: Dictionary, p: Vector2) -> void:
 func hurt_player(push: Vector2, cause := "attack", damage := true) -> void:
 	if debug.god:
 		return
+	if cause == "":
+		cause = "unparry"                          # 자리를 내준(진행 중 공격이 없는) 패리 불가 판정
 	tele.hurt_by(cause if boss.attack_kind() == "" or cause == boss.attack_kind() else "%s(%s)" % [cause, boss.attack_kind()])   # 맞은 판정(진행 중이던 패턴)
+	_tele_after_strike()
 	var p: Vector2 = player.position
 	player.on_hurt(push)
 	hitstop = 0.07
@@ -722,6 +727,7 @@ func _graze(hb: Dictionary) -> void:
 	if debug.god:
 		return
 	tele.hurt_by("small")
+	_tele_after_strike()
 	var p: Vector2 = player.position
 	heat += 1
 	heat_t = HEAT_COOL
@@ -1132,8 +1138,15 @@ func on_parry_launch(pos: Vector2, dir: Vector2) -> void:
 
 
 ## 돌진 적중. kind: "dash"(피해 1, 가볍게) / "charge"(3, 주황) / "power"(패리 돌진 12·16, 크게)
+## 텔레메트리: 적을 때린(막힌 것 포함) 직후 1초 안에 맞았는가 (무적이었는지와 함께)
+func _tele_after_strike() -> void:
+	if run_time - last_strike_t < 1.0:
+		tele.add("hurt_after_strike")
+
+
 func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, kind := "dash", buffed := false, strong := false) -> void:
 	var contact := pos + dir * Player.RADIUS
+	last_strike_t = run_time
 	if boss.blocks_strike(hit, kind, player.perfect_dash, strong):   # 방어막·결계: 튕겨 나온다 (크라켄 = 리버스 드라이브만, 결계 위성 = 완전 동조 차지·PERFECT 드라이브만 뚫는다)
 		tele.add("shield_block")
 		boss.shield_flash = 1.0

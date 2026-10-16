@@ -183,19 +183,25 @@ func _run() -> void:
 	var cd_before: float = p.dash_cd
 	_step(6)
 	_check("dash hit part: 1 dmg (hp %d)" % b.part_hp[0], b.part_hp[0] == b.PART_HP - 1)
-	_check("rises after hit (vy %.0f, up=%.0f)" % [p.vel.y, p.stats.bounce_up], p.vel.y < -p.stats.bounce_up * 0.9 and p.vel.y > -p.stats.bounce_up * 1.4)
-	_check("pushed to opposite side of approach (vx %.0f)" % p.vel.x, p.vel.x < 0.0 and p.vel.x > -400.0)
+	_check("rises a little after a side hit (vy %.0f, up=%.0f)" % [p.vel.y, p.stats.bounce_up], p.vel.y < -p.stats.bounce_up * 0.3 and p.vel.y > -p.stats.bounce_up * 0.9)
+	_check("knocked back the way it came (vx %.0f)" % p.vel.x, p.vel.x < -500.0)
 	_check("cooldown not reset on hit (cd %.2f)" % p.dash_cd, p.dash_cd > 0.4 and p.dash_cd <= cd_before)
 	_check("bounce height reduced vs v0.6 (1050 -> %.0f)" % p.stats.bounce_up, p.stats.bounce_up < 1050.0 and p.stats.bounce_up >= 800.0)
 	_air(pp + Vector2(0, 140))
 	_dash_dir("dash", Vector2.UP)
 	_step(6)
-	_check("hit from below also rises (vy %.0f)" % p.vel.y, p.vel.y < -p.stats.bounce_up * 0.9)
+	_check("hit from below knocks the ship back down, away from the target (vy %.0f)" % p.vel.y, p.vel.y > 300.0)
 	_air(pp + Vector2(-140, 0))
 	main.touch_ui.stick = Vector2(1, 0)
 	_dash_dir("dash", Vector2.RIGHT)
 	_step(6)
-	_check("steer with mouse x (vx %.0f)" % p.vel.x, p.vel.x > 300.0)
+	_check("mouse still on the target does not pull the bounce back in (vx %.0f)" % p.vel.x, p.vel.x < -500.0)
+	main.touch_ui.stick = Vector2.ZERO
+	_air(pp + Vector2(-140, 0))
+	main.touch_ui.stick = Vector2(-1, 0)
+	_dash_dir("dash", Vector2.RIGHT)
+	_step(6)
+	_check("steering away with the mouse adds to the bounce (vx %.0f)" % p.vel.x, p.vel.x < -900.0)
 	main.touch_ui.stick = Vector2(-1, 0)
 	_air(pp + Vector2(-140, 0))
 	_dash_dir("dash", Vector2.RIGHT)
@@ -741,7 +747,7 @@ func _v034_test() -> void:
 	while p.shield_t > 0.0 and frames < 120:
 		_step(1)
 		frames += 1
-	_check("strike shield is short (%.2fs <= %.2f)" % [frames * DT, p.STRIKE_SHIELD], frames * DT <= p.STRIKE_SHIELD + 0.3 and frames * DT >= 0.3)   # (PERFECT 타격 히트스톱 0.2초 포함)
+	_check("PERFECT strike shield lasts about STRONG_SHIELD (%.2fs, %.2f)" % [frames * DT, p.STRONG_SHIELD], frames * DT <= p.STRONG_SHIELD + 0.35 and frames * DT >= p.STRONG_SHIELD - 0.05)   # (PERFECT 타격 히트스톱 0.3초 포함)
 
 	# 잔탄 흡수 → 판정이 끝나도 쿨다운 없음
 	main.start_stage(1)
@@ -2256,7 +2262,9 @@ func _satellite_test() -> void:
 	b.damage(sh, 5)                                           # 반사탄처럼 blocks_strike 를 거치지 않은 결계 적중
 	_check("satellite: reflected shots do not open the barrier", not b.barrier_open and b.core.armor_hp == hp0)
 	_check("satellite: a fully synced charge gets through the barrier", not b.blocks_strike(sh, "charge", false, true))
+	b.start_attack(b.RadialBurst.new(b.CORE_POS, 8))
 	b.damage(sh, 12)
+	_check("satellite: a crack staggers it (running attack cut, short rest)", b.atk == null and b.next_t >= b.STAGGER - 0.01)
 	_check("satellite: the first two strikes only crack it (cracks %d, open %s, hp %d)" % [b.cracks, b.barrier_open, b.core.armor_hp], b.cracks == 1 and not b.barrier_open and b.core.armor_hp == hp0)
 	b.blocks_strike(sh, "power", true, false)
 	b.damage(sh, 16)
@@ -2279,13 +2287,36 @@ func _satellite_test() -> void:
 		b.step(DT, Vector2(300, -1300))
 	_check("satellite: after the seal, a PERFECT reverse drive cracks it too", not b.blocks_strike(sh, "power", true, false))
 	b.pending_open = false
+	b.reset()                                                 # 아래에서 완전 동조 차지로 결계를 때리면: 긴 무적 + 아래로 충분히 떨어져 나온다
+	b.next_t = 99.0
+	p.reset(b.CORE_POS + Vector2(0, b.BARRIER_R + 140.0), false)
+	p.buffed = true
+	p.buff_strong = true
+	p.buff_t = 9.0
+	_dash_dir("charge", Vector2.UP)
+	var hit_at := Vector2.INF
+	for k in 30:
+		main._physics_process(DT)
+		if p.dash_kind == "" and p.shield_t > 0.0:
+			hit_at = p.position
+			break
+	var sh0: float = p.shield_t
+	var guard := 0
+	while main.hitstop > 0.0 and guard < 60:               # 타격 히트스톱(멈춤) 동안은 움직이지 않는다
+		main._physics_process(DT)
+		guard += 1
+	for k in int(0.5 / DT):
+		main._physics_process(DT)
+	_check("full-sync hit on the barrier from below: long invulnerability (%.2f) and clear of it 0.5s after the hit-stop (%.0f px)" % [sh0, p.position.distance_to(hit_at) if hit_at.is_finite() else -1.0],
+		hit_at.is_finite() and sh0 >= p.STRONG_SHIELD - 0.05 and p.position.distance_to(hit_at) > 260.0 and p.position.y > hit_at.y)
+	main.debug.god = true
 	# 보라 공격: 궤도 광선 · 결계면 · 노드 분사가 돌고, 광선·벽은 패리 불가 판정
 	b.reset()
 	b.shots.clear()
 	var seen := {}
 	var beam_hit := false
 	var pp := Vector2(200, -900)
-	for k in int(40.0 / DT):
+	for k in int(80.0 / DT):
 		b.step(DT, pp)
 		for a in b.active_attacks():
 			seen[a.kind] = true
