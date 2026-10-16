@@ -52,7 +52,8 @@ var touch_ui                          # 모바일 터치 조작 (없으면 마�
 var menu
 var title                             # 메인 화면 (시작 / 이어하기 / 조작법 / 언어)
 var tutorial                          # 튜토리얼 팝업
-var tele                              # 플레이 기록 (user://telemetry)
+var tele                              # 플레이 기록 (user://telemetry, 텔레메트리 빌드는 실행 파일 옆 md 도)
+var tele_kd := ""                      # 기록용: 직전 프레임의 보스 패턴 (새로 시작할 때마다 센다)
 var debug                             # 개발용 디버그 (F1~F8)
 var profile                           # 진행 저장 (user://profile.cfg)
 var world                             # 월드 맵 (항로도: 스테이지 선택·코어)
@@ -177,7 +178,10 @@ func _ready() -> void:
 	title.visibility_changed.connect(func() -> void: hud.visible = not title.visible)
 	world.back_requested.connect(func() -> void: _open_title(title.can_resume))
 	tele = Telemetry.new()
-	tele.enabled = DisplayServer.get_name() != "headless" and OS.get_cmdline_user_args().has("--telemetry")   # 플레이어에게는 기록을 남기지 않는다 (개발용 옵션)
+	tele.enabled = DisplayServer.get_name() != "headless" and (OS.get_cmdline_user_args().has("--telemetry") or OS.has_feature("telemetry"))   # 플레이어에게는 기록을 남기지 않는다 (dev 빌드·개발용 옵션만)
+	if tele.enabled:                                     # 판마다 사람이 읽을 요약: 텔레메트리 빌드는 실행 파일 옆, 에디터는 user://telemetry
+		var exe := OS.get_executable_path()
+		tele.md_path = exe.get_basename() + "_log.md" if OS.has_feature("template") else Telemetry.DIR + "/log.md"
 	debug = Debug.new()
 	debug.main = self
 	add_child(debug)
@@ -412,6 +416,11 @@ func _physics_body(delta: float) -> void:
 		if player.aim_phase else Player.CHARGE_SPEED * Player.CHARGE_DASH_TIME
 	boss.hold_attacks = player.on_platform or debug.freeze   # 시작·부활 직후 날아오르기 전에는 공격이 시작되지 않는다 (F3: 디버그 정지)
 	boss.step(dt, player.position)
+	var kd: String = boss.attack_kind()
+	if kd != tele_kd:
+		if kd != "" and state == State.PLAY:
+			tele.add("atk_" + kd)                        # 보스 패턴 사용 횟수
+		tele_kd = kd
 	_drain_boss_events()
 	player.step(delta)
 	_heat_cool(dt)
@@ -644,7 +653,7 @@ func _clash(hb: Dictionary, p: Vector2) -> void:
 func hurt_player(push: Vector2, cause := "attack", damage := true) -> void:
 	if debug.god:
 		return
-	tele.hurt_by(cause)
+	tele.hurt_by(cause if boss.attack_kind() == "" or cause == boss.attack_kind() else "%s(%s)" % [cause, boss.attack_kind()])   # 맞은 판정(진행 중이던 패턴)
 	var p: Vector2 = player.position
 	player.on_hurt(push)
 	hitstop = 0.07

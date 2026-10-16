@@ -11,21 +11,20 @@ extends "res://scripts/colossus_base.gd"
 ## v0.50+: 탄막이 중심 (탄막 6 : 근접 4, 쉬는 시간 짧게). 촉수 끝·배경 다리·분사구가 모두 발사점 (barrage.gd). 근접 중에도 가끔 한 발씩 날아온다.
 ## 몸은 DROP 만큼 낮게 걸려 있다 (코어 작게, 튕겨 올라가도 천장에 붙지 않게).
 ## 공격: 몸통 내려치기 · 압착(촉수 둘) · 추적 감아치기 · 휩쓸기 · 조이기(촉수 2개 이상 잃은 뒤) · 먹물 포(부채 탄막, 가운데 주탄)
-##       · 방전 그물(패리 불가, 드물게) · 연타 3종(소용돌이·행진·난타, combo.gd). 동시에 예고하는 촉수는 최대 2개.
+##       · 방전 그물(패리 불가, 드물게) · 연속 내려치기(combo.gd). 패턴 통합: 내려치기·소용돌이·행진 → 연속 내려치기, 휩쓸기·난타 → 휩쓸기,
+##       압착·조이기 → 조이기, 먹물 부채·회전 → 먹물, 촉수 끝·양쪽 줄기 → 촉수 끝 물결
 ## 근접 패턴의 첫 타는 예고가 느리다 (tentacle.gd LEAD_K).
 ## 촉수 모양은 척추(마디 N 개)로 그린다: 강철 마디판 + 관절 링 + 유압 피스톤 + 집게 끝. 쉬는 촉수는 크라켄이, 공격 중인 촉수는 그 공격 모듈(attacks/tentacle.gd)이 움직인다.
 ## 바닥 y=0, 위쪽이 음수. 몸 중심 x=0.
 
 const ArmoredCore := preload("res://scripts/armored_core.gd")
 const Hammer := preload("res://scripts/attacks/hammer.gd")
-const Clap := preload("res://scripts/attacks/clap.gd")
 const Chase := preload("res://scripts/attacks/chase.gd")
 const Lash := preload("res://scripts/attacks/lash.gd")
 const Constrict := preload("res://scripts/attacks/constrict.gd")
 const Combo := preload("res://scripts/attacks/combo.gd")
 const Net := preload("res://scripts/attacks/net.gd")
 const Fan := preload("res://scripts/attacks/fan.gd")
-const Spiral := preload("res://scripts/attacks/spiral.gd")
 const Barrage := preload("res://scripts/attacks/barrage.gd")
 const Rings := preload("res://scripts/attacks/rings.gd")
 
@@ -66,10 +65,10 @@ const ZAP_TIME := 0.4                        # 요격 피해가 촉수 뿌리에
 const GAP := Vector2(0.45, 0.8)               # 근접 뒤 쉬는 시간
 const GAP_CORE := Vector2(0.3, 0.55)
 const GAP_FIRE := Vector2(0.25, 0.5)         # 탄막 뒤 (멍때릴 틈을 주지 않는다)
-const RANGED_KINDS := ["ink", "spray", "fan", "spiral", "tips", "ring", "cross", "snipe"]
+const RANGED_KINDS := ["ink", "fan", "tips", "ring", "snipe"]
 const RANGED_SHARE := 0.62                   # 탄막 : 근접 = 6 : 4 (근접은 시그니처 패턴 위주)
 const DUO_CHANCE := [0.0, 0.15, 0.3]         # 스테이지별: 작은 탄막 두 개를 겹쳐 쏠 확률 (근접과는 절대 겹치지 않는다)
-const DUOS := [["ring", "snipe"], ["cross", "tips"], ["ink", "snipe"]]     # 고정 탄막 + 저격(작게) 또는 고정 둘
+const DUOS := [["ring", "snipe"], ["ink", "snipe"]]     # 고정 탄막 + 저격(작게) 또는 고정 둘
 const CLEAR_WAIT := 2.5                      # 그래도 이 시간이 지나면 시작한다 (탄이 오래 남아 있을 때)
 const SPECIAL_EVERY := 4                     # 방전 그물(패리 불가)은 공격 이만큼마다 (드물게)
 const COMBO_HITS := 3                        # 연타 타수
@@ -503,15 +502,13 @@ func _choose(ppos: Vector2) -> void:
 		since_special = 0
 		kind = "net"
 	else:
-		var fire: Array[String] = ["ink", "spray", "tips", "ring", "cross", "snipe", "snipe"]
+		var fire: Array[String] = ["ink", "tips", "ring", "snipe", "snipe"]
 		if hard:
 			fire.append_array(["eye", "eye"])                # 코어 단계: 눈알 동심원 (패리 불가)
 		var melee: Array[String] = []
-		for m in ["hammer", "chase", "sweep", "clap", "vortex", "march", "flurry", "vortex", "flurry", "constrict", "constrict", "constrict"]:
+		for m in ["pound", "pound", "chase", "sweep", "constrict", "constrict"]:   # 시그니처: 연속 내려치기 · 조이기
 			if _melee_ok(m, ready):
 				melee.append(m)
-		if hard:
-			melee.append_array(["vortex", "flurry"] if ready.size() >= 2 else [])
 		var pool: Array[String] = fire
 		if not melee.is_empty() and randf() > RANGED_SHARE:
 			pool = melee
@@ -532,9 +529,7 @@ func _melee_ok(m: String, ready: Array[int]) -> bool:
 	match m:
 		"sweep":
 			return ready.has(SWEEPERS[0]) or ready.has(SWEEPERS[1])
-		"flurry":
-			return ready.has(SWEEPERS[0]) and ready.has(SWEEPERS[1])
-		"hammer", "chase":
+		"pound", "chase":
 			return not ready.is_empty()
 		"constrict":
 			return ready.size() >= 2 and (phase == 3 or core.frac() > 0.15)
@@ -551,13 +546,11 @@ func _zone_w(kind: String, p: Vector2) -> float:
 	var below_body := p.y > SIPHON.y - 100.0
 	var low := p.y > ROOTS[4].y + 150.0                      # 늘어진 촉수 뿌리보다 아래 = 하단
 	match kind:
-		"ink", "spray":
+		"ink":
 			return 1.0 if below_body else 0.15
 		"tips":
 			return 1.0 if absf(p.x) < 750.0 and p.y > -1900.0 else 0.4
-		"cross":
-			return 1.0 if p.y > -1700.0 and p.y < -250.0 else 0.25
-		"sweep", "flurry":
+		"sweep":
 			return 1.4 if low else 0.05
 		"ring", "snipe", "eye":
 			return 0.8
@@ -568,8 +561,8 @@ func _start(kind: String, ready: Array[int], ppos: Vector2, hard: bool) -> void:
 	match kind:
 		"net":
 			_pick("net", Net.new(randf() < 0.5))
-		"hammer":
-			_grab_start("hammer", Hammer.new(_nearest(ready, ppos.x)))
+		"pound":
+			_pick("pound", _pound(ready, ppos))
 		"chase":
 			_grab_start("chase", Chase.new(_nearest(ready, ppos.x)))
 		"sweep":                                             # 아래 두 촉수가 함께 바깥에서 안으로 하단을 쓴다 (고정)
@@ -586,14 +579,9 @@ func _start(kind: String, ready: Array[int], ppos: Vector2, hard: bool) -> void:
 			r.count = 3
 			r.wind = 1.5
 			_pick("eye", r)
-		"clap":
-			var lr := _outer_pair(ready)
-			_grab_start("clap", Clap.new(lr[0], lr[1]))
 		"constrict":
 			var lr := _outer_pair(ready)
 			_grab_start("constrict", Constrict.new(lr[0], lr[1]))
-		"vortex", "march", "flurry":
-			_pick(kind, _combo(kind, ready, ppos))
 		_:
 			if randf() < DUO_CHANCE[mini(level, DUO_CHANCE.size() - 1)]:   # 작은 탄막 둘을 함께
 				var duo: Array = DUOS[randi() % DUOS.size()]
@@ -606,11 +594,6 @@ func _start(kind: String, ready: Array[int], ppos: Vector2, hard: bool) -> void:
 ## 탄막 모듈. light = 두 개를 겹쳐 쏠 때의 작은 판
 func _fire(kind: String, ppos: Vector2, hard: bool, light: bool):
 	match kind:
-		"spray":                                             # 고정 방향(플레이어 쪽 선택지)으로 부채꼴을 휘두른다
-			var sp = Spiral.new(-1, SIPHON, SIPHON + Vector2(0, 1000), hard)
-			sp.fixed = true
-			sp.center = nearest_dir(SIPHON, ppos, DIRS_DOWN)
-			return sp
 		"ink":                                               # 고정 방향(플레이어 쪽 선택지)으로 부채, 부채마다 반 칸 어긋난다
 			var f = Fan.new(-1, SIPHON, SIPHON + Vector2(0, 1000), hard and not light)
 			f.fixed = true
@@ -621,15 +604,13 @@ func _fire(kind: String, ppos: Vector2, hard: bool, light: bool):
 	return Barrage.new(kind, emitters(), ppos, hard, light)
 
 
-## 연타: 서로 다른 촉수 최대 COMBO_HITS 개가 처음부터 함께 올라와 예고하고 차례로 친다 (좌우 번갈아)
-##  vortex 소용돌이 = 빠른 내려치기가 차례가 올 때까지 플레이어를 겨눈다 / march 행진 = 정해진 자리를 플레이어에게서 먼 쪽부터
-##  flurry 난타 = 좌우 촉수가 번갈아 휩쓴다
-func _combo(kind: String, ready: Array[int], ppos: Vector2) -> Combo:
+## 연속 내려치기 (관측자 때의 행진·소용돌이·단발 내려치기를 하나로): 서로 다른 촉수가 처음부터 함께 올라와 차례로 내려친다.
+## 앞의 타들은 플레이어에게서 먼 쪽 고정 자리(MARCH_X)부터 다가오고, 마지막 타만 플레이어를 따라간다. 다음에 칠 타만 예고가 보인다.
+## 촉수가 하나뿐이면 단발 (플레이어를 따라감)
+func _pound(ready: Array[int], ppos: Vector2) -> Combo:
 	var ls: Array[int] = []
 	var rs: Array[int] = []
 	for i in ready:
-		if kind == "flurry" and not SWEEPERS.has(i):
-			continue
 		(ls if ROOTS[i].x < 0.0 else rs).append(i)
 	var order: Array[int] = []
 	var side := 0 if ppos.x >= 0.0 else 1                    # 플레이어 반대쪽 촉수부터
@@ -645,17 +626,9 @@ func _combo(kind: String, ready: Array[int], ppos: Vector2) -> Combo:
 	var makers := []
 	for k in order.size():
 		var i: int = order[k]
-		var x: float = xs[k]
-		makers.append(func():
-			match kind:
-				"march":
-					return Hammer.new(i, true, 0.0, x)
-				"flurry":
-					var a = Lash.new(i, true)
-					a.pace = 0.7
-					return a
-			return Hammer.new(i, true))
-	return Combo.new(kind, makers, 0.2 if kind == "flurry" else 0.1)
+		var x: float = xs[k] if k < order.size() - 1 else NAN
+		makers.append(func(): return Hammer.new(i, true, 0.0, x))
+	return Combo.new("pound", makers, 0.1)
 
 
 func _pick(kind: String, a) -> void:

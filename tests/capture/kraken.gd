@@ -9,8 +9,6 @@ var plan := [
 	["idle", "", 30, Vector2(250, -1200), Vector2(0, -1600), 0.24],
 	["hammer_warn", "hammer", 80, Vector2(300, -1300), Vector2(0, -1500), 0.25],
 	["hammer_hit", "hammer", 116, Vector2(300, -1300), Vector2(0, -1500), 0.25],
-	["clap_warn", "clap", 85, Vector2(-200, -1300), Vector2(0, -1500), 0.25],
-	["clap_close", "clap", 112, Vector2(-200, -1300), Vector2(0, -1500), 0.25],
 	["chase_follow", "chase", 70, Vector2(300, -1300), Vector2(0, -1500), 0.25],
 	["chase_warn", "chase", 125, Vector2(300, -800), Vector2(0, -1100), 0.42],
 	["recoil", "recoil", 20, Vector2(300, -1300), Vector2(0, -1500), 0.25],
@@ -25,13 +23,8 @@ var plan := [
 	["broken", "broken", 60, Vector2(250, -1200), Vector2(0, -1600), 0.24],
 	["core", "core", 60, Vector2(250, -1800), Vector2(0, -2100), 0.3],
 	["regrow", "regrow", 50, Vector2(250, -1300), Vector2(0, -1900), 0.3],
-	["vortex", "vortex", 80, Vector2(250, -1300), Vector2(0, -1600), 0.24],
 	["zap", "zap", 24, Vector2(250, -1300), Vector2(0, -1900), 0.3],
 	["shatter", "shatter", 14, Vector2(250, -1300), Vector2(0, -2100), 0.3],
-	["march", "march", 150, Vector2(-300, -1300), Vector2(0, -1600), 0.24],
-	["flurry", "flurry", 150, Vector2(300, -1300), Vector2(0, -1600), 0.24],
-	["march_q", "march", 70, Vector2(-300, -900), Vector2(0, -1100), 0.5],
-	["flurry_q", "flurry", 70, Vector2(300, -900), Vector2(0, -1100), 0.5],
 	["k_sweep", "k_sweep", 75, Vector2(300, -700), Vector2(0, -1100), 0.42],
 	["k_constrict", "k_constrict", 75, Vector2(0, -900), Vector2(0, -1100), 0.42],
 	["k_snipe", "k_snipe", 70, Vector2(300, -800), Vector2(0, -1300), 0.42],
@@ -41,8 +34,6 @@ var plan := [
 	["tips", "tips", 70, Vector2(250, -700), Vector2(0, -1100), 0.5],
 	["tips_fire", "tips", 130, Vector2(250, -700), Vector2(0, -1300), 0.42],
 	["ring", "ring", 120, Vector2(250, -700), Vector2(0, -1100), 0.5],
-	["cross", "cross", 120, Vector2(250, -700), Vector2(0, -1100), 0.5],
-	["spray", "spray", 100, Vector2(250, -700), Vector2(0, -1100), 0.5],
 	["close", "idle", 30, Vector2(300, -1500), Vector2(-150, -1700), 0.6],
 ]
 var idx := 0
@@ -94,7 +85,6 @@ func _process(_d: float) -> bool:
 			b._start((pl[1] as String).substr(2), rr, pl[3], false)
 		match pl[1]:
 			"hammer": a = b.Hammer.new(1)
-			"clap": a = b.Clap.new(0, 1)
 			"chase": a = b.Chase.new(3)
 			"recoil", "detach":
 				a = b.Hammer.new(1)
@@ -117,14 +107,10 @@ func _process(_d: float) -> bool:
 			"shatter":
 				for i in 6:
 					b.damage_part(i, 99)
-			"march", "flurry":
-				var rr: Array[int] = [0, 1, 2, 3, 4, 5]
-				a = b._combo(pl[1], rr, pl[3])
 			"constrict": a = b.Constrict.new(0, 1)
 			"net": a = b.Net.new(true)
 			"ink": a = b.Fan.new(-1, b.SIPHON, p.position)
-			"tips", "ring", "cross": a = b.Barrage.new(pl[1], b.emitters(), p.position)
-			"spray": a = b.Spiral.new(-1, b.SIPHON, p.position)
+			"tips", "ring": a = b.Barrage.new(pl[1], b.emitters(), p.position)
 			"broken":
 				b.damage_part(0, 16)
 				b.damage_part(3, 16)
@@ -141,7 +127,7 @@ func _process(_d: float) -> bool:
 					b.grown[2] = 1.0
 					b.grown[3] = 1.0
 					var rr: Array[int] = [2, 3]
-					a = b._combo("vortex", rr, pl[3])
+					a = b._pound(rr, pl[3])
 		if a != null:
 			b.start_attack(a)
 			if a.has_method("claim"):

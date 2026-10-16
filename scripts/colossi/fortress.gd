@@ -52,7 +52,6 @@ const GAP_CORE := Vector2(0.2, 0.45) # 코어 페이즈는 더 몰아친다
 const GAP_SPIRAL := Vector2(1.0, 1.4) # 회전형 탄막 뒤: 남은 탄이 지나갈 시간을 준다 (겹치지 않게)
 const CALM_SHOTS := 8                # 회전형 탄막은 필드의 탄이 이 이하이고 겹쳐 도는 공격이 없을 때만
 const SPECIAL_EVERY := 5             # 특수기(프레스·동심원)는 이만큼 공격한 뒤에야 다시 (드물게, 연달아 쓰지 않음)
-const HOMING_EVERY := 3              # 유도탄(보조 공격)은 공격 이만큼마다 (코어 페이즈는 2)
 
 # ── 색 ─────────────────────────────────────────────────
 const C_HULL := Color(0.085, 0.085, 0.095)
@@ -66,7 +65,6 @@ var glow: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]   # 발사 전 달�
 var debris: Array[Dictionary] = []
 var last := ""                       # 직전에 고른 주 공격 (같은 탄막 반복 방지)
 var since_special := 0
-var since_homing := 0
 
 
 func _init() -> void:
@@ -85,7 +83,6 @@ func reset() -> void:
 	debris.clear()
 	last = ""
 	since_special = 0
-	since_homing = 0
 	for i in glow.size():
 		glow[i] = 0.0
 
@@ -150,9 +147,7 @@ func _step_phase(dt: float) -> void:
 func _choose(ppos: Vector2) -> void:
 	var hard := phase == 3
 	since_special += 1
-	since_homing += 1
 	var calm: bool = lingering.is_empty() and shots.size() <= CALM_SHOTS    # 회전형 탄막은 다른 패턴이 쉴 때만 혼자
-	var want_homing := since_homing >= (2 if hard else HOMING_EVERY) and not homing_origins().is_empty()
 	var main_kind := ""
 	var high := ppos.y < -1900.0                             # 높은 곳: 천장 프레스가 노리는 곳
 	if since_special >= SPECIAL_EVERY and randf() < (0.75 if high else 0.35):   # 드물게: 천장 프레스(근접) / 심장부 동심원 파동(패리 불가)
@@ -174,9 +169,6 @@ func _choose(ppos: Vector2) -> void:
 		if pool.is_empty():
 			pool.append("fan")
 		main_kind = pool[randi() % pool.size()]
-	if want_homing and main_kind != "spiral" and main_kind != "press":   # 유도탄(요새의 시그니처, 겨누는 사격)은 다른 탄막과 겹쳐 쏜다 (회전형·프레스와는 겹치지 않는다)
-		since_homing = 0
-		start_side(Homing.new())
 	var c := _battery(ppos)
 	var org: Vector2 = SPIRE_TOP if c < 0 else BARREL_TIPS[c]
 	match main_kind:
@@ -196,6 +188,8 @@ func _choose(ppos: Vector2) -> void:
 			f.fixed = true
 			f.aim = nearest_dir(org, ppos, DIRS_DOWN)
 			_pick("fan", f)
+			if not homing_origins().is_empty():             # 일제 사격: 부채와 함께 사일로가 유도탄(요새의 시그니처, 겨누는 사격)을 쏜다
+				start_side(Homing.new())
 		_:
 			_pick("overload", Overload.new(REACTOR_POS))
 

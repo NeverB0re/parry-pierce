@@ -461,13 +461,22 @@ func _telemetry_test() -> void:
 	t.hit("charge", 3)
 	t.hurt_by("beam")
 	t.mark("part_break", 12.5)
-	t.finish("dead", 42.0, 0, {"phase": 1})
+	t.add("atk_pound", 2)
+	t.md_path = "user://telemetry_test/log.md"                # 텔레메트리 빌드: 실행 파일 옆 md 요약 (여기서는 테스트 폴더)
+	t.finish("dead", 42.0, 0, {"phase": 1, "stage": "kraken"})
 	var ok := FileAccess.file_exists(t.last_path)
 	var data = JSON.parse_string(FileAccess.get_file_as_string(t.last_path)) if ok else null
 	_check("telemetry file written (%s)" % t.last_path, ok and data is Dictionary and data["result"] == "dead" and int(data["counts"]["parry_perfect"]) == 1 and int(data["damage"]["charge"]) == 3 and int(data["hurt"]["beam"]) == 1)
-	if ok:
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(t.last_path))
-		DirAccess.remove_absolute(ProjectSettings.globalize_path("user://telemetry_test"))
+	t.begin()
+	t.add("parry")
+	t.finish("win", 80.0, 2, {"phase": 3, "stage": "kraken"})
+	var md := FileAccess.get_file_as_string(t.md_path)
+	_check("telemetry md log: two runs appended, readable summary (%d chars)" % md.length(), md.count("\n## ") == 2 and md.contains("kraken · dead · 0분 42초") and md.contains("보스 패턴: pound ×2") and md.contains("피격: beam ×1"))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(t.md_path))
+	for fn in DirAccess.get_files_at("user://telemetry_test"):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path("user://telemetry_test/" + fn))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://telemetry_test"))
+	t.md_path = ""
 	t.enabled = false
 	t.dir = t.DIR
 
@@ -1115,7 +1124,6 @@ func _v037_test() -> void:
 		b.atk = null
 		b.last = ""
 		b.since_special = 0
-		b.since_homing = 0
 		b.shots.clear()
 		b.lingering.clear()
 		b._choose(Vector2(-500, -1500))
@@ -1137,7 +1145,6 @@ func _v037_test() -> void:
 		b.atk = null
 		b.last = ""
 		b.since_special = 0
-		b.since_homing = 99
 		b.shots.clear()
 		b.lingering.clear()
 		b._choose(Vector2(-500, -1500))
@@ -1450,11 +1457,11 @@ func _kraken_shield_test() -> void:
 	var sh: Dictionary = b.strike_hit(b.CORE_POS + Vector2(0, b.SHIELD_R + 10.0), 20.0)
 	_check("kraken: the shield around the core is the only target", sh.get("kind", "") == "shield")
 	_check("kraken: assist sees only the core (no tentacle targets)", b.assist_targets(Vector2(0, -1500)).size() == 1)
-	for kind in ["tips", "ring", "cross", "snipe", "spray", "ink"]:      # 탄막 5종: 발사점이 사방에 있고, 끝까지 돌아 탄을 쏜다
+	for kind in ["tips", "ring", "snipe", "ink"]:      # 탄막 4종: 발사점이 사방에 있고, 끝까지 돌아 탄을 쏜다
 		b.reset()
 		b.next_t = 99.0
 		b._ppos = Vector2(300, -700)
-		b.start_attack(b.Barrage.new(kind, b.emitters(), b._ppos) if kind in ["tips", "ring", "cross", "snipe"] else b._fire(kind, b._ppos, false, false))
+		b.start_attack(b.Barrage.new(kind, b.emitters(), b._ppos) if kind in ["tips", "ring", "snipe"] else b._fire(kind, b._ppos, false, false))
 		var spawned := 0
 		for k in 600:
 			b.step(DT, b._ppos)
@@ -1526,11 +1533,11 @@ func _kraken_shield_test() -> void:
 	_check("first hit telegraphs longer (%d vs %d frames)" % [t_first, t_plain], absf(float(t_first) / t_plain - h.LEAD_K) < 0.08)
 
 	# 연타 3종: 서로 다른 촉수가 처음부터 함께 올라오고, 또렷한 예고는 한 번에 하나, 순서대로 친다
-	for kind in ["vortex", "march", "flurry"]:
+	for kind in ["pound"]:                                  # 연속 내려치기 (내려치기·소용돌이·행진을 하나로)
 		main.reset_run()
 		b.next_t = 99.0
 		var ready: Array[int] = [0, 1, 2, 3, 4, 5]
-		var c = b._combo(kind, ready, Vector2(300, -1300))
+		var c = b._pound(ready, Vector2(300, -1300))
 		b.start_attack(c)
 		var bright := 0
 		var raised := 0
@@ -1551,7 +1558,7 @@ func _kraken_shield_test() -> void:
 			bright = maxi(bright, n)
 			if b.atk == null:
 				break
-		var want_n: int = 2 if kind == "flurry" else b.COMBO_HITS     # 난타는 아래 두 촉수만
+		var want_n: int = b.COMBO_HITS
 		var ordered: bool = c.kids.size() == want_n
 		for j in range(1, c.kids.size()):
 			if c.kids[j].fired_t <= c.kids[j - 1].fired_t:
@@ -1683,49 +1690,6 @@ func _v047_test() -> void:
 			break
 	p.parry_release()
 	_check("hammer parry: pushed away, no damage, no life lost (hp %d, |v| %.0f)" % [b.part_hp[4], p.vel.length()], b.part_hp[4] == hp4 and main.lives == p.stats.shield_cells and p.vel.length() > 600.0)
-
-	# 압착: 두 몸통이 가운데까지 닫힌다 (틈 없음), 한쪽을 요격하면 둘 다 풀린다
-	main.reset_run()
-	b.next_t = 99.0
-	p.reset(Vector2(100, -1300), false)
-	var cl = b.Clap.new(0, 1)
-	b.start_attack(cl)
-	cl.claim()
-	var clapped := false
-	for k in 300:
-		main.hitstop = 0
-		p.position = Vector2(100, -1300)
-		p.vel = Vector2.ZERO
-		p.invuln = 99.0
-		main._physics_process(DT)
-		for h in b.hitboxes(Vector2(100, -1300)):
-			if h["id"] == "arm" and b.overlaps(h, Vector2(100, -1300), 12.0):
-				clapped = true
-		if cl.phase == "hold" or b.atk == null:
-			break
-	_check("clap closes on the player's position", clapped)
-	main.reset_run()
-	b.next_t = 99.0
-	p.reset(Vector2(100, -1300), false)
-	cl = b.Clap.new(0, 1)
-	b.start_attack(cl)
-	cl.claim()
-	for k in 300:
-		main.hitstop = 0
-		p.position = Vector2(100, -1300)
-		p.vel = Vector2.ZERO
-		p.invuln = 99.0
-		main._physics_process(DT)
-		if cl.phase == "warn":
-			break
-	var on_bar: Vector2 = b.spines[1][8]
-	var hbc: Dictionary = b.clash_box(on_bar)
-	var hpc: int = b.part_hp[1]
-	p.dash_kind = "charge"
-	p.dash_t = 0.1
-	p.vel = Vector2.RIGHT * 3000.0
-	main._clash(hbc, on_bar)
-	_check("clap intercept: that tentacle is cut at once, the clap ends (hp %d->%d)" % [hpc, b.part_hp[1]], b.part_hp[1] == 0 and b.atk == null)
 
 	# 추적 감아치기: 따라다니다 멈춰 부채꼴로 감아친다
 	main.reset_run()
@@ -1894,7 +1858,7 @@ func _v047_test() -> void:
 	b.next_t = 99.0
 	b.atk = null
 	var rr: Array[int] = [2, 3]
-	var vx = b._combo("vortex", rr, Vector2(300, -1200))
+	var vx = b._pound(rr, Vector2(300, -1200))
 	b.start_attack(vx)
 	var most := 0
 	for k in 600:

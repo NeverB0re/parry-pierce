@@ -3,7 +3,6 @@ extends "res://scripts/attacks/attack.gd"
 ## 원칙: 탄막은 플레이어를 겨누지 않고 정해진 공간을 채운다 (빠져나갈 길을 미리 정해 두고 쏜다). 겨누는 것은 snipe 하나뿐.
 ##  tips  = 촉수 끝 물결 — 발사점이 왼쪽 → 오른쪽(다음 바퀴는 반대) 차례로 경기장 가운데 쪽으로 넓은 부채를 쏜다. 바퀴마다 반 칸 어긋난다
 ##  ring  = 분사구에서 동심 고리 — 한 줄 걸러 반 칸씩 어긋난다 (고리 사이로 빠져나간다)
-##  cross = 양쪽 가장자리에서 수평으로 엇갈리게 휘두르는 탄 줄기 (가운데에서 X 자로 엇갈린다)
 ##  snipe = 저격 (시그니처, 유일하게 겨눈다) — 치켜든 두 촉수가 번갈아 조준선을 띄우고 빠른 유도탄을 한 발씩 쏜다.
 ##          한 발씩이고 주탄(유도탄)이라 패리 → 리버스 드라이브의 기회 (되돌리면 피해가 크다)
 ## 탄은 모두 패리할 수 있다 (주탄 = 리버스 드라이브).
@@ -28,10 +27,6 @@ const RING_N := 16                   # + 스테이지 순번 × 2
 const RING_COUNT := 3                # + 1 (2스테이지부터)
 const RING_GAP := 0.7
 const RING_SPEED := 240.0
-# cross
-const CROSS_TIME := 2.6
-const CROSS_RATE := 0.13
-const CROSS_SWEEP := 0.55
 # snipe
 const SNIPE_SHOTS := 2               # + 1 (3스테이지부터)
 const SNIPE_CHARGE := 0.8            # 조준선이 보이는 시간
@@ -49,9 +44,8 @@ var tips_rounds := TIPS_ROUNDS
 var tips_n := TIPS_N
 var ring_n := RING_N
 var ring_count := RING_COUNT
-var cross_time := CROSS_TIME
 var snipe_n := SNIPE_SHOTS
-var ids: Array[int] = []             # tips: 왼쪽 → 오른쪽 발사점 / cross: [왼쪽, 오른쪽] / snipe: 번갈아 쏠 두 발사점
+var ids: Array[int] = []             # tips: 왼쪽 → 오른쪽 발사점 / snipe: 번갈아 쏠 두 발사점
 var done := 0                        # 쏜 횟수
 var spin := 1.0
 var aims: Dictionary = {}            # snipe: 발 번호 → 조준 각 (조준 중인 것만)
@@ -77,7 +71,6 @@ func _setup() -> void:
 	if light:
 		tips_rounds = 1
 		ring_count = 2
-		cross_time = 1.4
 		snipe_n = 1
 	match mode:
 		"tips":
@@ -85,21 +78,6 @@ func _setup() -> void:
 			tips.sort_custom(func(a, b): return (a[1] as Vector2).x < (b[1] as Vector2).x)
 			for e in tips:
 				ids.append(int(e[0]))
-		"cross":
-			var l = null
-			var r = null
-			for e in em:
-				if int(e[0]) < 0:
-					continue
-				var p: Vector2 = e[1]
-				if p.x < 0.0 and (l == null or p.x < (l[1] as Vector2).x):
-					l = e
-				if p.x > 0.0 and (r == null or p.x > (r[1] as Vector2).x):
-					r = e
-			if l != null:
-				ids.append(int(l[0]))
-			if r != null:
-				ids.append(int(r[0]))
 		"snipe":
 			for pair in [[0, 1], [6, 7]]:                # 치켜든 두 촉수, 없으면 배경 다리
 				for id in pair:
@@ -118,8 +96,6 @@ func step(_dt: float, ppos: Vector2) -> void:
 	match mode:
 		"tips":
 			_tips()
-		"cross":
-			_cross()
 		"snipe":
 			_snipe(ppos)
 		_:
@@ -184,36 +160,6 @@ func _ring() -> void:
 		boss.emit(Ev.BOLT, o)
 		done += 1
 	if done >= ring_count:
-		boss.finish_attack()
-
-
-## 양쪽 가장자리에서 수평 기준으로 위아래로 휘두르는 줄기 (서로 반대 위상 → 가운데에서 X 자)
-func _cross() -> void:
-	for id in ids:
-		boss.set_glow(id, clampf(t / WIND, 0.0, 1.0))
-	if t < WIND:
-		return
-	var ft := t - WIND
-	var m: float = boss.bolt_mult()
-	while done * CROSS_RATE <= ft and done * CROSS_RATE < cross_time:
-		var ph := sin(TAU * done * CROSS_RATE / cross_time) * spin
-		for s in ids.size():
-			var o: Vector2 = boss.emitter_pos(ids[s])
-			if o == Vector2.INF:
-				continue
-			var toward := 0.0 if o.x < 0.0 else PI
-			var sg := 1.0 if s == 0 else -1.0
-			var v := Vector2.from_angle(toward + sg * CROSS_SWEEP * ph) * SMALL_SPEED * m
-			if done % 4 == 0:
-				boss.shots.spawn(o, v * 1.15, 10.0)
-			else:
-				boss.shots.spawn(o, v, 10.0, 0.0, 0.0, Projectiles.Kind.SMALL)
-		if done % 4 == 0:
-			boss.emit(Ev.BOLT, boss.emitter_pos(ids[0]))
-		done += 1
-	for id in ids:
-		boss.set_glow(id, 1.0)
-	if ft >= cross_time:
 		boss.finish_attack()
 
 
