@@ -20,6 +20,7 @@ extends Resource
 @export var perfect_evade_window := 0.12    ## 돌진 시작 후 이 시간 안에 공격이 스치면 퍼펙트 회피
 @export var evade_buff_mult := 2            ## 동조: 다음 차지 공격 피해 배율 (차지 시간도 절반)
 @export var evade_buff_mult_strong := 4     ## 완전 동조: 패리 불가 공격(레이저)을 퍼펙트 회피하면
+@export var sync_clear := false            ## 동조 코어: 퍼펙트 회피 때 기체 둘레의 적 탄을 지운다
 @export var sync_time := 4.0                ## 동조 지속 시간. 다시 얻으면 갱신. 월드 시간 기준(슬로우 중엔 느리게 줄어듦)
 
 @export_group("패리·조준")

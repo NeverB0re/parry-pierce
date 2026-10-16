@@ -34,6 +34,7 @@ const RESPAWN_DELAY := 1.3         # 용암에 빠진 뒤 재출격까지
 const RESPAWN_INVULN := 1.5
 const PLAT_SINK_TIME := 1.0        # 발사 후 발판이 가라앉는 시간
 const PLAT_RISE_TIME := 0.6
+const SYNC_CLEAR_R := 280.0          # 동조 코어: 퍼펙트 회피 때 이 반경의 적 탄을 지운다
 const HEAT_MAX := 3                # 잔탄에 이만큼 맞으면 실드 셀 1개가 깨진다 (과열 게이지)
 const HEAT_COOL := 4.0             # 이 시간 동안 잔탄에 안 맞으면 게이지가 한 칸 식는다
 const GRAZE_INVULN := 0.35         # 잔탄에 맞은 직후 무적
@@ -47,6 +48,7 @@ var fx
 var hud
 var sfx
 var bg
+var lava_front                       # 앞쪽 바닥 (용암 표면 / 대기권 경계)
 var cam: Camera2D
 var touch_ui                          # 모바일 터치 조작 (없으면 마우스·키보드)
 var menu
@@ -126,9 +128,10 @@ func _ready() -> void:
 	add_child(player)
 	fx = Fx.new()
 	add_child(fx)
-	var fg := Ground.new()
-	fg.front = true
-	add_child(fg)
+	lava_front = Ground.new()
+	lava_front.front = true
+	add_child(lava_front)
+	_apply_theme()
 
 	cam = Camera2D.new()
 	cam.zoom = Vector2(0.9, 0.9)
@@ -226,6 +229,14 @@ func reset_run() -> void:
 	cam.reset_smoothing()
 
 
+## 스테이지 무대 (궤도 = 결계 위성): 배경·바닥 그림만 바뀐다 (판정은 같다)
+func _apply_theme() -> void:
+	var orbit: bool = Stages.LIST[stage_idx].get("theme", "") == "orbit"
+	bg.set_orbit(orbit)
+	lava.set_orbit(orbit)
+	lava_front.set_orbit(orbit)
+
+
 ## 장착한 동력 코어를 플레이어 수치에 반영
 func _apply_loadout() -> void:
 	player.stats = Upgrades.build(Player.BASE_STATS, profile.equipped)
@@ -244,6 +255,7 @@ func start_stage(i: int) -> void:
 		move_child(boss, at)
 		player.boss = boss
 	boss.level = i
+	_apply_theme()
 	_apply_loadout()
 	reset_run()
 	hud.queue_redraw()                       # FTL 섬광 중(일시정지)에도 배너·실드 셀 표시를 새로
@@ -301,6 +313,8 @@ func _on_arrived() -> void:
 		ids.append("intercept")
 	if stage_idx >= 2:
 		ids.append("tentacle")
+	if stage_idx >= 3:
+		ids.append("barrier")
 	tutorial.request(ids)
 
 
@@ -1046,6 +1060,10 @@ func _respawn() -> void:
 ## strong(패리 불가 공격을 피함)은 확실히 더 크게 — 긴 슬로우, 금빛·청록 이중 링, 입자
 func on_perfect_evade(pos: Vector2, strong := false) -> void:
 	tele.add("perfect_evade_strong" if strong else "perfect_evade")
+	if player.stats.sync_clear:                  # 동조 코어: 기체 둘레의 적 탄이 사라진다
+		var n: int = boss.shots.clear_near(pos, SYNC_CLEAR_R)
+		if n > 0:
+			fx.ring(pos, Color(0.5, 1.0, 0.88), SYNC_CLEAR_R, 0.35, 5.0)
 	var mint := Color(0.5, 1.0, 0.88)
 	if not strong:
 		slowmo = maxf(slowmo, 0.25)
@@ -1091,7 +1109,7 @@ func on_parry_launch(pos: Vector2, dir: Vector2) -> void:
 ## 돌진 적중. kind: "dash"(피해 1, 가볍게) / "charge"(3, 주황) / "power"(패리 돌진 12·16, 크게)
 func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, kind := "dash", buffed := false, strong := false) -> void:
 	var contact := pos + dir * Player.RADIUS
-	if hit["kind"] == "shield" and kind != "power":   # 크라켄 방어막: 돌진·차지 강습은 피해 없이 튕겨 나온다 (리버스 드라이브만 뚫는다)
+	if boss.blocks_strike(hit, kind, player.perfect_dash, strong):   # 방어막·결계: 튕겨 나온다 (크라켄 = 리버스 드라이브만, 결계 위성 = 완전 동조 차지·PERFECT 드라이브만 뚫는다)
 		tele.add("shield_block")
 		boss.shield_flash = 1.0
 		boss.shield_hit_n = hit["n"]

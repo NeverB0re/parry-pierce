@@ -38,6 +38,7 @@ func _process(_d: float) -> bool:
 	_zone_test()
 	_title_test()
 	_telemetry_test()
+	_satellite_test()
 	print("FAILS ", fails)
 	quit(fails)
 	return false
@@ -2237,3 +2238,55 @@ func _zone_test() -> void:
 	_check("observer: arm swing is common in arm reach when clear (%d/40)" % swung, swung >= 10)
 	o.atk = null
 	main.reset_run()
+
+
+## 결계 위성 (4스테이지): 결계는 완전 동조 차지·PERFECT 리버스 드라이브만 열고, 열리면 금색 탄막, OPEN_TIME 뒤 닫힌다. 보라 공격은 퍼펙트 회피로 완전 동조
+func _satellite_test() -> void:
+	main.start_stage(3)
+	var b = main.boss
+	var p = main.player
+	main.debug.god = true
+	b.next_t = 99.0
+	_check("satellite: stage 4 is the barrier satellite on the orbit stage", main.Stages.LIST[3]["id"] == "satellite" and main.bg.orbit and main.lava.orbit)
+	var sh: Dictionary = b.strike_hit(b.CORE_POS + Vector2(0, b.BARRIER_R + 10.0), 20.0)
+	_check("satellite: closed barrier is the target (shield)", sh.get("kind", "") == "shield")
+	_check("satellite: dash, charge and a normal drive bounce off the barrier",
+		b.blocks_strike(sh, "dash", false, false) and b.blocks_strike(sh, "charge", false, false) and b.blocks_strike(sh, "power", false, false))
+	var hp0: int = b.core.armor_hp
+	b.damage(sh, 5)                                           # 반사탄처럼 blocks_strike 를 거치지 않은 결계 적중
+	_check("satellite: reflected shots do not open the barrier", not b.barrier_open and b.core.armor_hp == hp0)
+	_check("satellite: a fully synced charge opens it", not b.blocks_strike(sh, "charge", false, true))
+	b.damage(sh, 12)
+	_check("satellite: the opening strike damages the core and the barrier opens (hp %d -> %d)" % [hp0, b.core.armor_hp], b.barrier_open and b.core.armor_hp == hp0 - 12 and b.atk != null and b.atk.kind == "open")
+	var mains := 0
+	for k in int(2.0 / DT):
+		b.step(DT, Vector2(300, -1300))
+	for k in b.shots.size():
+		if b.shots.kind[k] == b.Projectiles.Kind.BOLT and b.shots.mine[k] == 0:
+			mains += 1
+	_check("satellite: open barrier pours out gold main bolts to parry (%d)" % mains, mains >= 12)
+	_check("satellite: open = the core is the target", b.strike_hit(b.CORE_POS, 10.0).get("kind", "") == "core")
+	for k in int(b.OPEN_TIME / DT):
+		b.step(DT, Vector2(300, -1300))
+	_check("satellite: the barrier closes after OPEN_TIME", not b.barrier_open)
+	_check("satellite: a PERFECT reverse drive opens it too", not b.blocks_strike(sh, "power", true, false))
+	b.pending_open = false
+	# 보라 공격: 궤도 광선 · 결계면 · 노드 분사가 돌고, 광선·벽은 패리 불가 판정
+	b.reset()
+	b.shots.clear()
+	var seen := {}
+	var beam_hit := false
+	var pp := Vector2(200, -900)
+	for k in int(40.0 / DT):
+		b.step(DT, pp)
+		if b.atk != null:
+			seen[b.atk.kind] = true
+		if b.beam_hit(pp, 12.0) != Vector2.ZERO:
+			beam_hit = true
+	_check("satellite: closed patterns cycle (%s)" % str(seen.keys()), seen.has("orbit") and seen.has("wall") and seen.has("spray") and not seen.has("open"))
+	_check("satellite: purple attacks reach the player", beam_hit)
+	var w = b.BarrierWall.new(Vector2(500, -900))
+	w.boss = b
+	_check("barrier wall starts on the far side from the player", w.x0 < 0.0 and w.x1 > 0.0)
+	main.debug.god = false
+	main.start_stage(0)

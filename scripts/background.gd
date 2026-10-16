@@ -8,6 +8,8 @@ var spires: Array[Vector3] = []     # x, 폭, 높이
 var chains: Array[Vector2] = []     # x, 길이
 var arches: Array[Vector2] = []     # x, 폭
 var motes: Array[Vector3] = []      # x, y, 속도
+var orbit := false                  # 궤도 무대 (결계 위성): 폐허 대신 우주·별·행성
+var stars: Array[Vector3] = []      # x, y, 밝기 (궤도)
 
 var sky_low: Node2D
 var sky_high: Node2D
@@ -32,6 +34,8 @@ func _ready() -> void:
 		x += rng.randf_range(500, 800)
 	for i in 36:
 		motes.append(Vector3(rng.randf_range(0, 1), rng.randf_range(0, 1), rng.randf_range(0.2, 1.0)))
+	for i in 220:
+		stars.append(Vector3(rng.randf_range(-2600, 2600), rng.randf_range(-2600, 900), rng.randf_range(0.2, 1.0)))
 
 	sky_low = _layer_node()
 	sky_high = _layer_node()
@@ -46,6 +50,15 @@ func _ready() -> void:
 	near.draw.connect(_draw_near.bind(near))
 	dust.draw.connect(_draw_dust.bind(dust))
 	get_viewport().size_changed.connect(_on_resized)
+
+
+## 무대 바꾸기 (main.gd 가 스테이지를 시작할 때)
+func set_orbit(v: bool) -> void:
+	if orbit == v:
+		return
+	orbit = v
+	for n in [sky_low, sky_high, far, mid, near]:
+		n.queue_redraw()
 
 
 func _layer_node() -> Node2D:
@@ -72,6 +85,10 @@ func _process(delta: float) -> void:
 ## 하늘 그라데이션(낮은 팔레트 위에 높은 팔레트를 알파로 겹침) + 빛줄기
 func _draw_sky(n: Node2D, high: bool) -> void:
 	var s := get_viewport_rect().size
+	if orbit:
+		if not high:
+			_draw_space(n, s)
+		return
 	var top := Color(0.24, 0.29, 0.35) if high else Color(0.17, 0.21, 0.27)
 	var bot := Color(0.14, 0.17, 0.22) if high else Color(0.08, 0.10, 0.13)
 	n.draw_polygon(PackedVector2Array([Vector2.ZERO, Vector2(s.x, 0), s, Vector2(0, s.y)]),
@@ -87,6 +104,10 @@ func _draw_sky(n: Node2D, high: bool) -> void:
 
 
 func _draw_far(n: Node2D) -> void:
+	if orbit:                                          # 먼 별 (천천히 흐른다)
+		for st in stars:
+			n.draw_rect(Rect2(st.x, st.y, 3, 3), Color(0.85, 0.9, 1.0, 0.25 + 0.6 * st.z))
+		return
 	var far_c := Color(0.2, 0.24, 0.3)
 	for sp in spires:
 		var base := Vector2(sp.x, 350)
@@ -102,6 +123,8 @@ func _draw_far(n: Node2D) -> void:
 
 
 func _draw_mid(n: Node2D) -> void:
+	if orbit:
+		return
 	var mid_c := Color(0.13, 0.16, 0.2)
 	for ar in arches:
 		var base := Vector2(ar.x, 500)
@@ -118,11 +141,30 @@ func _draw_mid(n: Node2D) -> void:
 
 
 func _draw_near(n: Node2D) -> void:
+	if orbit:
+		return
 	for ch in chains:
 		var top_p := Vector2(ch.x, -1900)
 		var end_p := top_p + Vector2(0, ch.y)
 		n.draw_line(top_p, end_p, Color(0.1, 0.12, 0.15), 3.0)
 		n.draw_circle(end_p, 10.0, Color(0.1, 0.12, 0.15))
+
+
+## 우주: 짙은 남색 그라데이션 + 아래로 행성 곡면(대기 띠가 빛난다) + 먼 성운
+func _draw_space(n: Node2D, s: Vector2) -> void:
+	var top := Color(0.02, 0.025, 0.06)
+	var bot := Color(0.05, 0.07, 0.14)
+	n.draw_polygon(PackedVector2Array([Vector2.ZERO, Vector2(s.x, 0), s, Vector2(0, s.y)]), PackedColorArray([top, top, bot, bot]))
+	for i in 3:                                        # 성운
+		var c := Vector2(s.x * (0.2 + 0.3 * i), s.y * (0.25 + 0.1 * (i % 2)))
+		n.draw_circle(c, s.x * 0.22, Color(0.35, 0.12, 0.4, 0.05))
+		n.draw_circle(c + Vector2(40, 20), s.x * 0.12, Color(0.2, 0.35, 0.6, 0.05))
+	var pr := s.x * 1.6                                # 행성: 화면 아래에 걸린 큰 원의 윗부분
+	var pc := Vector2(s.x * 0.5, s.y + pr - s.y * 0.16)
+	n.draw_circle(pc, pr + 26.0, Color(0.35, 0.6, 1.0, 0.18))
+	n.draw_circle(pc, pr + 10.0, Color(0.5, 0.75, 1.0, 0.3))
+	n.draw_circle(pc, pr, Color(0.06, 0.1, 0.18))
+	n.draw_arc(pc, pr, PI * 1.25, PI * 1.75, 96, Color(0.6, 0.85, 1.0, 0.7), 3.0)
 
 
 ## 떠다니는 먼지 (화면 순환): 작은 사각형으로 그려 호출 비용을 줄인다

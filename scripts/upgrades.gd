@@ -12,6 +12,9 @@ const CORES := {
 	"assault": {"name": "강습 코어", "from": "kraken",
 		"desc": "요격을 연달아 성공할수록 요격 피해가 커진다. 맞으면 끊긴다 (기체 둘레의 주황 불씨 = 연쇄 단계)",
 		"mods": {"assault": ["set", true]}},
+	"sync": {"name": "동조 코어", "from": "satellite",
+		"desc": "퍼펙트 회피에 성공하면 기체 둘레의 적 탄이 사라진다",
+		"mods": {"sync_clear": ["set", true]}},
 }
 
 

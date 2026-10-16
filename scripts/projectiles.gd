@@ -137,6 +137,16 @@ func hitboxes_near(p: Vector2, reach: float, out: Array[Dictionary]) -> void:
 				"lava": kind[i] == Kind.LAVA, "small": kind[i] == Kind.SMALL, "homing": kind[i] == Kind.HOMING})
 
 
+## p 둘레 r 안의 적 탄을 지운다 (동조 코어). 지운 개수
+func clear_near(p: Vector2, r: float) -> int:
+	var n := 0
+	for i in range(pos.size() - 1, -1, -1):
+		if mine[i] == 0 and pos[i].distance_to(p) < r:
+			remove(i)
+			n += 1
+	return n
+
+
 ## 반사: p 에서 reach 안의 적 탄을 플레이어 것으로 바꿔 target 쪽으로 되돌린다. 바꾼 개수
 func reflect_near(p: Vector2, reach: float, target: Vector2) -> int:
 	var n := 0

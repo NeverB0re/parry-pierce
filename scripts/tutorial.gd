@@ -6,7 +6,7 @@ extends CanvasLayer
 const Loc := preload("res://scripts/loc.gd")
 const Sprites := preload("res://scripts/sprites.gd")
 
-const ORDER := ["dodge", "charge", "parry", "intercept", "tentacle", "dashparry", "unparry", "barrage"]   # 자동으로 뜨는 건 앞의 다섯 장 (main.gd _on_arrived), 나머지는 성공 보상 위주라 조작법 목록에서만
+const ORDER := ["dodge", "charge", "parry", "intercept", "tentacle", "barrier", "dashparry", "unparry", "barrage"]   # 자동으로 뜨는 건 앞의 다섯 장 (main.gd _on_arrived), 나머지는 성공 보상 위주라 조작법 목록에서만
 const SAVE_PATH := "user://tutorial.cfg"
 
 var enabled := true                  # false: 자동 팝업·저장 없음 (테스트·헤드리스)
@@ -94,6 +94,13 @@ func _pages() -> Dictionary:
 				Loc.t("요격하면 차지 쿨다운이 돌아오고 다음 차지가 빨라집니다. 연타는 첫 타를 요격해 이어 가세요."),
 				Loc.t("크라켄의 표적은 방어막 속 외눈입니다. 돌진과 차지 강습은 방어막에 막히고, 리버스 드라이브와 요격만 외눈에 피해를 줍니다."),
 				Loc.t("촉수가 멈춰 붉게 점멸할 때 차지 강습으로 요격하면 외눈에 피해가 들어가고 촉수가 끊어집니다. 끊긴 촉수는 잠시 뒤 다시 자랍니다."),
+			],
+		},
+		"barrier": {
+			"title": Loc.t("결계 — 피해서 열고, 패리해서 부순다"),
+			"lines": [
+				Loc.t("보라 공격을 돌진 직후에 스치면 완전 동조. 그 상태로 차지 강습을 결계에 꽂으면 결계가 열립니다. PERFECT 리버스 드라이브도 결계를 엽니다."),
+				Loc.t("열리면 쏟아지는 금색 탄을 연달아 패리해 코어를 노리세요. 잠시 뒤 결계는 다시 닫힙니다."),
 			],
 		},
 		"unparry": {
@@ -379,7 +386,7 @@ class Stage extends Control:
 				_charge()
 			"intercept":
 				_charge(true)
-			"unparry":
+			"unparry", "barrier":
 				_unparry()
 			"barrage":
 				_barrage()
