@@ -92,7 +92,7 @@ func _run() -> void:
 	main.touch_ui = FakeStick.new()
 
 	_check("numbers (cd %.2f, dmg %d/%d/%d/%d, part %d, core %d)" % [p.stats.dash_cooldown, p.DASH_DAMAGE, p.stats.charge_damage, p.stats.power_damage, p.stats.clash_damage, b.PART_HP, b.core.CORE_HP],
-		absf(p.stats.dash_cooldown - 0.9) < 0.001 and p.DASH_DAMAGE == 1 and p.stats.charge_damage == 3 and p.stats.power_damage == 12 and p.stats.power_damage_perfect == 16 and p.stats.clash_damage == 8 and b.PART_HP == 30 and b.ARMOR_HP == 160 and b.core.CORE_HP == 1)
+		absf(p.stats.dash_cooldown - 0.9) < 0.001 and p.DASH_DAMAGE == 1 and p.stats.charge_damage == 3 and p.stats.power_damage == 6 and p.stats.power_damage_perfect == 16 and p.stats.clash_damage == 8 and b.PART_HP == 30 and b.ARMOR_HP == 160 and b.core.CORE_HP == 1)
 
 	# ── 돌진: 짧게 = 돌진, 쿨다운 ──
 	_air(Vector2(-900, -1500))
@@ -225,8 +225,22 @@ func _run() -> void:
 	p.aim = Vector2.RIGHT
 	p.launch_parry_dash()
 	_step(6)
-	_check("parry dash: 12 dmg (hp %d)" % b.part_hp[0], b.part_hp[0] == b.PART_HP - 12)
-	_check("part damage stage 1 at 60%% (stage %d)" % b.part_stage[0], b.part_stage[0] == 1)
+	_check("normal parry drive: 6 dmg (hp %d)" % b.part_hp[0], b.part_hp[0] == b.PART_HP - 6)
+	_check("normal parry drive: no strike shield, only the small-bullet guard (shield %.2f)" % p.shield_t, p.shield_t <= 0.0 and p.small_guard > 0.0)
+	_air(pp + Vector2(-200, 0))
+	p.aim_phase = true
+	p.aim_perfect = true
+	p.aim = Vector2.RIGHT
+	p.launch_parry_dash()
+	_step(6)
+	_check("PERFECT parry drive: 16 dmg + strike shield (hp %d, shield %.2f)" % [b.part_hp[0], p.shield_t], b.part_hp[0] == b.PART_HP - 16 and p.shield_t > 0.0)
+	_check("part damage stage 1 at 60%% (stage %d)" % b.part_stage[0], b.part_stage[0] >= 1)
+	_air(pp + Vector2(-600, 0))                           # 반사탄 피해: 잔탄 0.5 · 주탄 1 · 유도탄 3 (소수점은 모아서)
+	var rhit: Dictionary = b.strike_hit(b.part_pos(0), 20.0)
+	for k in 3:
+		b.emit(b.Ev.REFLECT_HIT, b.part_pos(0), {"hit": rhit, "dmg": b.shots.REFLECT_DMG[b.shots.Kind.SMALL]})
+	main._drain_boss_events()
+	_check("reflected small bullets deal 0.5 each, carried over (hp %d, carry %.1f)" % [b.part_hp[0], main.reflect_carry], b.part_hp[0] == b.PART_HP - 1 and absf(main.reflect_carry - 0.5) < 0.01 and b.shots.REFLECT_DMG == [1.0, 1.0, 0.5, 3.0])
 
 	# ── 접촉: 돌진 중이 아니면 표적을 통과한다 (충돌·피해·스턴 없음) ──
 	_air(pp + Vector2(-90, 0))
@@ -668,12 +682,19 @@ func _v034_test() -> void:
 	_air(pp + Vector2(-140, 0))
 	_dash_dir("charge", Vector2.RIGHT)
 	_step(6)
-	_check("charge strike bounce gives a shield (%.2f)" % p.shield_t, p.shield_t > 0.0 and p.bouncing)
+	_check("charge strike bounce: like a plain dash, no shield (%.2f, guard %.2f)" % [p.shield_t, p.small_guard], p.shield_t <= 0.0 and p.small_guard > 0.0 and p.bouncing)
+	_air(pp + Vector2(-200, 0))
+	p.aim_phase = true
+	p.aim_perfect = true
+	p.aim = Vector2.RIGHT
+	p.launch_parry_dash()
+	_step(6)
+	_check("PERFECT drive bounce gives a shield (%.2f)" % p.shield_t, p.shield_t > 0.0 and p.bouncing)
 	var frames := 0
 	while p.shield_t > 0.0 and frames < 120:
 		_step(1)
 		frames += 1
-	_check("strike shield is short (%.2fs <= %.2f)" % [frames * DT, p.STRIKE_SHIELD], frames * DT <= p.STRIKE_SHIELD + 0.1 and frames * DT >= 0.3)
+	_check("strike shield is short (%.2fs <= %.2f)" % [frames * DT, p.STRIKE_SHIELD], frames * DT <= p.STRIKE_SHIELD + 0.3 and frames * DT >= 0.3)   # (PERFECT 타격 히트스톱 0.2초 포함)
 
 	# 잔탄 흡수 → 판정이 끝나도 쿨다운 없음
 	main.start_stage(1)
@@ -1234,7 +1255,7 @@ func _v038_test() -> void:
 	b.atk = null
 	b.lingering.clear()
 
-	# 돌진패리: 돌진하는 동안(과 끝난 직후 잠깐)의 패리 성공은 눌렀던 타이밍과 상관없이 PERFECT
+	# 돌진패리: PERFECT 는 타이밍대로 (돌진해도 늦게 누른 패리는 일반), 대신 드라이브 뒤 돌진·차지 쿨다운이 바로 돌아온다
 	p.reset(Vector2(-700, -1500), false)
 	main.hitstop = 0.0
 	main.slowmo = 0.0
@@ -1245,16 +1266,33 @@ func _v038_test() -> void:
 	_check("dash-parry state while dashing", p.is_dash_parry() and p.parry_active and p.parry_t > p.PERFECT_WINDOW)
 	b.shots.spawn(p.position + Vector2(40, 0), Vector2.ZERO, 5.0)
 	_step(1)
-	_check("parry while dashing is PERFECT even though pressed long ago (aim %s, perfect %s, left %.2f)" % [p.aim_phase, p.aim_perfect, p.aim_left], p.aim_phase and p.aim_perfect)
-	var normal_reach: float = p.PARRY_DASH_SPEED_PERFECT * p.PARRY_DASH_TIME
-	_check("reverse drive range is unlimited (reach %.0f vs old %.0f)" % [p.parry_dash_reach(), normal_reach], p.aim_boost and p.parry_dash_reach() >= p.UNLIMITED_REACH)
+	_check("late parry while dashing is NOT perfect (dash-parry no longer upgrades it) (aim %s, perfect %s, boost %s)" % [p.aim_phase, p.aim_perfect, p.aim_boost], p.aim_phase and not p.aim_perfect and p.aim_boost)
+	var normal_reach: float = p.PARRY_DASH_SPEED * p.NORMAL_DRIVE_TIME
+	_check("normal reverse drive has limited range (reach %.0f)" % p.parry_dash_reach(), p.parry_dash_reach() < 1100.0)
+	p.dash_cd = 0.5
+	p.charge_cd = 0.8
 	p.aim = Vector2.RIGHT
 	p.launch_parry_dash()
-	_check("dash-parry reverse drive keeps the boost look (kind %s, boost %s)" % [p.dash_kind, p.power_boost], p.power_boost and p.dash_kind == "power")
+	_check("dash-parry drive: dash and charge cooldowns come back at once (dash %.2f, charge %.2f)" % [p.dash_cd, p.charge_cd], p.power_boost and p.dash_kind == "power" and p.dash_cd <= 0.0 and p.charge_cd <= 0.0)
 	var x0: float = p.position.x
-	_step(int(0.9 / DT))                                # (퍼펙트 패리 히트스톱 0.2초 포함)
-	_check("and goes farther (%.0f px)" % (p.position.x - x0), p.position.x - x0 > normal_reach * 1.15 or p.position.x >= p.WALL_R - 20.0)
+	_step(int(0.9 / DT))
+	_check("normal drive stops near its range (%.0f px)" % (p.position.x - x0), p.position.x - x0 < normal_reach * 1.6)
 	_check("boost ends with the dash", not p.power_boost)
+	p.parry_release()
+	p.aim_phase = false
+	p.reset(Vector2(-700, -1500), false)               # PERFECT 패리 드라이브는 사거리 무제한
+	main.hitstop = 0.0
+	main.slowmo = 0.0
+	b.shots.clear()
+	p.parry_press()
+	b.shots.spawn(p.position + Vector2(40, 0), Vector2.ZERO, 5.0)
+	_step(1)
+	_check("parry right on time is PERFECT and its drive range is unlimited (perfect %s, reach %.0f)" % [p.aim_perfect, p.parry_dash_reach()], p.aim_phase and p.aim_perfect and p.parry_dash_reach() >= p.UNLIMITED_REACH)
+	p.aim = Vector2.RIGHT
+	p.launch_parry_dash()
+	x0 = p.position.x
+	_step(int(0.9 / DT))
+	_check("and goes farther (%.0f px)" % (p.position.x - x0), p.position.x - x0 > normal_reach * 1.15 or p.position.x >= p.WALL_R - 20.0)
 	p.parry_release()
 	p.aim_phase = false
 	# 돌진하지 않으면 같은 늦은 패리는 보통 판정
@@ -1279,7 +1317,7 @@ func _v038_test() -> void:
 	_check("reverse drive does not", not p.is_dash_parry())
 	p.dash_t = 0.0
 	p.dash_kind = ""
-	# 차지 강습 중 패리: 오래전에 누른 패리도 PERFECT + 사거리 증가
+	# 차지 강습 중 패리: 돌진패리 (늦게 누른 패리는 PERFECT 아님)
 	p.reset(Vector2(-700, -1500), false)
 	main.hitstop = 0.0
 	main.slowmo = 0.0
@@ -1289,7 +1327,7 @@ func _v038_test() -> void:
 	_dash_dir("charge", Vector2.RIGHT)
 	b.shots.spawn(p.position + Vector2(40, 0), Vector2.ZERO, 5.0)
 	_step(1)
-	_check("parry during a charge assault is a PERFECT dash-parry (aim %s, perfect %s, boost %s)" % [p.aim_phase, p.aim_perfect, p.aim_boost], p.aim_phase and p.aim_perfect and p.aim_boost)
+	_check("parry during a charge assault is a dash-parry, timing decides PERFECT (aim %s, perfect %s, boost %s)" % [p.aim_phase, p.aim_perfect, p.aim_boost], p.aim_phase and not p.aim_perfect and p.aim_boost)
 	p.parry_release()
 	p.aim_phase = false
 	# 돌진이 끝난 직후 잠깐은 인정, 곧 끝난다. 맞으면 사라진다
@@ -2129,6 +2167,7 @@ func _zone_test() -> void:
 	_check("observer: no arm swing while a bullet is coming (%d)" % swung, swung == 0)
 	o.shots.clear()
 	swung = 0
+	seed(5)                                                          # 무작위 뽑기: 시드를 고정해 가끔 실패하지 않게
 	for i in 40:
 		o.atk = null
 		o.last = ""

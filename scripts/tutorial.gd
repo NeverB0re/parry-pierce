@@ -62,8 +62,8 @@ func _pages() -> Dictionary:
 		"dashparry": {
 			"title": Loc.t("돌진패리 — 돌진하며 패리"),
 			"lines": [
-				Loc.t("탄막을 향해 돌진하면서 패리하면 '돌진패리'입니다. 타이밍과 상관없이 PERFECT 패리가 됩니다."),
-				Loc.t("PERFECT 패리는 리버스 드라이브가 더 강하고 조준할 시간도 깁니다. 돌진 중에는 무적이라 못 막아도 그대로 통과합니다."),
+				Loc.t("탄막을 향해 돌진하면서 패리하면 '돌진패리'입니다. 리버스 드라이브 뒤 돌진·차지 쿨다운이 바로 돌아옵니다."),
+				Loc.t("탄이 닿기 직전에 막으면 PERFECT — 리버스 드라이브가 끝까지 날아가 크게 들어가고 착지 후 잠깐 무적입니다. 일반 패리는 짧고 약합니다."),
 			],
 		},
 		"charge": {
@@ -494,7 +494,7 @@ class Stage extends Control:
 		if tt >= 4.0 and tt < 4.3:
 			_txt(Loc.t("뗀다"), Vector2(size.x - 60.0, 100.0), 15, Color(0.8, 0.9, 1.0))
 
-	## 돌진패리: 탄막을 향해 돌진하며 패리하면 타이밍과 상관없이 PERFECT
+	## 돌진패리: 탄막을 향해 돌진하며 패리하면 리버스 드라이브 뒤 돌진·차지 쿨다운이 바로 돌아온다
 	func _dashparry() -> void:
 		var T := 6.0
 		var tt := fmod(t, T)
@@ -509,7 +509,7 @@ class Stage extends Control:
 		if tt < d0:
 			_caption(Loc.t("① 다가오는 탄막을 보고 스스로 돌진하며 패리를 누른다"), MINT)
 		else:
-			_caption(Loc.t("② 돌진하는 동안의 패리 = 타이밍과 상관없이 PERFECT"), GOLD)
+			_caption(Loc.t("② 돌진하는 동안의 패리 = 쿨다운 즉시 회복"), GOLD)
 		if not parried:
 			_bolt(Vector2(394.0 + 180.0 * (tm - tt), y), Vector2.LEFT)
 		if dashing:
@@ -527,7 +527,7 @@ class Stage extends Control:
 			_ring(Vector2(sx, y), 46.0, Color(0.5, 1.0, 0.88, 0.9), 3.0)
 		if parried and tt < 4.6:
 			_spark(Vector2(sx + 30.0, y), _smooth(tm, tm + 0.5, tt), Color(1, 1, 1), 12, 56.0)
-			_txt(Loc.t("돌진패리! PERFECT"), Vector2(sx - 70.0, y - 62.0), 20, GOLD)
+			_txt(Loc.t("돌진패리!"), Vector2(sx - 70.0, y - 62.0), 20, GOLD)
 			if tt >= tm + 0.5:
 				_txt(Loc.t("더 강하게"), Vector2(sx - 100.0, y + 64.0), 16, MINT)
 

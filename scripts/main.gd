@@ -77,6 +77,7 @@ var spawn := SPAWN
 var spawn_on_platform := true
 var win_t := 0.0                   # 승리 후 흐른 시간 (바로 클릭해 정비로 넘어가는 실수 방지)
 var heat := 0                      # 과열 게이지 (잔탄 피격 횟수)
+var reflect_carry := 0.0           # 반사탄의 소수점 피해 (잔탄 0.5) 를 모아 둔다
 var heat_t := 0.0                  # 다음에 한 칸 식을 때까지
 
 
@@ -212,6 +213,7 @@ func reset_run() -> void:
 	win_t = 0.0
 	heat = 0
 	heat_t = 0.0
+	reflect_carry = 0.0
 	lives = player.stats.shield_cells
 	hitstop = 0.0
 	slowmo = 0.0
@@ -528,8 +530,8 @@ func _check_attacks() -> void:
 				player.on_absorb()
 				_absorb_feedback(hb["pos"])
 				return
-			var dash_parry: bool = player.is_dash_parry()          # 돌진패리: 돌진하는 동안의 패리는 타이밍과 상관없이 PERFECT
-			var perfect: bool = dash_parry or player.parry_t <= Player.PERFECT_WINDOW
+			var dash_parry: bool = player.is_dash_parry()          # 돌진패리: PERFECT 는 타이밍대로, 대신 드라이브 뒤 쿨다운 회복 (player.gd)
+			var perfect: bool = player.parry_t <= Player.PERFECT_WINDOW
 			if hb["id"] == "arm":                       # 팔은 그냥 패리하면 피해 없이 튕겨나기만 (받아치기는 차지 돌진)
 				var hp_pos: Vector2 = hb["pos"]
 				var away: Vector2 = p - hp_pos
@@ -608,7 +610,7 @@ func _clash(hb: Dictionary, p: Vector2) -> void:
 	var kind: String = player.dash_kind
 	var dmg: int = player.intercept_damage() if (hb.has("part") or hb.has("core")) else 0
 	player.pass_target = {}                      # 요격은 표적 원과 무관하다
-	player.bounce_off(dir, kind)                 # 먼저 튕긴다 (리버스 드라이브가 끝나며 풀어 주는 경직이 이번 요격의 경직을 풀지 않게)
+	player.bounce_off(dir, kind, true)           # 먼저 튕긴다 (리버스 드라이브가 끝나며 풀어 주는 경직이 이번 요격의 경직을 풀지 않게)
 	hb["dir"] = dir                              # 촉수는 부딪힌 방향으로 크게 튕겨 나간다
 	boss.on_parried(hb)                          # 팔: 휩쓸던 반대쪽으로 밀려나 잠시 멈춘다 (관절 노출) / 프레스: 걸려서 도로 올라간다
 	var at := p.lerp(contact, 0.4)
@@ -922,12 +924,17 @@ func _drain_boss_events() -> void:
 			Ev.REFLECT_HIT:                     # 반사된 탄이 표적에 닿음
 				if state != State.PLAY:
 					continue
-				var dmg: int = ev["dmg"]
-				tele.hit("reflect", dmg)
-				shake = maxf(shake, 6.0 + dmg * 2.0)
+				var rd: float = ev["dmg"]                # 잔탄 0.5 · 주탄 1 · 유도탄 3 (소수점은 모아서 준다)
+				reflect_carry += rd
+				var dmg := int(reflect_carry)
+				reflect_carry -= dmg
+				shake = maxf(shake, 6.0 + rd * 2.0)
 				sfx.play("armor", -4.0)
-				fx.burst(pos, 10 + dmg * 4, Color(0.75, 1.0, 1.0), 600.0, 0.3, 2.5)
-				fx.sprite(pos, 1, 90.0 + dmg * 40.0, 0.3)
+				fx.burst(pos, int(10 + rd * 4), Color(0.75, 1.0, 1.0), 600.0, 0.3, 2.5)
+				fx.sprite(pos, 1, 90.0 + rd * 40.0, 0.3)
+				if dmg <= 0:
+					continue
+				tele.hit("reflect", dmg)
 				if boss.damage(ev["hit"], dmg):
 					_core_destroyed(pos)
 			Ev.PRESS:                           # 프레스가 정지선에 닿음
@@ -1057,11 +1064,16 @@ func on_power_dash_end() -> void:
 
 
 func on_parry_launch(pos: Vector2, dir: Vector2) -> void:
+	if not player.perfect_dash:                 # 일반 패리 드라이브: 작게
+		sfx.play("dash", 0.0, 0.0)
+		shake = maxf(shake, 6.0)
+		fx.burst(pos, 12, Color(0.8, 0.92, 1.0), 800.0, 0.3, 2.5, 0.0, -dir, 0.5)
+		return
 	sfx.play("dash", 4.0, 0.0)
-	shake = maxf(shake, 12.0)
-	hud.flash(0.1, Color(0.8, 0.9, 1.0))
-	fx.burst(pos, 30, Color(0.8, 0.92, 1.0), 1300.0, 0.4, 3.0, 0.0, -dir, 0.5)
-	fx.ring(pos, Color(0.8, 0.92, 1.0), 160.0, 0.3, 6.0)
+	shake = maxf(shake, 16.0)
+	hud.flash(0.14, Color(1.0, 0.92, 0.75))
+	fx.burst(pos, 40, Color(1.0, 0.92, 0.7), 1500.0, 0.45, 3.5, 0.0, -dir, 0.5)
+	fx.ring(pos, Color(1.0, 0.92, 0.7), 200.0, 0.35, 7.0)
 
 
 ## 돌진 적중. kind: "dash"(피해 1, 가볍게) / "charge"(3, 주황) / "power"(패리 돌진 12·16, 크게)
@@ -1088,8 +1100,18 @@ func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, kind := "d
 		_core_destroyed(contact)
 		return
 	match kind:
-		"power":
+		"power" when not player.perfect_dash:    # 일반 패리 드라이브: 차지 강습 정도의 작은 타격
 			_cure_heat(contact)
+			hitstop = maxf(hitstop, 0.1)
+			shake = maxf(shake, 13.0)
+			sfx.play("armor", 3.0)
+			fx.rays_burst(contact, 8, Color(1.0, 0.85, 0.6), 320.0, 0.3, 5.0)
+			fx.ring(contact, Color(1, 0.9, 0.7), 150.0, 0.3, 7.0)
+			fx.burst(contact, 18, Color(1.0, 0.8, 0.5), 900.0, 0.4, 3.0, 0.0, -dir, 1.1)
+			fx.sprite(contact, 1, 200.0, 0.35)
+		"power":                                 # PERFECT 리버스 드라이브: 크게
+			_cure_heat(contact)
+			_perfect_impact(contact, dir)
 			hitstop = maxf(hitstop, 0.18)
 			shake = maxf(shake, 26.0)
 			sfx.play("break", 4.0)

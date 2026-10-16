@@ -13,7 +13,7 @@ extends Resource
 @export_group("피해")
 @export var charge_damage := 3
 @export var clash_damage := 8               ## 요격: 팔에 차지 강습으로 부딪힘 → 그 팔 관절에 즉시
-@export var power_damage := 12              ## 리버스 드라이브
+@export var power_damage := 6               ## 리버스 드라이브 (일반 패리: 짧고 약하다)
 @export var power_damage_perfect := 16      ## PERFECT 패리 후 리버스 드라이브
 
 @export_group("동조 (퍼펙트 회피 버프)")
@@ -35,7 +35,7 @@ extends Resource
 @export var shield_cells := 3               ## 실드 셀 (피격 −1, 융해 지대 −1)
 @export var stun_time := 0.9                ## 피격 → 제어 불능
 @export var bounce_up := 900.0              ## 적중 후 솟구치는 속도. 차지 ×1.1, 리버스 드라이브 ×1.25
-@export var power_grace := 0.7              ## 리버스 드라이브가 끝난 직후 무적
+@export var power_grace := 0.85             ## PERFECT 리버스 드라이브가 끝난 직후 무적 (일반 패리는 없음)
 @export var glide_fall := 140.0             ## 마우스를 위로: 활공 중 낙하 속도 상한
 
 @export_group("코어 아이템")

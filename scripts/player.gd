@@ -22,7 +22,6 @@ const CHARGE_HOVER := 0.15       # 이 시간 이상 누르면 차지 자세(공
 const CHARGE_AUTO := 0.9         # 차지 완료 후 이 시간이 지나면 자동 발사 (v0.44: 1.3 → 0.9)
 const CHARGE_SPEED := 3600.0     # 차지 돌진: 빠르게 꽂힌다. 사거리 약 950px (요격 고정이면 무제한)
 const CHARGE_DASH_TIME := 0.265
-const CHARGE_GRACE := 0.5        # 차지 돌진이 빗나가 끝난 직후 무적
 const PERFECT_EVADE_GRAZE := 16.0   # 퍼펙트 회피로 인정하는 근접 여유 (몸 반지름에 더함)
 const PERFECT_EVADE_INVULN := 0.8   # 퍼펙트 회피 성공 시 추가 무적 (회피 직후 다른 곳에 맞는 일 방지)
 const PARRY_PUSH := 1100.0          # 휩쓰는 팔을 그냥 패리하면: 피해 없이 반대쪽으로 튕겨나기만 한다
@@ -31,9 +30,10 @@ const PERFECT_WINDOW := 0.07     # 패리 누른 뒤 이 시간 안에 막으면
 const PARRY_MIN := 0.12          # 짧게 눌러도 이 시간만큼은 패리 유지
 const PARRY_COOLDOWN := 0.55     # 끝까지 버틴 뒤 재입력 대기 (남발 방지)
 const PARRY_RELEASE_CD := 0.25   # 중간에 뗐을 때 재입력 대기
-const PARRY_DASH_SPEED := 3600.0 # 패리 돌진: 주력 공격. 월드가 느려져도 플레이어는 실시간
+const PARRY_DASH_SPEED := 3000.0 # 일반 패리의 리버스 드라이브: 느리고 사거리가 있다 (NORMAL_DRIVE_TIME). 월드가 느려져도 플레이어는 실시간
 const PARRY_DASH_SPEED_PERFECT := 4000.0
 const PARRY_DASH_TIME := 0.22
+const NORMAL_DRIVE_TIME := 0.32  # 일반 패리 드라이브 사거리 ≈ 960px (차지 강습 정도). PERFECT 패리만 사거리 무제한
 const UNLIMITED_REACH := 3200.0  # 리버스 드라이브·요격: 사거리 무제한 (표적·벽·천장·바닥에 닿을 때까지). 조준선·어시스트는 이 거리까지 본다
 const UNLIMITED_MAX_T := 1.2     # 그래도 이 시간이 지나면 끝난다 (안전장치)
 const REFLECT_RADIUS := 70.0     # 반사 범위 (기체보다 넓게)
@@ -351,8 +351,8 @@ func parry_reach() -> float:
 
 
 ## 탄 패리 성공: 시간이 느려지고 방향을 정한다 → 패리 돌진
-## 돌진패리: 스스로 돌진해(일반 돌진·차지 강습, 끝난 직후 잠깐 포함) 탄막으로 다가가며 하는 패리. 성공하면 타이밍과 상관없이 PERFECT 패리.
-## (리버스 드라이브 중에는 해당 없음)
+## 돌진패리: 스스로 돌진해(일반 돌진·차지 강습, 끝난 직후 잠깐 포함) 탄막으로 다가가며 하는 패리. PERFECT 판정은 타이밍대로이고,
+## 대신 이어지는 리버스 드라이브 뒤 돌진·차지 쿨다운이 바로 돌아온다. (리버스 드라이브 중에는 해당 없음)
 func is_dash_parry() -> bool:
 	return (dash_t > 0.0 and (dash_kind == "dash" or dash_kind == "charge")) or dash_parry_t > 0.0
 
@@ -415,14 +415,14 @@ func on_parry_push(away: Vector2) -> void:
 	parry_flash = 0.6
 
 
-## 지금 조준 중인 리버스 드라이브의 사거리 (무제한: 조준선 길이)
+## 지금 조준 중인 리버스 드라이브의 사거리 (PERFECT = 무제한: 조준선 길이, 일반 = 짧다)
 func parry_dash_reach() -> float:
-	return UNLIMITED_REACH
+	return UNLIMITED_REACH if aim_perfect else PARRY_DASH_SPEED * NORMAL_DRIVE_TIME
 
 
-## 사거리 무제한 돌진인가 (리버스 드라이브, 요격 고정된 차지 강습)
+## 사거리 무제한 돌진인가 (PERFECT 리버스 드라이브, 요격 고정된 리버스 드라이브·차지 강습)
 func _unlimited() -> bool:
-	return dash_kind == "power" or (dash_kind == "charge" and intercept_lock)
+	return (dash_kind == "power" and perfect_dash) or ((dash_kind == "power" or dash_kind == "charge") and intercept_lock)
 
 
 ## 돌진 경로(지금 위치 → 조준 방향 reach)에 요격할 수 있는 공격 판정이 걸려 있는가
@@ -445,9 +445,12 @@ func launch_parry_dash() -> void:
 	perfect_dash = aim_perfect
 	power_boost = aim_boost
 	aim_boost = false
-	dash_total = PARRY_DASH_TIME
+	dash_total = PARRY_DASH_TIME if aim_perfect else NORMAL_DRIVE_TIME
 	dash_t = dash_total
 	dash_cd = stats.dash_cooldown
+	if power_boost:                              # 돌진패리 보상: 돌진·차지 쿨다운이 바로 돌아온다
+		dash_cd = 0.0
+		charge_cd = 0.0
 	vel = aim * (PARRY_DASH_SPEED_PERFECT if aim_perfect else PARRY_DASH_SPEED)
 	parry_cd = PARRY_RELEASE_CD
 	intercept_lock = _intercept_on_path(UNLIMITED_REACH)
@@ -602,12 +605,13 @@ func step(dt: float) -> void:
 			dash_t -= dt
 		if dash_t <= 0.0:
 			vel *= DASH_KEEP
-			if dash_kind == "dash":
+			var perfect_end := dash_kind == "power" and perfect_dash
+			if not perfect_end:               # 일반 돌진·차지 강습·일반 리버스 드라이브: 무적 없이 잔탄만 잠깐 막는다
 				small_guard = SMALL_GUARD
 			if dash_kind == "dash" or dash_kind == "charge":
 				dash_parry_t = DASH_PARRY_GRACE
-			var grace := stats.power_grace if dash_kind == "power" else (CHARGE_GRACE if dash_kind == "charge" else 0.0)
-			if grace > 0.0:                   # 무적 여유는 패리 돌진/차지 돌진만
+			var grace := stats.power_grace if perfect_end else 0.0
+			if grace > 0.0:                   # 착지 무적은 PERFECT 리버스 드라이브만
 				shield_max = grace
 				shield_t = grace
 			_end_dash()
@@ -817,11 +821,13 @@ func _clear_buff() -> void:
 
 ## 직격 후 위로 솟구친다 (차지·패리 돌진일수록 조금 더 높이). 좌우는 마우스(스틱)로 조종.
 ## 차지 강습(요격 포함)·리버스 드라이브가 적중하면 돌진 쿨다운을 돌려준다 (튕겨나는 중에도 바로 돌진). 일반 돌진은 그대로
-func bounce_off(dir: Vector2, kind := "dash") -> void:
+## 튕김 무적(STRIKE_SHIELD)은 요격과 PERFECT 리버스 드라이브만. 일반 돌진·차지 강습·일반 리버스 드라이브 적중은 잔탄만 잠깐 막는다
+func bounce_off(dir: Vector2, kind := "dash", intercept := false) -> void:
+	var perfect := kind == "power" and perfect_dash
 	dash_t = 0.0
 	_end_dash()
 	bouncing = true
-	if kind == "dash":                           # 일반 돌진 적중: 무적 없음, 잔탄만 잠깐 막는다
+	if not intercept and not perfect:            # 무적 없음, 잔탄만 잠깐 막는다
 		shield_t = 0.0
 		small_guard = maxf(small_guard, SMALL_GUARD_HIT)
 	else:
@@ -1041,7 +1047,7 @@ func _draw() -> void:
 			var ba := Time.get_ticks_msec() * 0.006 + k * TAU / 3.0
 			draw_circle(Vector2(cos(ba), sin(ba)) * 34.0, 2.6, Color(1, 1, 1, 0.9))
 	if dash_t > 0.0 and dash_kind == "power":
-		_draw_gold_tail((1.9 if perfect_dash else 1.6) * (1.4 if power_boost else 1.0))
+		_draw_gold_tail((2.2 if perfect_dash else 0.9) * (1.3 if power_boost else 1.0))   # 일반 패리 드라이브는 가늘게, PERFECT 는 굵게
 	elif buffed and buff_strong and fade_ok:
 		_draw_gold_tail(1.0)
 
@@ -1144,7 +1150,7 @@ func _draw() -> void:
 		draw_rect(Rect2(br.position, Vector2(br.size.x * fr, br.size.y)), Color(C_ATTACK, ba))
 		draw_rect(br, Color(C_ATTACK, 0.5 * ba), false, 1.5)
 
-	# 돌진패리: 돌진하는 동안 패리 자세를 잡으면 청록 고리가 겹쳐 뜬다 (이때 막으면 타이밍과 상관없이 PERFECT)
+	# 돌진패리: 돌진하는 동안 패리 자세를 잡으면 청록 고리가 겹쳐 뜬다 (이때 막으면 드라이브 뒤 돌진·차지 쿨다운 회복)
 	if parry_active and is_dash_parry():
 		var dpp := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.03)
 		draw_arc(Vector2.ZERO, RADIUS + stats.parry_reach + 8.0, 0.0, TAU, 40, Color(0.5, 1.0, 0.88, 0.7 + 0.3 * dpp), 3.0)
