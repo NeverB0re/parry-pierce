@@ -10,6 +10,7 @@ var plan := [
 	["orbit_wind", "orbit", 40, Vector2(300, -900), Vector2(0, -1400), 0.42],
 	["orbit_sweep", "orbit", 110, Vector2(300, -900), Vector2(0, -1400), 0.42],
 	["wall", "wall", 140, Vector2(300, -900), Vector2(0, -1500), 0.42],
+	["burst_wind", "burst", 50, Vector2(300, -900), Vector2(0, -1500), 0.42],
 	["burst", "burst", 120, Vector2(300, -900), Vector2(0, -1500), 0.42],
 	["lattice", "lattice", 64, Vector2(300, -900), Vector2(0, -1500), 0.42],
 	["lattice2", "lattice", 200, Vector2(300, -900), Vector2(0, -1500), 0.42],

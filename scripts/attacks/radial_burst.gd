@@ -4,7 +4,9 @@ extends "res://scripts/attacks/attack.gd"
 ## 흡수는 줄기 단위 (퍼펙트 회피로 빨아들인 줄기만 사라진다)
 ## boss 에 필요한 것: CORE_POS, BARRIER_R, set_glow(i, v), node_toward(a)
 
+const MeleeWarn := preload("res://scripts/melee_warn.gd")
 const WIND := 1.1
+const TRACE_R := 640.0               # 예고: 줄기마다 돌아갈 길을 이 반지름의 옅은 점선 호로 그린다 (회전 방향)
 const ACTIVE := 3.6
 const SPIN := 0.3                    # 회전 (rad/s)
 const HALF := 14.0                   # 판정 반폭 (보이는 빛무리보다 훨씬 가늘다)
@@ -116,6 +118,7 @@ func draw() -> void:
 			var a := _angle(i)
 			c.draw_line(origin + Vector2.from_angle(a) * br, end_at(a), Color(C_UNPARRY_CORE, (0.15 + 0.35 * kk) * blink), 2.0 + 2.0 * kk)
 			c.draw_line(origin + Vector2.from_angle(a) * br, end_at(a), Color(C_UNPARRY, 0.08 * kk), 90.0 * kk)
+			MeleeWarn.arc_trace(c, origin, TRACE_R, a, a + spin * ACTIVE, t / MeleeWarn.TRACE_TIME)   # 회전 방향: 줄기가 쓸고 갈 길이 한 번 그어지고 끝에 화살표
 		return
 	var fl := 0.9 + 0.2 * sin(boss.t * 36.0)
 	for i in n:
