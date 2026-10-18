@@ -162,7 +162,7 @@ const EN := {
 	"크라켄의 표적은 방어막 속 외눈입니다. 돌진과 차지 강습은 방어막에 막히고, 리버스 드라이브와 요격만 외눈에 피해를 줍니다.": "The Kraken's target is the eye inside its shield. Dashes and Charge Strikes bounce off — only Reverse Drives and intercepts damage the eye.",
 	"촉수가 멈춰 붉게 점멸할 때 차지 강습으로 요격하면 외눈에 피해가 들어가고 촉수가 끊어집니다. 끊긴 촉수는 잠시 뒤 다시 자랍니다.": "Intercept a tentacle with a Charge Strike while it is stopped and flashing red to damage the eye and sever the tentacle. A severed tentacle regrows after a while.",
 	"요격하면 차지 쿨다운이 돌아오고 다음 차지가 빨라집니다. 연타는 첫 타를 요격해 이어 가세요.": "An intercept resets your charge cooldown and speeds up the next charge. Intercept the first hit of a combo to keep the chain going.",
-	"검붉은 보라색 공격(레이저·동심원 파동·방전 그물)은 패리할 수 없습니다. 돌진의 무적으로 통과하세요. 지나갈 범위가 미리 표시됩니다.": "Dark purple attacks (lasers, concentric waves, the discharge net) can't be parried. Pass through them with dash invulnerability. Their path is shown in advance.",
+	"검붉은 보라색 공격(레이저·동심원 파동)은 패리할 수 없습니다. 돌진의 무적으로 통과하세요. 지나갈 범위가 미리 표시됩니다.": "Dark purple attacks (lasers, concentric waves) can't be parried. Pass through them with dash invulnerability. Their path is shown in advance.",
 	"돌진을 시작한 직후 스치게 피하면 '강한 퍼펙트 회피'! 다음 차지 강습이 매우 강해지고 금빛 꼬리가 길게 늘어집니다.": "Get grazed right after starting a dash for a 'Strong Perfect Evade'! Your next Charge Strike becomes very strong and a golden trail follows you.",
 	"② 돌진 직후에 스치면 PERFECT": "② Get grazed right after dashing = PERFECT",
 	"다음 차지 강화": "Next charge boosted",

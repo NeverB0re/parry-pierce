@@ -29,7 +29,7 @@ You are a tiny ship facing titanic war machines. Their weapons are huge, their b
 ### Colossi (so far)
 1. **The Observer** — an all-round tutorial titan: lava eruptions, arm sweeps, an eye laser.
 2. **The Barrage Fortress** — a parry-focused tank of spiral fire, fans, homing missiles and mines.
-3. **The Kraken** — an eight-limbed mechanical octopus. Intercept its tentacles to sever them, and brace for the discharge net.
+3. **The Kraken** — a giant mechanical squid. Intercept its tentacles to sever them and strip the shield from its eye — and watch out for the sweeping eye beam.
 4. **The Barrier Satellite** — an orbital fortress sealed inside an unparryable barrier. Slip through its purple storms with perfect evades, crack the barrier with synced strikes, then parry the flood that pours out when it opens.
 
 ### Controls (mouse required)
@@ -67,7 +67,7 @@ Language: pick **English / 한국어** with the flag buttons at the bottom-right
 ### 콜로서스 (현재)
 1. **관측자** — 용암 분출·팔 휘두르기·눈 레이저의 올라운더
 2. **탄막 요새** — 나선·부채 탄막, 유도탄, 기뢰의 패리 중심 보스
-3. **크라켄** — 촉수를 요격해 끊어야 하는 기계 문어, 방전 그물 주의
+3. **크라켄** — 촉수를 요격해 끊어 눈알의 방어막을 벗겨 내야 하는 거대 기계 오징어
 4. **결계 위성** — 패리 불가 결계에 싸인 궤도 요새. 보라 폭풍을 퍼펙트 회피로 넘기고, 동조 일격으로 결계를 깨뜨린 뒤 쏟아지는 탄막을 패리해 꽂아라
 
 ### 조작 (마우스 필수)
