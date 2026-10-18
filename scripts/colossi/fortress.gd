@@ -20,6 +20,7 @@ const Mines := preload("res://scripts/attacks/mines.gd")
 const Press := preload("res://scripts/attacks/press.gd")
 const Rings := preload("res://scripts/attacks/rings.gd")
 const Overload := preload("res://scripts/attacks/overload.gd")
+const BigGun := preload("res://scripts/attacks/big_gun.gd")
 
 # ── 구조 ───────────────────────────────────────────────
 const REACTOR_POS := Vector2(0, -1640)      # 동력 코어(반응로) 중심
@@ -43,7 +44,13 @@ const MORTARS := [Vector2(-430, -640), Vector2(430, -640)]          # 기뢰 박
 
 # ── 외부 시스템 ────────────────────────────────────────
 const PART_HP := 30
-const PART_R := [62.0, 62.0, 58.0, 58.0]
+const PART_R := [62.0, 62.0, 58.0, 58.0, 170.0]
+const BIG := 4                       # 대구경 포대 (외부 시스템 4): 포방패가 닫힌 동안은 피해가 크게 줄고, 드러났을 때 맞으면 1/3 씩
+const BIG_HITS := 3
+const BIG_HP := 48
+const BIG_CLOSED_K := 0.15           # 포방패 너머로 들어가는 피해 비율
+const BIG_EVERY := 3                 # 공격 이만큼마다 대구경 포 (탄막과 함께)
+const GUN_LEN := 430.0               # 다 나왔을 때 포신 길이
 const OPEN_TIME := 1.6
 
 # ── 공격 고르기 ────────────────────────────────────────
@@ -63,6 +70,13 @@ const C_TREAD := Color(0.06, 0.06, 0.065)
 const C_GLOW := Color(1.0, 0.78, 0.42)
 
 var glow: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]   # 발사 전 달아오름: 부위 0~3, 4 첨탑, 5 박격포, 6 반응로(보라)
+var gun_open := 0.0                  # 포방패가 열리고 포가 나온 정도 (0~1)
+var gun_aim := PI * 0.5              # 포신 방향 (아래 = PI/2)
+var gun_heat := 0.0                  # 쏘기 직전 포구가 달아오름
+var gun_recoil := 0.0
+var gun_exposed := false             # 포가 드러나 있다 = 제대로 피해가 들어간다
+var gun_shake := 0.0                 # 맞고 휘청임
+var since_gun := 0
 var debris: Array[Dictionary] = []
 var last := ""                       # 직전에 고른 주 공격 (같은 탄막 반복 방지)
 var since_special := 0
@@ -86,15 +100,22 @@ func reset() -> void:
 	since_special = 0
 	for i in glow.size():
 		glow[i] = 0.0
+	gun_open = 0.0
+	gun_aim = PI * 0.5
+	gun_heat = 0.0
+	gun_recoil = 0.0
+	gun_exposed = false
+	gun_shake = 0.0
+	since_gun = 0
 
 
 # ── 외부 시스템 ────────────────────────────────────────
 func part_count() -> int:
-	return 4
+	return 5
 
 
-func part_max_hp(_i: int) -> int:
-	return PART_HP
+func part_max_hp(i: int) -> int:
+	return BIG_HP if i == BIG else PART_HP
 
 
 func part_radius(i: int) -> float:
@@ -102,12 +123,53 @@ func part_radius(i: int) -> float:
 
 
 func part_pos(i: int) -> Vector2:
+	if i == BIG:
+		return gun_center()
 	return BATTERIES[i] if i < 2 else SILOS[i - 2]
+
+
+## 대구경 포대 중심 (포방패 가운데)과 포구 끝
+func gun_center() -> Vector2:
+	return CASEMATE.get_center()
+
+
+func gun_muzzle() -> Vector2:
+	return gun_center() + Vector2.from_angle(gun_aim) * GUN_LEN * gun_open
+
+
+## 대구경 포대: 포방패가 닫혀 있으면 피해가 크게 준다 (둔탁하게 튕긴다). 드러났을 때 맞으면 한 번에 1/3 + 휘청이며 들어간다
+func damage_part(i: int, dmg: int) -> bool:
+	if i != BIG:
+		return super(i, dmg)
+	if not part_alive(i):
+		return false
+	if gun_exposed:
+		gun_shake = 1.0
+		for m in active_attacks():
+			if m.kind == "big_gun":
+				m.hit()
+		return super(i, BIG_HP / BIG_HITS)
+	part_flash[i] = 0.4
+	return super(i, maxi(1, int(round(dmg * BIG_CLOSED_K))))
+
+
+## 대구경 포대가 부서지면 코어가 열린다 (나머지 외부 시스템은 조건이 아니다)
+func _should_open() -> bool:
+	return not part_alive(BIG)
+
+
+func part_emphasis(i: int) -> float:
+	if i != BIG:
+		return 1.0
+	return 2.2 if gun_exposed else 0.35
 
 
 ## 표적 테두리: 포대 = 포좌 반원 둘레, 사일로 = 사일로 상자
 func part_outline(i: int) -> PackedVector2Array:
 	var out := PackedVector2Array()
+	if i == BIG:
+		var rc := CASEMATE.grow(34.0)
+		return PackedVector2Array([rc.position, Vector2(rc.end.x, rc.position.y), rc.end, Vector2(rc.position.x, rc.end.y)])
 	if i < 2:
 		var b: Vector2 = BATTERIES[i]
 		for q in 13:
@@ -122,6 +184,12 @@ func part_outline(i: int) -> PackedVector2Array:
 ## 부서진 포대는 포신이, 사일로는 해치가 떨어져 나간다
 func _on_part_broken(i: int) -> void:
 	var s := 1.0 if i % 2 == 1 else -1.0
+	if i == BIG:                                        # 대구경 포: 포신이 통째로 떨어져 나간다
+		var c := gun_center()
+		var d := Vector2.from_angle(gun_aim)
+		debris.append({"pos": c + d * GUN_LEN * 0.5, "half": d * GUN_LEN * 0.5, "w": 110.0, "vel": Vector2(randf_range(-200.0, 200.0), -420.0), "rot": 0.0, "rotv": randf_range(-2.0, 2.0), "rest": false})
+		gun_exposed = false
+		return
 	if i < 2:
 		var b: Vector2 = BATTERIES[i]
 		var tip: Vector2 = BARREL_TIPS[i]
@@ -157,6 +225,10 @@ func _step_phase(dt: float) -> void:
 		attack_gap = GAP_SPIRAL
 	for i in glow.size():
 		glow[i] = move_toward(glow[i], 0.0, dt * 2.0)
+	gun_recoil = move_toward(gun_recoil, 0.0, dt * 3.0)
+	gun_shake = move_toward(gun_shake, 0.0, dt * 1.2)
+	if not part_alive(BIG):
+		gun_open = 0.0
 
 
 func _choose(ppos: Vector2) -> void:
@@ -186,6 +258,10 @@ func _choose(ppos: Vector2) -> void:
 		main_kind = pool[randi() % pool.size()]
 	var c := _battery(ppos)
 	var org: Vector2 = SPIRE_TOP if c < 0 else BARREL_TIPS[c]
+	since_gun += 1                                         # 대구경 포: 공격 몇 번마다 탄막과 함께 (탄막 속에서 큰 포탄을 골라 받아치는 손맛)
+	if phase == 1 and part_alive(BIG) and since_gun >= BIG_EVERY and not is_lingering("big_gun") and main_kind != "press":
+		since_gun = 0
+		start_side(BigGun.new())
 	match main_kind:
 		"press":
 			_pick("press", Press.new())
@@ -464,33 +540,70 @@ func _draw_roof() -> void:
 	draw_circle(SPIRE_TOP, 22.0 + 16.0 * g, Color(C_GLOW, 0.35 + 0.55 * g))
 
 
-## 대구경 포대의 포방패 (가운데, 그림만 — 다음 단계에서 열리고 포가 나온다): 두꺼운 셔터 두 짝 + 틈으로 새는 포구 빛 + 경고 줄무늬
+## 대구경 포대: 두꺼운 포방패(셔터 두 짝)가 닫혀 있다가, 쏠 때 양옆으로 열리고 안에서 거대한 포가 밀려 나와 플레이어를 겨눈다.
+## 포구가 달아오르고(gun_heat), 쏘면 뒤로 밀린다(gun_recoil). 맞으면 휘청인다(gun_shake). 부서지면 셔터가 찢어진 채 빈 포좌에서 연기
 func _draw_casemate() -> void:
 	var rc := CASEMATE
+	var c := rc.get_center()
+	var alive := part_alive(BIG)
 	draw_rect(rc.grow(30.0), C_HULL_DARK)
 	draw_rect(rc.grow(30.0), Color(C_RIM, 0.55), false, 5.0)
-	var mid := rc.position.x + rc.size.x * 0.5
-	for sd in [-1.0, 1.0]:
-		var half := Rect2(mid - (rc.size.x * 0.5 if sd < 0.0 else 0.0), rc.position.y, rc.size.x * 0.5 - 6.0, rc.size.y)
-		if sd > 0.0:
-			half.position.x += 6.0
-		draw_rect(half, C_HULL)
-		for q in 4:                                                    # 셔터 가로 판
-			var y := half.position.y + 50.0 + q * 95.0
-			draw_line(Vector2(half.position.x + 14.0, y), Vector2(half.end.x - 14.0, y), C_HULL_DARK, 8.0)
-			draw_circle(Vector2(half.position.x + 30.0, y + 20.0), 6.0, Color(C_RIM, 0.5))
-			draw_circle(Vector2(half.end.x - 30.0, y + 20.0), 6.0, Color(C_RIM, 0.5))
+	var op := gun_open if alive else 0.85
+	if op > 0.0:                                                       # 열린 포좌 안: 어둡고 붉은 빛
+		draw_rect(rc, Color(0.05, 0.02, 0.02))
+		_soft_glow(c, rc.size.x * 0.5, Color(1.0, 0.35, 0.1), 0.25 * op if alive else 0.1)
+	var half_w := rc.size.x * 0.5
+	for sd in [-1.0, 1.0]:                                             # 셔터: 양옆으로 밀려 열린다 (부서지면 한 짝은 찢어져 기운다)
+		var slide: float = sd * half_w * 0.92 * op
+		var x0: float = (rc.position.x if sd < 0.0 else c.x + 6.0) + slide
+		var hr := Rect2(x0, rc.position.y, half_w - 6.0, rc.size.y)
+		var torn: bool = not alive and sd > 0.0
+		if torn:
+			draw_set_transform(Vector2(hr.position.x, hr.end.y), 0.35)
+			hr.position = Vector2(0, -hr.size.y)
+		draw_rect(hr, C_HULL)
+		for q in 4:
+			var y := hr.position.y + 50.0 + q * 95.0
+			draw_line(Vector2(hr.position.x + 14.0, y), Vector2(hr.end.x - 14.0, y), C_HULL_DARK, 8.0)
+			draw_circle(Vector2(hr.position.x + 30.0, y + 20.0), 6.0, Color(C_RIM, 0.5))
+			draw_circle(Vector2(hr.end.x - 30.0, y + 20.0), 6.0, Color(C_RIM, 0.5))
 		for q in 3:
-			var x := half.position.x + 40.0 + q * 80.0
-			draw_line(Vector2(x, half.end.y - 60.0), Vector2(x + 40.0, half.end.y - 20.0), Color(C_RUST, 0.8), 12.0)
-	var heat := 0.5 + 0.5 * sin(t * 1.7)                               # 틈으로 새는 포구 빛 (안에 거대한 포가 있다)
-	draw_line(Vector2(mid, rc.position.y + 10.0), Vector2(mid, rc.end.y - 10.0), Color(1.0, 0.5, 0.15, (0.35 + 0.35 * heat) * (0.0 if dead else 1.0)), 6.0)
-	_soft_glow(Vector2(mid, rc.position.y + rc.size.y * 0.5), 150.0, Color(1.0, 0.45, 0.12), 0.12 * heat * (0.0 if dead else 1.0))
-	for sd in [-1.0, 1.0]:                                             # 포방패를 여닫는 유압 실린더
-		var a: Vector2 = Vector2(mid + sd * (rc.size.x * 0.5 + 30.0), rc.position.y + 40.0)
-		var b := a + Vector2(sd * 90.0, 120.0)
+			var x := hr.position.x + 40.0 + q * 80.0
+			draw_line(Vector2(x, hr.end.y - 60.0), Vector2(x + 40.0, hr.end.y - 20.0), Color(C_RUST, 0.8), 12.0)
+		if torn:
+			draw_set_transform(Vector2.ZERO, 0.0)
+	if alive and op <= 0.01:                                           # 닫혀 있을 때: 틈으로 새는 포구 빛
+		var heat := 0.5 + 0.5 * sin(t * 1.7)
+		draw_line(Vector2(c.x, rc.position.y + 10.0), Vector2(c.x, rc.end.y - 10.0), Color(0.9, 0.35, 0.1, 0.3 + 0.3 * heat), 6.0)
+	if alive and op > 0.0:                                             # 거대한 포: 포미 + 굵은 포신 (포방패 안에서 밀려 나온다)
+		var shake := Vector2(sin(t * 53.0), cos(t * 47.0)) * 14.0 * gun_shake
+		var d := Vector2.from_angle(gun_aim)
+		var base := c + shake - d * 60.0 * gun_recoil
+		var tip := base + d * GUN_LEN * op
+		draw_circle(base, 130.0 * (0.6 + 0.4 * op), C_SIDE)
+		draw_circle(base, 100.0 * (0.6 + 0.4 * op), C_FACE)
+		_cap(base, tip, 170.0, C_SIDE)
+		_cap(base, tip, 128.0, C_FACE)
+		for q in 3:                                                    # 포신 띠
+			var p := base.lerp(tip, 0.35 + q * 0.2)
+			draw_line(p - d.orthogonal() * 86.0, p + d.orthogonal() * 86.0, C_HULL_DARK, 14.0)
+		draw_line(base + d.orthogonal() * 30.0, tip + d.orthogonal() * 30.0, Color(C_RIM, 0.45), 4.0)
+		draw_circle(tip, 92.0, C_HULL_DARK)
+		draw_circle(tip, 60.0, Color(0.03, 0.02, 0.02))
+		if gun_heat > 0.0:                                             # 쏘기 직전 포구가 달아오른다
+			draw_circle(tip, 44.0 + 30.0 * gun_heat, Color(1.0, 0.75, 0.35, 0.25 + 0.5 * gun_heat))
+			draw_circle(tip, 24.0 * gun_heat, Color(1.0, 0.95, 0.8, gun_heat))
+		if gun_recoil > 0.6:
+			draw_circle(tip + d * 60.0, 90.0 * gun_recoil, Color(1.0, 0.85, 0.5, 0.6 * gun_recoil))
+	if not alive and not dead:                                         # 부서진 포좌: 연기
+		for k in 5:
+			var life := fmod(t * 0.5 + k * 0.2, 1.0)
+			draw_circle(c + Vector2(sin(t + k * 1.7) * 60.0, -life * 300.0), 30.0 + life * 60.0, Color(0.25, 0.24, 0.25, 0.4 * (1.0 - life)))
+	for sd in [-1.0, 1.0]:                                             # 포방패를 여닫는 유압 실린더 (열리면 늘어난다)
+		var a: Vector2 = Vector2(c.x + sd * (half_w + 30.0), rc.position.y + 40.0)
+		var b := a + Vector2(sd * (90.0 + 80.0 * op), 120.0)
 		draw_line(a, b, C_HULL_DARK, 22.0)
-		draw_line(a, a.lerp(b, 0.55), Color(0.62, 0.66, 0.68, 0.6), 7.0)
+		draw_line(a, a.lerp(b, 0.55 + 0.3 * op), Color(0.62, 0.66, 0.68, 0.6), 7.0)
 
 
 ## 근접 방공포 (잔탄의 출처): 층 난간마다 작은 포탑이 줄지어 플레이어를 따라 돌고, 가끔 짧게 번쩍인다

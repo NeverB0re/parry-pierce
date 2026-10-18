@@ -363,7 +363,7 @@ func damage_part(i: int, dmg: int) -> bool:
 		finish_attack()
 	part_hp[i] = 0
 	emit(Ev.PART_BREAK, pos)
-	if parts_left() == 0:
+	if _should_open():
 		phase = 2
 		open_t = 0.0
 		atk = null
@@ -371,6 +371,11 @@ func damage_part(i: int, dmg: int) -> bool:
 		next_t = open_time + 1.0
 		emit(Ev.CORE_OPEN, core.center)
 	return true
+
+
+## 외부 시스템이 이만큼 부서지면 코어가 열린다 (기본: 전부. 탄막 요새는 대구경 포대 하나)
+func _should_open() -> bool:
+	return parts_left() == 0
 
 
 func _part_stage_of(i: int) -> int:
@@ -691,9 +696,14 @@ func _draw_part_outline(i: int, p: Vector2, r: float, flick: float) -> void:
 	var breathe := 0.5 + 0.5 * sin(t * 2.2 + i * 1.3)
 	var to := p - aim_from
 	var aimed := to.length() < 1600.0 and to.normalized().dot(aim_dir) > cos(0.22)
-	var a := (0.55 + 0.25 * breathe + (0.2 if aimed else 0.0)) * flick
+	var emph := part_emphasis(i)
+	var a := (0.55 + 0.25 * breathe + (0.2 if aimed else 0.0)) * flick * minf(1.0, emph)
 	var col := Color(1.0, 0.84, 0.45, minf(1.0, a)).lerp(Color.WHITE, part_flash[i])
-	var w := 4.0 + (2.0 if aimed else 0.0)
+	var w := (4.0 + (2.0 if aimed else 0.0)) * (1.0 + maxf(0.0, emph - 1.0) * 0.8)
+	if emph > 1.0:                                   # 드러난 약점: 크게 맥동하는 고리가 바깥으로 퍼진다 (가장 먼저 노릴 곳)
+		var u := fmod(t * 1.5, 1.0)
+		draw_arc(p, r * (1.1 + 0.5 * u), 0.0, TAU, 40, Color(1.0, 0.9, 0.6, 0.7 * (1.0 - u)), 5.0)
+		draw_circle(p, r * 1.2, Color(1.0, 0.8, 0.4, 0.1 + 0.08 * breathe))
 	var pts := part_outline(i)
 	var glow_c := Color(1.0, 0.7, 0.3, (0.12 + 0.1 * breathe + (0.12 if aimed else 0.0)) * flick)   # 바깥 번짐 (어두운 몸에서 잘 보이게)
 	if pts.is_empty():
@@ -769,6 +779,11 @@ func part_pos(_i: int) -> Vector2:
 ## 표적 테두리 모양 (월드 좌표 꼭짓점). 비우면 part_radius 원
 func part_outline(_i: int) -> PackedVector2Array:
 	return PackedVector2Array()
+
+
+## 표적 강조 정도: 1 = 보통, 1 보다 작으면 흐리게 (지금은 잘 안 들어가는 곳), 1 보다 크면 드러난 약점 (크게 맥동)
+func part_emphasis(_i: int) -> float:
+	return 1.0
 
 
 func part_radius(_i: int) -> float:

@@ -7,17 +7,17 @@ extends RefCounted
 ##    패리할 수 있으니 금색 계열이지만, 붉은 기와 별 모양으로 둥근 금색 주탄과 구별한다
 ## 반사 코어·반격 코어로 되돌린 탄은 플레이어 것(mine)이 되어 청백색으로 바뀌고, 표적에 닿으면 피해를 준다.
 
-enum Kind { BOLT, LAVA, SMALL, HOMING }   # 일반 주탄 / 용융물 덩어리(포물선) / 잔탄 / 유도탄(크고 느리게 쫓아옴)
+enum Kind { BOLT, LAVA, SMALL, HOMING, SHELL }   # 일반 주탄 / 용융물 덩어리(포물선) / 잔탄 / 유도탄(크고 느리게 쫓아옴) / 대구경 포탄(크고 느린 주탄, 규칙은 주탄과 같다)
 
 const R := 16.0                       # 주탄 판정 반지름
-const RADII := [16.0, 16.0, 10.0, 24.0]  # 종류별 판정 반지름
+const RADII := [16.0, 16.0, 10.0, 24.0, 32.0]  # 종류별 판정 반지름
 const WARMUP := 0.3                   # 발사 직후 50% 속도에서 출발해 이 시간 동안 100%까지
 const WARMUP_FLOOR := 0.5
 const HOMING_TIME := 3.6              # 유도탄은 발사 후 이 시간 동안만 방향을 튼다
 const HOMING_TURN := 2.0              # 초당 회전 (라디안)
 const HOMING_BLINK := 1.2             # 적 유도탄은 수명이 이만큼 남으면 점멸한다 (곧 사라진다는 표시)
 const REFLECT_SPEED := 1500.0         # 반사된 탄 속도
-const REFLECT_DMG := [1.0, 1.0, 0.5, 3.0]   # 반사된 탄의 피해: 주탄 1 · 용융물 1 · 잔탄 0.5 · 유도탄 3 (main.gd 가 소수점을 모은다)
+const REFLECT_DMG := [1.0, 1.0, 0.5, 3.0, 3.0]   # 반사된 탄의 피해: 주탄 1 · 용융물 1 · 잔탄 0.5 · 유도탄 3 · 대구경 3 (main.gd 가 소수점을 모은다)
 const KILL_X := 1250.0                # 이 밖으로 나가면 사라진다 (벽 너머 / 용암 / 천장 위)
 const KILL_FLOOR := -6.0
 const KILL_TOP := -3100.0
@@ -198,7 +198,7 @@ func draw(ci: CanvasItem) -> void:
 	var homing_tails := PackedVector2Array()
 	for i in pos.size():
 		var p := pos[i]
-		var tail := p - vel[i].normalized() * (26.0 if kind[i] == Kind.SMALL else 50.0)
+		var tail := p - vel[i].normalized() * (26.0 if kind[i] == Kind.SMALL else (90.0 if kind[i] == Kind.SHELL else 50.0))
 		if mine[i] == 1:
 			mine_tails.append_array(PackedVector2Array([p, tail]))
 		elif kind[i] == Kind.SMALL:
@@ -240,6 +240,9 @@ func draw(ci: CanvasItem) -> void:
 				fade = 1.0 if fmod(sqrt(life[i]) * 10.0, 1.0) > 0.4 else 0.22
 				mod = Color(1, 1, 1, fade)
 		var tex: Texture2D = _tex_lava if k == Kind.LAVA else (_tex_homing if hot else _tex_bolt)
+		if k == Kind.SHELL and mine[i] == 0:        # 대구경 포탄: 크게 + 바깥으로 맥동하는 금빛 고리 (무겁다)
+			ci.draw_circle(pos[i], RADII[k] * 2.2 + 6.0 * pulse, Color(C_BOLT, 0.12))
+			ci.draw_arc(pos[i], RADII[k] + 10.0 + 4.0 * pulse, 0.0, TAU, 24, Color(1.0, 0.95, 0.7, 0.8), 3.0)
 		ci.draw_texture_rect(tex, Rect2(pos[i] - half, half * 2.0), false, mod)
 		if k == Kind.HOMING:                      # 유도탄: 바깥에서 도는 끊긴 고리 (쫓아온다는 모양 단서). 적 것은 붉게 맥동한다
 			var rr: float = RADII[k] + 9.0

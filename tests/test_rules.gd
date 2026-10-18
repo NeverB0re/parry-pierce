@@ -251,7 +251,7 @@ func _run() -> void:
 	for k in 3:
 		b.emit(b.Ev.REFLECT_HIT, b.part_pos(0), {"hit": rhit, "dmg": b.shots.REFLECT_DMG[b.shots.Kind.SMALL]})
 	main._drain_boss_events()
-	_check("reflected small bullets deal 0.5 each, carried over (hp %d, carry %.1f)" % [b.part_hp[0], main.reflect_carry], b.part_hp[0] == b.PART_HP - 1 and absf(main.reflect_carry - 0.5) < 0.01 and b.shots.REFLECT_DMG == [1.0, 1.0, 0.5, 3.0])
+	_check("reflected small bullets deal 0.5 each, carried over (hp %d, carry %.1f)" % [b.part_hp[0], main.reflect_carry], b.part_hp[0] == b.PART_HP - 1 and absf(main.reflect_carry - 0.5) < 0.01 and b.shots.REFLECT_DMG == [1.0, 1.0, 0.5, 3.0, 3.0])
 
 	# ── 접촉: 돌진 중이 아니면 표적을 통과한다 (충돌·피해·스턴 없음) ──
 	_air(pp + Vector2(-90, 0))
@@ -601,7 +601,7 @@ func _fortress_test() -> void:
 	var b = main.boss
 	var p = main.player
 	var K = b.shots.Kind
-	_check("stage 2 is the barrage fortress (%s, parts %d)" % [b.get_script().resource_path.get_file(), b.part_count()], b.get_script().resource_path.ends_with("fortress.gd") and b.part_count() == 4 and b.phase == 1)
+	_check("stage 2 is the barrage fortress (%s, parts %d)" % [b.get_script().resource_path.get_file(), b.part_count()], b.get_script().resource_path.ends_with("fortress.gd") and b.part_count() == 5 and b.phase == 1)
 	b.next_t = 99.0
 	p.stats.counter = false                            # 앞선 승리로 얻은 반격 코어가 탄을 되돌리지 않게
 	p.reset(Vector2(-700, -1500), false)
@@ -635,7 +635,7 @@ func _fortress_test() -> void:
 	p.dash_t = 0.3
 	var tgt: Vector2 = b.target_pos(p.position)
 	var ti := -1
-	for i in 4:
+	for i in b.part_count():
 		if b.part_pos(i) == tgt:
 			ti = i
 	var hp0: int = b.part_hp[ti]
@@ -682,8 +682,8 @@ func _fortress_test() -> void:
 	mp.persist = false
 	main.profile = mp
 	b.next_t = 99.0
-	for i in 4:
-		b.damage_part(i, 99)
+	for i in b.part_count():
+		b.damage_part(i, 999)
 	_step(int((b.OPEN_TIME + 1.0) / DT))
 	_check("fortress core phase", b.phase == 3)
 	b.damage_core(999)
@@ -774,7 +774,7 @@ func _v034_test() -> void:
 	p.stats.counter = true
 	var tgt: Vector2 = b.target_pos(p.position)
 	var ti := -1
-	for i in 4:
+	for i in b.part_count():
 		if b.part_pos(i) == tgt:
 			ti = i
 	var hp0: int = b.part_hp[ti]
@@ -962,8 +962,8 @@ func _v035_test() -> void:
 		main.start_stage(1)
 		b = main.boss
 		if ph == 3:
-			for i in 4:
-				b.damage_part(i, 99)
+			for i in b.part_count():
+				b.damage_part(i, 999)
 			_step(int((b.OPEN_TIME + 0.2) / DT))
 		p.reset(Vector2(-500, -1500), false)
 		var quiet := 0.0
@@ -984,15 +984,48 @@ func _v035_test() -> void:
 				continue
 			quiet = 0.0 if busy else quiet + DT
 			longest = maxf(longest, quiet)
-		_check("phase %d: field never sits empty for long (longest quiet %.2fs, attacks %s)" % [ph, longest, kinds.keys()], longest < 1.6 and b.phase == ph)
+		_check("phase %d: field never sits empty for long (longest quiet %.2fs, attacks %s, now phase %d, hp %s)" % [ph, longest, kinds.keys(), b.phase, str(b.part_hp)], longest < 1.6 and b.phase == ph)
 		if ph == 3:
 			_check("core phase uses the reactor overload", kinds.has("overload"))
+
+	# 대구경 포대: 포방패가 열리고 호위탄에 싸인 대구경 포탄 → 드러난 동안 3번 맞으면 부서지고 코어가 열린다
+	main.start_stage(1)
+	b = main.boss
+	b.next_t = 99.0
+	p.reset(Vector2(300, -1300), false)
+	var bg = b.BigGun.new()
+	b.start_side(bg)
+	var shell_n := 0
+	var small_n := 0
+	for k in int((bg.OPEN + bg.AIM + 0.1) / DT):
+		b.step(DT, Vector2(300, -1300))
+	for i in b.shots.size():
+		if b.shots.kind[i] == b.shots.Kind.SHELL:
+			shell_n += 1
+		elif b.shots.kind[i] == b.shots.Kind.SMALL:
+			small_n += 1
+	_check("big gun opens, aims and fires one heavy shell ringed by escorts (shell %d, escorts %d, open %.2f)" % [shell_n, small_n, b.gun_open], shell_n == 1 and small_n == bg.ESCORT and b.gun_exposed and b.gun_open >= 1.0)
+	_check("the exposed gun is the brightest target", b.part_emphasis(b.BIG) > 1.5 and b.part_emphasis(0) == 1.0)
+	b.damage_part(b.BIG, 8)
+	_check("a hit on the exposed gun takes a third and staggers it (hp %d, phase %s)" % [b.part_hp[b.BIG], bg.phase], b.part_hp[b.BIG] == b.BIG_HP - b.BIG_HP / b.BIG_HITS and bg.phase == "stagger")
+	for k in int(3.0 / DT):
+		b.step(DT, Vector2(300, -1300))
+	var hp_c: int = b.part_hp[b.BIG]
+	b.damage_part(b.BIG, 16)
+	_check("closed gun shield: damage is cut down hard (%d -> %d, exposed %s)" % [hp_c, b.part_hp[b.BIG], b.gun_exposed], not b.gun_exposed and hp_c - b.part_hp[b.BIG] >= 1 and hp_c - b.part_hp[b.BIG] <= 3 and b.part_emphasis(b.BIG) < 1.0)
+	b.gun_exposed = true
+	b.damage_part(b.BIG, 8)
+	b.gun_exposed = true
+	b.damage_part(b.BIG, 8)
+	_check("three exposed hits break the big gun and open the core (phase %d, other parts alive %d)" % [b.phase, b.parts_left()], not b.part_alive(b.BIG) and b.phase == 2 and b.parts_left() == 4)
+	b.lingering.clear()
+	b.shots.clear()
 
 	# 반응로 폭주: 잔탄 고리 + 주탄, 끝난다
 	main.start_stage(1)
 	b = main.boss
-	for i in 4:
-		b.damage_part(i, 99)
+	for i in b.part_count():
+		b.damage_part(i, 999)
 	_step(int((b.OPEN_TIME + 1.2) / DT))
 	b.next_t = 99.0
 	b.atk = null
@@ -1068,14 +1101,14 @@ func _v036_test() -> void:
 	for t in tg:
 		if absf(t["pos"].x - 400.0) < 1.0 and absf(t["pos"].y - (pr.bottom - 30.0)) < 1.0:
 			found = true
-	_check("press warn adds a temporary aim-assist target above the player (%d targets)" % tg.size(), found and tg.size() == 5)
+	_check("press warn adds a temporary aim-assist target above the player (%d targets)" % tg.size(), found and tg.size() == 6)
 	p.reset(Vector2(450, -2500), false)
 	p.aim = Vector2.from_angle(-PI * 0.5 + 0.25)
 	var a2: Vector2 = p._assisted(p.aim, p.CHARGE_SPEED * p.CHARGE_DASH_TIME, 0.0)
 	_check("assist pulls the charge aim straight up into the press (x %.2f)" % a2.x, absf(a2.x) < 0.05 and a2.y < -0.99)
 	b.atk = null
 	b.lingering.clear()
-	_check("no press, no temporary target", b.assist_targets(Vector2(400, -2500)).size() == 4)
+	_check("no press, no temporary target", b.assist_targets(Vector2(400, -2500)).size() == 5)
 	main.start_stage(0)
 
 
@@ -2118,8 +2151,8 @@ func _v047_test() -> void:
 	b = main.boss
 	p = main.player
 	b.next_t = 99.0
-	for i in 4:
-		b.damage_part(i, 99)
+	for i in b.part_count():
+		b.damage_part(i, 999)
 	_check("fortress opening (phase 2)", b.phase == 2)
 	main.debug.god = true
 	p.reset(Vector2(0, -1050), false)
