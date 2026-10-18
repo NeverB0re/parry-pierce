@@ -47,7 +47,7 @@ const PART_R := [46.0, 46.0, 50.0, 50.0, 190.0]
 const BIG := 4                       # 대구경 포대 (외부 시스템 4): 체력제. 포방패가 닫힌 동안은 피해가 크게 줄고, 드러났을 때는 그대로 들어간다
 const BIG_HP := 110                  # 주 공략 대상이라 튼튼하게 (리버스 드라이브 8 / PERFECT 16, 반사탄은 0.5~3)
 const BIG_CLOSED_K := 0.15           # 포방패 너머로 들어가는 피해 비율
-const BIG_EVERY := 3                 # 공격 이만큼마다 대구경 포 (단독 패턴)
+const BIG_EVERY := 5                 # 공격 이만큼마다 대구경 포 (단독 패턴, 너무 자주 열리면 금방 끝난다)
 const GUN_HOLD := 1.5                # 대구경 포 차례에 필드가 비길 기다리는 최대 시간 (남은 탄·자리를 내준 공격)
 const SHELL_OUT := 200.0             # 포탄이 만들어지는 자리 (코어 앞, 플레이어 쪽으로)
 const SEGS := 8                      # 코어 장갑 조각 수 (조리개처럼 둘러싼 사다리꼴, 체력이 깎일수록 하나씩 떨어진다)
@@ -232,11 +232,6 @@ func _draw_gauge() -> void:
 		var red := Color(C_HEART, 0.95).lerp(Color.WHITE, gauge_hit * 0.6)
 		red.a *= vis
 		draw_arc(hc, GAUGE_R, top, top + TAU * hp / BIG_HP, 64, red, w)
-
-
-## 마지막 한 방 (v0.75): 장갑이 다 벗겨진 맨 코어는 직접 때려야(돌진·리버스 드라이브) 터진다 — 반사탄은 튕겨 나간다
-func takes_reflect(hit: Dictionary) -> bool:
-	return not (hit.get("kind", "") == "core" and core.broken)
 
 
 ## 겨냥 표적 (반사탄·반격 코어): 닫힌 코어 포대는 피해가 거의 안 들어가므로, 드러났을 때만 노린다

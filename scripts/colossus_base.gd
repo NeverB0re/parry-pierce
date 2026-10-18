@@ -641,9 +641,9 @@ func damage(hit: Dictionary, dmg: int) -> bool:
 	return false
 
 
-## 반사탄이 이 표적에 피해를 주는가 (기본: 언제나. 탄막 요새 = 맨 코어는 직접 때려야 한다)
-func takes_reflect(_hit: Dictionary) -> bool:
-	return true
+## 반사탄이 이 표적에 피해를 주는가: 장갑이 다 벗겨진 맨 코어(마지막 한 방)는 직접 때려야(돌진·리버스 드라이브) 터진다 — 모든 보스
+func takes_reflect(hit: Dictionary) -> bool:
+	return not (hit.get("kind", "") == "core" and core != null and core.broken)
 
 
 func damage_core(dmg: int) -> bool:

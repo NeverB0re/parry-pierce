@@ -102,9 +102,10 @@ func _shell_alive() -> bool:
 	return false
 
 
-## 드러난 포가 맞았다 (fortress.damage_part): 휘청이며 멈췄다가 들어간다
+## 드러난 포가 맞았다 (fortress.damage_part): 쏜 뒤라면 휘청이며 멈췄다가 들어간다.
+## 쏘기 전(열리는 중·모으는 중)에는 흔들리기만 하고 한 번은 꼭 쏜다 (열렸는데 포탄 없이 닫히면 받아칠 기회가 사라진다)
 func hit() -> void:
-	if phase == "out" or phase == "aim" or phase == "open":
+	if phase == "out":
 		set_phase("stagger")
 
 

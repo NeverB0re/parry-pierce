@@ -1046,6 +1046,22 @@ func _v035_test() -> void:
 	main._drain_boss_events()
 	_check("bare fortress core shrugs off reflected shots (broken %s, dead %s)" % [b.core.broken, b.dead], b.core.broken and not b.dead and bare.get("kind", "") == "core" and not b.takes_reflect(bare))
 	_check("a direct strike on the bare core finishes it", b.damage(bare, 1))
+	# v0.78: 한 번 열리면 포탄은 꼭 한 발 쏜다 (모으는 중에 맞아도 닫히지 않는다)
+	main.start_stage(1)
+	b = main.boss
+	b.next_t = 999.0
+	var bg2 = b.BigGun.new()
+	b.start_attack(bg2)
+	for k in int((bg2.OPEN + 0.2) / DT):
+		b.step(DT, Vector2(300, -1300))
+	b.damage_part(b.BIG, 16)
+	var shell2 := false
+	for k in int(bg2.AIM / DT):
+		b.step(DT, Vector2(300, -1300))
+		for i in b.shots.size():
+			shell2 = shell2 or b.shots.kind[i] == b.shots.Kind.SHELL
+	_check("a hit while the core charges does not close it: the shell still fires (phase %s, shell %s)" % [bg2.phase, shell2], shell2 and bg2.phase == "out")
+	b.shots.clear()
 	b.lingering.clear()
 	b.shots.clear()
 
