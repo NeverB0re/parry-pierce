@@ -266,8 +266,6 @@ func _feed_core(dmg: int) -> void:
 
 func _wear_shield(v: float) -> void:
 	shield_hp = maxf(0.0, shield_hp - v)
-	gauge_vis = GAUGE_SHOW                                # 방어막만 깎여도 게이지가 뜬다
-	gauge_hit = 1.0
 	if phase == 1 and shield_hp <= 0.0:
 		_shatter()
 
@@ -1189,7 +1187,7 @@ func _draw_shield() -> void:
 			draw_polyline(PackedVector2Array([p0, p0 + Vector2.from_angle(a + 2.6) * 60.0, p0 + Vector2.from_angle(a + 2.2) * 110.0]), Color(1, 1, 1, 0.8 * k), 3.0)
 
 
-## 체력 게이지 (colossus_base.gd): 안쪽 = 코어 체력(빨강), 페이즈 1 에는 바깥에 방어막 내구도(청록)를 한 겹 더 두른다
+## 체력 게이지 (colossus_base.gd): 코어 체력만 (빨강). 방어막은 게이지 없이 막의 두께·금·뚫는 빛줄기로만 보여 준다
 func gauge_values() -> Vector3:
 	return Vector3(core.armor_hp, ARMOR_HP, ARMOR_HP)
 
@@ -1211,12 +1209,6 @@ func _draw_gauge() -> void:
 		draw_arc(hc, GAUGE_R, top, top + TAU * hp / ARMOR_HP, 64, red, w)
 	else:
 		draw_arc(hc, GAUGE_R, 0.0, TAU, 64, Color(1.0, 0.95, 0.7, (0.3 + 0.4 * float(int(t * 8.0) % 2)) * vis), 3.0)
-	if phase == 1 and shield_hp > 0.0:
-		var R := GAUGE_R + w + 8.0
-		draw_arc(hc, R, 0.0, TAU, 96, Color(0.03, 0.04, 0.05, 0.6 * vis), w * 0.6 + 4.0)
-		var cyan := Color(0.45, 0.95, 1.0, 0.95).lerp(Color.WHITE, gauge_hit * 0.6)
-		cyan.a *= vis
-		draw_arc(hc, R, top, top + TAU * shield_frac(), 64, cyan, w * 0.6)
 
 
 ## 잘린 집게: 두 갈래 집게 + 끊긴 단면의 불씨 + 눈에 띄는 금빛 테두리 (쳐 보고 싶게). 날아가는 중엔 금빛 꼬리
