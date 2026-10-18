@@ -56,17 +56,30 @@ func _air(pos: Vector2) -> void:
 	main.player.aim = Vector2.RIGHT
 
 
-## 오른팔(1) 휘두르기를 원하는 단계·각도로 바로 세운다
+## 관측자 대검 긋기를 원하는 단계·각도로 바로 세운다 (회전축 SWORD_PIV 고정)
+const SWORD_PIV := Vector2(-300, -1900)
 func _swing(ph: String, tt: float, th0: float, th1: float) -> void:
 	var b = main.boss
-	var sw = b.Swing.new(1, 3, b.fists[1])
+	var sw = b.Greatsword.new()
 	b.start_attack(sw)
+	sw.piv = SWORD_PIV
 	sw.phase = ph
 	sw.t = tt
 	sw.th0 = th0
 	sw.th1 = th1
 	sw.th = th0
-	b.fists[1] = sw.fist_at(1.0)
+	b.sword_piv = SWORD_PIV
+	b.sword_ang = th0
+	sw.from_piv = SWORD_PIV
+	sw.from_ang = th0
+
+
+## 쳐낸 대검이 코어에 닿을 때까지
+func _fling() -> void:
+	for k in 180:
+		if _ph() != "fling":
+			break
+		_step(1)
 
 
 func _ph() -> String:
@@ -281,21 +294,17 @@ func _run() -> void:
 	_step(1)
 	_check("late graze: no reward, no slowmo", not p.buffed and main.slowmo <= 0.0)
 
-	# ── 패리 불가(레이저) 퍼펙트 회피 = 강한 버프 4배 ──
+	# ── 패리 불가(방패 동심원) 퍼펙트 회피 = 강한 버프 4배 ──
 	_air(Vector2(-300, -1500))
 	_dash_dir("dash", Vector2.RIGHT)
-	var bm = b.Beam.new(b.HEAD_POS)
+	var bm = b.Rings.new(b.shield_center())
 	b.start_attack(bm)
-	bm.phase = "sweep"
-	bm.t = bm.SWEEP * 0.5
-	bm.th = 1.57
-	bm.th_prev = 1.6
-	var rel: Vector2 = Vector2.from_angle(1.565) * 400.0
-	p.position = b.HEAD_POS + rel
+	bm.t = bm.wind + 400.0 / bm.SPEED
+	p.position = bm.origin + Vector2(400.0, 0)
 	p.dash_t = 0.2
 	main.slowmo = 0.0
 	_step(1)
-	_check("beam perfect dodge: strong buff (buffed %s, strong %s, slowmo %.2f)" % [p.buffed, p.buff_strong, main.slowmo], p.buffed and p.buff_strong and main.slowmo >= 0.45)
+	_check("shield rings perfect dodge: strong buff (buffed %s, strong %s, slowmo %.2f)" % [p.buffed, p.buff_strong, main.slowmo], p.buffed and p.buff_strong and main.slowmo >= 0.45)
 	b.atk = null
 	var hp_core: int = b.core.core_hp
 	b.phase = 1
@@ -334,56 +343,57 @@ func _run() -> void:
 	_air(Vector2(-700, -1500))
 	b.shots.clear()
 	_swing("swing", 0.0, 1.0, 1.0)
-	var mid: Vector2 = b.fists[1].lerp(b.sword_tip(), 0.5)   # 검날 가운데 (v0.80: 판정은 무기·손)
-	var side: Vector2 = (b.fists[1] - b.SHOULDERS[1]).orthogonal().normalized()
+	var mid: Vector2 = b.sword_piv + Vector2.from_angle(b.sword_ang) * (b.HILT_GAP + b.BLADE_L * 0.5)   # 대검 날 가운데
+	var side: Vector2 = Vector2.from_angle(b.sword_ang).orthogonal()
 	_air(mid + side * 220.0)
 	_swing("swing", 0.0, 1.0, 1.0)
-	var hp3: int = b.part_hp[3]
+	var hp3: int = b.core.armor_hp
 	_dash_dir("charge", -side)
 	_step(4)
-	_check("clash: joint takes 8 (hp %d -> %d)" % [hp3, b.part_hp[3]], b.part_hp[3] == hp3 - 8)
-	_check("clash: arm recoils", _ph() == "recoil")
+	_check("clash: the greatsword is flung toward the core", _ph() == "fling")
 	_check("clash: player rises, no life lost", p.dash_t <= 0.0 and p.vel.y < -800.0 and main.lives == main.player.stats.shield_cells)
+	_fling()
+	_check("clash: the flung sword stabs the core for 8 (armour %d -> %d, phase %s)" % [hp3, b.core.armor_hp, _ph()], b.core.armor_hp == hp3 - 8 and _ph() == "stuck")
 
 	# ── 사전 저지: 위치 고정 후 멈춰 있을 때(set/warn)는 차지 돌진으로 끊을 수 있고, 들어올리는 중(prep)은 아니다 ──
 	for ph in ["set", "warn"]:
 		_air(mid + side * 220.0)
 		_swing(ph, 0.2, 1.0, 2.0)
-		hp3 = b.part_hp[3]
+		hp3 = b.core.armor_hp
 		_dash_dir("charge", -side)
 		_step(4)
-		_check("pre-swing interrupt in %s: joint -8, attack cut (hp %d->%d, phase %s)" % [ph, hp3, b.part_hp[3], _ph()], b.part_hp[3] == hp3 - 8 and _ph() == "recoil")
+		_fling()
+		_check("pre-swing interrupt in %s: core -8, attack cut (armour %d->%d, phase %s)" % [ph, hp3, b.core.armor_hp, _ph()], b.core.armor_hp == hp3 - 8 and _ph() == "stuck")
 	_air(mid + side * 220.0)
-	_swing("prep", 0.2, 1.0, 2.0)
-	hp3 = b.part_hp[3]
+	_swing("rise", 0.2, 1.0, 2.0)
+	hp3 = b.core.armor_hp
 	_dash_dir("charge", -side)
 	_step(4)
-	_check("no interrupt while arm is still lifting (prep)", b.part_hp[3] == hp3 and _ph() == "prep")
+	_check("no interrupt while the sword is still rising", b.core.armor_hp == hp3 and _ph() == "rise")
 	_air(mid + side * 220.0)
 	_swing("warn", 0.2, 1.0, 2.0)
-	hp3 = b.part_hp[3]
+	hp3 = b.core.armor_hp
 	_dash_dir("dash", -side)
 	_step(4)
-	_check("normal dash does not interrupt", b.part_hp[3] == hp3 and _ph() == "warn")
+	_check("normal dash does not interrupt", b.core.armor_hp == hp3 and _ph() == "warn")
 
 	_air(mid + side * 100.0)
 	_swing("swing", 0.0, 1.0, 1.0)
-	hp3 = b.part_hp[3]
+	hp3 = b.core.armor_hp
 	p.parry_press()
 	p.vel = -side * 400.0
 	_step(4)
-	_check("arm parry: no aim, no damage, pushed (|v| %.0f)" % p.vel.length(), not p.aim_phase and b.part_hp[3] == hp3 and main.lives == main.player.stats.shield_cells and p.vel.length() > 600.0)
-	_check("arm parry: arm keeps swinging", _ph() == "swing")
+	_check("sword parry: no aim, no damage, pushed (|v| %.0f, phase %s, lives %d, aim %s, armour %d/%d)" % [p.vel.length(), _ph(), main.lives, p.aim_phase, b.core.armor_hp, hp3], not p.aim_phase and b.core.armor_hp == hp3 and main.lives == main.player.stats.shield_cells and p.vel.length() > 600.0)
+	_check("sword parry: the sword keeps swinging", _ph() == "swing")
 	p.parry_release()
 
 	# ── 코어: 껍질(체력 160)을 다 부수고 나서도 한 발을 더 맞혀야 부서진다 ──
 	main.reset_run()
 	b.next_t = 99.0
-	for i in 4:
+	_check("observer: the core is a target from the start (hit %s)" % b.strike_hit(b.HEART_POS, 20.0).get("kind", ""), b.strike_hit(b.HEART_POS, 20.0).get("kind", "") == "core" and b.phase == 1)
+	for i in b.part_count():
 		b.damage_part(i, 99)
-	_check("all parts -> chest opens", b.phase == 2)
-	_step(int((b.OPEN_TIME + 1.0) / DT))
-	_check("core phase", b.phase == 3)
+	_check("breaking both shoulder cannons does not open a phase", b.phase == 1)
 	b.next_t = 99.0
 	b.atk = null
 	_check("core armour = 3x3 plates, all on (%d)" % b.plates_left(), b.plates_left() == b.PLATE_N)
@@ -841,8 +851,8 @@ func _v034_test() -> void:
 	b = main.boss
 	_air(Vector2(-700, -1500))
 	_swing("swing", 0.0, 1.0, 1.0)
-	var mid: Vector2 = b.fists[1].lerp(b.sword_tip(), 0.5)   # 검날 가운데 (v0.80: 판정은 무기·손)
-	var side: Vector2 = (b.fists[1] - b.SHOULDERS[1]).orthogonal().normalized()
+	var mid: Vector2 = b.sword_piv + Vector2.from_angle(b.sword_ang) * (b.HILT_GAP + b.BLADE_L * 0.5)   # 대검 날 가운데
+	var side: Vector2 = Vector2.from_angle(b.sword_ang).orthogonal()
 	p.position = mid + side * 120.0
 	_swing("swing", 0.0, 1.0, 1.0)
 	lives0 = main.lives
@@ -1104,18 +1114,20 @@ func _v036_test() -> void:
 	var b = main.boss
 	_air(Vector2(-700, -1500))
 	_swing("warn", 0.2, 1.0, 2.0)
-	var mid: Vector2 = b.fists[1].lerp(b.sword_tip(), 0.5)   # 검날 가운데 (v0.80: 판정은 무기·손)
-	var side: Vector2 = (b.fists[1] - b.SHOULDERS[1]).orthogonal().normalized()
+	var mid: Vector2 = b.sword_piv + Vector2.from_angle(b.sword_ang) * (b.HILT_GAP + b.BLADE_L * 0.5)   # 대검 날 가운데
+	var side: Vector2 = Vector2.from_angle(b.sword_ang).orthogonal()
 	_air(mid + side * 190.0)
 	_swing("warn", 0.2, 1.0, 2.0)
-	var hp3: int = b.part_hp[3]
+	var hp3: int = b.core.armor_hp
 	p.aim_phase = true
 	p.aim_perfect = false
 	p.aim = -side
 	p.launch_parry_dash()
 	_step(4)
-	_check("reverse drive intercepts the arm (hp %d -> %d, phase %s)" % [hp3, b.part_hp[3], _ph()], b.part_hp[3] == hp3 - p.stats.power_damage and _ph() == "recoil")
+	var flung: bool = _ph() == "fling"
 	_check("after reverse drive intercept: bounce, dash ready, world speed back", p.bouncing and p.dash_cd <= 0.0 and p.dash_kind == "" and main.world_scale() == 1.0)
+	_fling()
+	_check("reverse drive intercepts the sword and flings it into the core (armour %d -> %d, flung %s)" % [hp3, b.core.armor_hp, flung], flung and b.core.armor_hp == hp3 - p.stats.power_damage)
 	# 리버스 드라이브로 프레스 요격
 	main.start_stage(1)
 	b = main.boss
@@ -1498,7 +1510,7 @@ func _v039_test() -> void:
 	main.start_stage(0)
 	var b = main.boss
 	_air(Vector2(-700, -1500))
-	for ph in ["prep", "set", "warn"]:
+	for ph in ["rise", "set", "warn"]:
 		_swing(ph, 0.2, 1.0, 2.0)
 		_check("arm %s phase is a melee warning" % ph, b.melee_warning())
 	for ph in ["swing", "recoil", "return"]:
@@ -2354,9 +2366,9 @@ func _zone_test() -> void:
 		o.atk = null
 		o.last = ""
 		o._choose(pp)
-		if o.atk != null and o.atk.kind == "swing":
+		if o.atk != null and o.atk.kind == "sword":
 			swung += 1
-	_check("observer: no arm swing while a bullet is coming (%d)" % swung, swung == 0)
+	_check("observer: no greatsword while a bullet is coming (%d)" % swung, swung == 0)
 	o.shots.clear()
 	swung = 0
 	seed(5)                                                          # 무작위 뽑기: 시드를 고정해 가끔 실패하지 않게
@@ -2364,9 +2376,9 @@ func _zone_test() -> void:
 		o.atk = null
 		o.last = ""
 		o._choose(pp)
-		if o.atk != null and o.atk.kind == "swing":
+		if o.atk != null and o.atk.kind == "sword":
 			swung += 1
-	_check("observer: arm swing is common in arm reach when clear (%d/40)" % swung, swung >= 10)
+	_check("observer: greatsword is common when clear (%d/40)" % swung, swung >= 10)
 	o.atk = null
 	main.reset_run()
 

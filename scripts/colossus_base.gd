@@ -661,10 +661,11 @@ func _draw_shards() -> void:
 	for sd in shards:
 		var pts: PackedVector2Array = sd["pts"]
 		draw_set_transform(sd["pos"], float(sd["rot"]))
-		draw_colored_polygon(pts, core.C_STEEL)
+		var col: Color = sd.get("col", core.C_STEEL)        # 파편 색 (기본 강철, 관측자 보석 면은 붉은 결정)
+		draw_colored_polygon(pts, col)
 		var ol := pts.duplicate()
 		ol.append(pts[0])
-		draw_polyline(ol, core.C_STEEL_DARK, 3.0)
+		draw_polyline(ol, col.darkened(0.4), 3.0)
 	draw_set_transform(Vector2.ZERO, 0.0)
 
 

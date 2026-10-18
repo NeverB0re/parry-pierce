@@ -588,7 +588,7 @@ class Stage extends Control:
 					_txt(Loc.t("꾹"), Vector2(size.x - 52.0, 100.0), 15, GOLD)
 			_ship(pos, 0.0, 1.0, col)
 		else:
-			_caption(Loc.t("팔이 멈춰 있을 때 차지 강습으로 부딪히면 요격!"), Color(1.0, 0.8, 0.6))
+			_caption(Loc.t("멈춘 근접 공격에 차지 강습으로 부딪히면 요격!"), Color(1.0, 0.8, 0.6))
 			var u := tt - 3.6
 			var sh := Vector2(110, 60)
 			var arm_len := 380.0

@@ -645,10 +645,11 @@ func _clash(hb: Dictionary, p: Vector2) -> void:
 	var contact: Vector2 = hb["pos"]
 	var dir: Vector2 = player.vel.normalized()
 	var kind: String = player.dash_kind
-	var dmg: int = player.intercept_damage() if (hb.has("part") or hb.has("core")) else 0
+	var dmg: int = player.intercept_damage() if (hb.has("part") or hb.has("core") or hb.has("fling")) else 0
 	player.pass_target = {}                      # 요격은 표적 원과 무관하다
 	player.bounce_off(dir, kind, true)           # 먼저 튕긴다 (리버스 드라이브가 끝나며 풀어 주는 경직이 이번 요격의 경직을 풀지 않게)
 	hb["dir"] = dir                              # 촉수는 부딪힌 방향으로 크게 튕겨 나간다
+	hb["dmg"] = dmg                              # 관측자 대검: 쳐낸 검이 코어에 꽂혀 이만큼 피해 (도착할 때 REFLECT_HIT)
 	boss.on_parried(hb)                          # 팔: 휩쓸던 반대쪽으로 밀려나 잠시 멈춘다 (관절 노출) / 프레스: 걸려서 도로 올라간다
 	var at := p.lerp(contact, 0.4)
 	last_strike_t = run_time
