@@ -2468,6 +2468,7 @@ func _satellite_test() -> void:
 	var seen := {}
 	var beam_hit := false
 	var pp := Vector2(200, -900)
+	seed(11)                                                         # 무작위 고르기: 앞 테스트의 난수 소비에 따라 가끔 한 종류가 안 나오지 않게
 	for k in int(80.0 / DT):
 		b.step(DT, pp)
 		for a in b.active_attacks():
