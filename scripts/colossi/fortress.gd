@@ -134,7 +134,7 @@ func gun_center() -> Vector2:
 
 
 func gun_muzzle() -> Vector2:
-	return gun_center() + Vector2.from_angle(gun_aim) * GUN_LEN * gun_open
+	return gun_center() + Vector2.from_angle(gun_aim) * (GUN_LEN * gun_open + 56.0)
 
 
 ## 대구경 포대: 포방패가 닫혀 있으면 피해가 크게 준다 (둔탁하게 튕긴다). 드러났을 때 맞으면 한 번에 1/3 + 휘청이며 들어간다
@@ -575,26 +575,35 @@ func _draw_casemate() -> void:
 	if alive and op <= 0.01:                                           # 닫혀 있을 때: 틈으로 새는 포구 빛
 		var heat := 0.5 + 0.5 * sin(t * 1.7)
 		draw_line(Vector2(c.x, rc.position.y + 10.0), Vector2(c.x, rc.end.y - 10.0), Color(0.9, 0.35, 0.1, 0.3 + 0.3 * heat), 6.0)
-	if alive and op > 0.0:                                             # 거대한 포: 포미 + 굵은 포신 (포방패 안에서 밀려 나온다)
+	if alive and op > 0.0:                                             # 거대한 포: 각진 방패 덩어리(포가) + 네모난 포신 셋 + 슬롯 달린 포구 제동기 (둥근 모양 없이 기계적으로)
 		var shake := Vector2(sin(t * 53.0), cos(t * 47.0)) * 14.0 * gun_shake
 		var d := Vector2.from_angle(gun_aim)
-		var base := c + shake - d * 60.0 * gun_recoil
-		var tip := base + d * GUN_LEN * op
-		draw_circle(base, 130.0 * (0.6 + 0.4 * op), C_SIDE)
-		draw_circle(base, 100.0 * (0.6 + 0.4 * op), C_FACE)
-		_cap(base, tip, 170.0, C_SIDE)
-		_cap(base, tip, 128.0, C_FACE)
-		for q in 3:                                                    # 포신 띠
-			var p := base.lerp(tip, 0.35 + q * 0.2)
-			draw_line(p - d.orthogonal() * 86.0, p + d.orthogonal() * 86.0, C_HULL_DARK, 14.0)
-		draw_line(base + d.orthogonal() * 30.0, tip + d.orthogonal() * 30.0, Color(C_RIM, 0.45), 4.0)
-		draw_circle(tip, 92.0, C_HULL_DARK)
-		draw_circle(tip, 60.0, Color(0.03, 0.02, 0.02))
-		if gun_heat > 0.0:                                             # 쏘기 직전 포구가 달아오른다
-			draw_circle(tip, 44.0 + 30.0 * gun_heat, Color(1.0, 0.75, 0.35, 0.25 + 0.5 * gun_heat))
-			draw_circle(tip, 24.0 * gun_heat, Color(1.0, 0.95, 0.8, gun_heat))
+		draw_set_transform(c + shake, gun_aim)
+		var L := GUN_LEN * op - 70.0 * gun_recoil
+		var mantlet := PackedVector2Array([Vector2(-150, -150), Vector2(10, -150), Vector2(70, -100), Vector2(70, 100), Vector2(10, 150), Vector2(-150, 150)])
+		draw_colored_polygon(mantlet, C_SIDE)
+		var inner := PackedVector2Array([Vector2(-130, -128), Vector2(0, -128), Vector2(48, -88), Vector2(48, 88), Vector2(0, 128), Vector2(-130, 128)])
+		draw_colored_polygon(inner, C_FACE)
+		for q in 3:                                                    # 포가 장갑 리벳·띠
+			draw_line(Vector2(-110 + q * 45, -120), Vector2(-110 + q * 45, 120), C_HULL_DARK, 6.0)
+		for y in [-64.0, 0.0, 64.0]:                                   # 네모난 포신 셋
+			draw_rect(Rect2(60.0, y - 24.0, L - 60.0, 48.0), C_SIDE)
+			draw_rect(Rect2(60.0, y - 16.0, L - 60.0, 32.0), C_FACE)
+			draw_line(Vector2(60.0, y - 16.0), Vector2(L, y - 16.0), Color(C_RIM, 0.4), 3.0)
+			for q in 2:                                                # 포신 고정 띠
+				var x := 60.0 + (L - 60.0) * (0.3 + q * 0.35)
+				draw_rect(Rect2(x - 10.0, y - 30.0, 20.0, 60.0), C_HULL_DARK)
+			draw_rect(Rect2(L, y - 32.0, 56.0, 64.0), C_HULL_DARK)       # 포구 제동기 (네모, 옆으로 슬롯)
+			for q in 2:
+				draw_rect(Rect2(L + 10.0 + q * 22.0, y - 32.0, 10.0, 14.0), Color(0.02, 0.02, 0.02))
+				draw_rect(Rect2(L + 10.0 + q * 22.0, y + 18.0, 10.0, 14.0), Color(0.02, 0.02, 0.02))
+			if gun_heat > 0.0:                                         # 쏘기 직전 포구가 달아오른다
+				draw_rect(Rect2(L + 46.0, y - 14.0, 14.0, 28.0), Color(1.0, 0.8, 0.4, 0.4 + 0.6 * gun_heat))
+		draw_set_transform(Vector2.ZERO, 0.0)
+		if gun_heat > 0.0:
+			_soft_glow(c + shake + d * (L + 60.0), 120.0 * gun_heat + 30.0, Color(1.0, 0.7, 0.3), 0.5 * gun_heat)
 		if gun_recoil > 0.6:
-			draw_circle(tip + d * 60.0, 90.0 * gun_recoil, Color(1.0, 0.85, 0.5, 0.6 * gun_recoil))
+			_soft_glow(c + d * (GUN_LEN + 80.0), 170.0 * gun_recoil, Color(1.0, 0.85, 0.5), 0.8 * gun_recoil)
 	if not alive and not dead:                                         # 부서진 포좌: 연기
 		for k in 5:
 			var life := fmod(t * 0.5 + k * 0.2, 1.0)
