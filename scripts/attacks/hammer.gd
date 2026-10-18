@@ -22,7 +22,10 @@ var y_top := -1600.0
 var y_stop := -800.0
 var y_bar := -1600.0
 var _from := PackedVector2Array()
-var pin_x := NAN                      # 정해진 x 에 내려친다 (행진 연타). NAN = 플레이어를 따라감
+var pin_x := NAN                      # 정해진 x 에 내려친다. NAN = 플레이어를 따라감
+var follow = null                     # 연속 내려치기의 뒤 타: 첫 타(follow)가 겨눈 자리에 떨어진다
+var stack := 0                        # 그때 첫 타 위로 겹겹이 들려 있는 순번 (막대가 겹쳐 보이지 않게)
+const STACK_UP := 170.0
 
 
 func _init(tent: int, fast := false, wait := 0.0, at_x := NAN) -> void:
@@ -37,6 +40,12 @@ func _init(tent: int, fast := false, wait := 0.0, at_x := NAN) -> void:
 
 
 func _aim(ppos: Vector2) -> void:
+	if follow != null:
+		cx = follow.cx
+		y_top = maxf(TOP_MIN, follow.y_top - STACK_UP * stack)
+		y_stop = follow.y_stop
+		y_bar = y_top
+		return
 	cx = clampf(ppos.x if is_nan(pin_x) else pin_x, -900.0, 900.0)
 	y_top = clampf(ppos.y - ABOVE, TOP_MIN, -900.0)
 	y_stop = minf(ppos.y + BELOW, STOP_MAX)
@@ -93,7 +102,9 @@ func _pose() -> PackedVector2Array:
 
 
 func _track(ppos: Vector2) -> void:
-	if is_nan(pin_x):
+	if is_nan(pin_x) and follow == null:
+		_aim(ppos)
+	elif follow != null and follow.phase != "strike" and follow.phase != "lie":   # 첫 타가 내려치기 전까지는 함께 움직인다
 		_aim(ppos)
 
 

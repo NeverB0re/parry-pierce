@@ -1619,8 +1619,8 @@ func _kraken_shield_test() -> void:
 			bounced = true
 	_check("charge into the shield: blocked, no core damage, bounced out (core %d)" % b.core.armor_hp, b.core.armor_hp == a0 and bounced)
 	main.on_strike(sh, 12, p.position, Vector2.UP, "power", false, false)
-	_check("reverse drive pierces a full shield only partly and wears it (core %d -> %d, shield %.1f)" % [a0, b.core.armor_hp, b.shield_hp],
-		b.core.armor_hp == a0 - int(round(12 * b.SHIELD_PASS_MIN)) and absf(b.shield_hp - (b.SHIELD_HP - 12 * b.SHIELD_WEAR)) < 0.01)
+	_check("reverse drive pierces a full shield only partly and leaves the shield alone (core %d -> %d, shield %.1f)" % [a0, b.core.armor_hp, b.shield_hp],
+		b.core.armor_hp == a0 - int(round(12 * b.SHIELD_PASS_MIN)) and b.shield_hp == b.SHIELD_HP)
 	b.shield_hp = b.SHIELD_HP * 0.2
 	var a1: int = b.core.armor_hp
 	b.damage(sh, 12)
@@ -1628,7 +1628,10 @@ func _kraken_shield_test() -> void:
 	for k in 30:
 		if b.phase == 1:
 			b.damage(sh, 16)
-	_check("drives alone wear the shield away (core %d, phase %d)" % [b.core.armor_hp, b.phase], b.core.armor_hp >= b.CORE_FLOOR and not b.core.broken and b.phase == 2)
+	for k in 60:
+		if b.phase == 1:
+			b.damage(sh, 16)
+	_check("drives alone grind the core to the floor and the shield breaks (core %d, phase %d)" % [b.core.armor_hp, b.phase], b.core.armor_hp == b.CORE_FLOOR and not b.core.broken and b.phase == 2)
 	main.debug.god = false
 	main.reset_run()
 	b.next_t = 99.0
@@ -1641,11 +1644,14 @@ func _kraken_shield_test() -> void:
 	_check("a strong intercept cuts at once", not b.part_alive(1) and b.claws.size() == 2)
 	b.claws.pop_back()
 	var y0: float = b.claws[0]["pos"].y
-	for k in 60:
+	var y_min := y0
+	for k in 130:
 		b.next_t = 99.0
 		b.step(DT, Vector2(0, -700))
+		y_min = minf(y_min, b.claws[0]["pos"].y)
 	var vy: float = b.claws[0]["vel"].y
-	_check("the claw falls slowly (y %.0f -> %.0f, vy %.0f)" % [y0, b.claws[0]["pos"].y, vy], vy > 0.0 and vy <= b.CLAW_FALL + 0.01)
+	_check("the claw first flies up high (%.0f above)" % (y0 - y_min), y0 - y_min > 400.0)
+	_check("then falls at a capped speed (y %.0f -> %.0f, vy %.0f)" % [y0, b.claws[0]["pos"].y, vy], vy > 0.0 and vy <= b.CLAW_FALL + 0.01)
 	var cp: Vector2 = b.claws[0]["pos"]
 	_check("striking the falling claw finds it", b.claw_at(cp + Vector2(60, 0), 20.0) == 0 and b.claw_at(cp + Vector2(400, 0), 20.0) == -1)
 	var s0: float = b.shield_hp
@@ -1713,6 +1719,11 @@ func _kraken_shield_test() -> void:
 			bright = maxi(bright, n)
 			if b.atk == null:
 				break
+		var same_spot: bool = c.kids.size() >= 2
+		for j in range(1, c.kids.size()):
+			if absf(c.kids[j].cx - c.kids[0].cx) > 0.5 or absf(c.kids[0].cx - 300.0) > 1.0:
+				same_spot = false
+		_check("pound: the first hit aims at the player, the rest fall on the same spot (%s)" % str(c.kids.map(func(a): return a.cx)), same_spot)
 		var want_n: int = b.COMBO_HITS
 		var ordered: bool = c.kids.size() == want_n
 		for j in range(1, c.kids.size()):

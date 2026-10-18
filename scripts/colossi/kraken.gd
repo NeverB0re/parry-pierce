@@ -3,8 +3,8 @@ extends "res://scripts/colossus_base.gd"
 ## 표적은 외투막 한가운데의 외눈(동력 코어) 하나뿐. 촉수에는 노릴 곳이 없다 (돌진은 쉬는 촉수를 그냥 통과한다).
 ## 핵심: 촉수 공격(근접, 회피 불가)이 위치를 잡고 멈춘 순간을 차지 강습으로 요격하면, 그 촉수(구동부, 2번 요격이면 끊어짐)와 코어에 함께 피해가 들어간다.
 ## 페이즈: 1) 방어막 — 코어가 방어막에 싸여 있다. 돌진·차지 강습은 튕겨 나오고(피해 없음), 리버스 드라이브·반사탄·요격은 뚫고 코어에 피해.
-##            방어막이 남아 있을수록 뚫고 들어가는 피해가 적다 (SHIELD_PASS_MIN ~ 100%). 뚫는 일격은 방어막도 조금씩 닳게 한다 (SHIELD_WEAR).
-##            방어막이 다 닳으면 산산조각 난다
+##            방어막이 남아 있을수록 뚫고 들어가는 피해가 적다 (SHIELD_PASS_MIN ~ 100%). 플레이어의 일격은 방어막을 깎지 못한다 — 방어막은 집게로만 깎인다.
+##            방어막이 다 깎이거나, 코어가 CORE_FLOOR 까지 깎이면(피해 누적) 산산조각 난다
 ##         2) 방어막이 깨지는 연출
 ##         3) 동력 코어 — 직접 노릴 수 있다
 ## 촉수 = 부가 목표: 근접공격을 요격하면 촉수에 상처가 쌓이고(요격 2번, 강한 요격은 1번) 끊어지면 그 촉수의 패턴·발사점이 사라진다.
@@ -37,9 +37,8 @@ const DROP := 640.0                          # 몸을 천장에서 이만큼 내
 const CORE_POS := Vector2(0, -2520.0 + DROP)          # 외눈 = 동력 코어 중심 (외투막 한가운데)
 const ARMOR_HP := 320                        # 코어 체력 (장갑판 없이 균열로 보인다). 다 깎이면 한 발 더 맞아야 부서진다 (armored_core.gd)
 const SHIELD_HP := 100.0                     # 방어막 내구도 (코어 체력과 따로)
-const SHIELD_PASS_MIN := 0.35                # 방어막이 온전할 때 코어까지 뚫고 들어가는 피해 비율 (다 닳을수록 1.0 으로)
-const SHIELD_WEAR := 0.6                     # 뚫는 일격 피해 1 마다 방어막이 닳는 양
-const CORE_FLOOR := 60                       # 방어막이 남아 있는 동안 코어는 여기 아래로 깎이지 않는다 (그 뒤 피해는 방어막만 닳게 한다)
+const SHIELD_PASS_MIN := 0.5                 # 방어막이 온전할 때 코어까지 뚫고 들어가는 피해 비율 (집게로 깎일수록 1.0 으로)
+const CORE_FLOOR := 100                      # 방어막이 남은 채 코어가 여기까지 깎이면 방어막이 깨진다 (집게 없이 피해 누적으로 여는 길)
 const SHIELD_R := 205.0                      # 방어막 반지름
 const SHIELD_SHATTER := 1.6                  # 방어막이 깨지는 연출 시간 (페이즈 2)
 const CORE_R := 46.0
@@ -61,7 +60,9 @@ const BG_TIPS := [Vector2(-1080, -520), Vector2(1080, -520)]
 const REGROW_DELAY := 8.0                    # 끊긴 촉수가 다시 자라기 시작할 때까지
 const REGROW := 1.6                          # 다시 자라나는 시간
 const CLAW_R := 70.0                         # 잘린 집게 판정 반지름 (차지 강습·리버스 드라이브로 친다)
-const CLAW_FALL := 150.0                     # 집게가 떨어지는 최고 속도 (천천히)
+const CLAW_FALL := 380.0                     # 집게가 떨어지는 최고 속도
+const CLAW_POP := 1150.0                     # 끊기는 순간 솟구치는 속도 (높이 날아올랐다 떨어지며 칠 틈을 준다)
+const CLAW_G := 900.0
 const CLAW_SPEED := 2800.0                   # 쳐 낸 집게가 눈알로 날아가는 속도
 const CLAW_SHIELD := 34.0                    # 집게 하나가 깎는 방어막 (셋이면 거의 깨진다)
 const W_ROOT := 100.0                        # 촉수 굵기 (뿌리 → 끝)
@@ -77,14 +78,13 @@ const GAP := Vector2(0.45, 0.8)               # 근접 뒤 쉬는 시간
 const GAP_CORE := Vector2(0.3, 0.55)
 const GAP_FIRE := Vector2(0.25, 0.5)         # 탄막 뒤 (멍때릴 틈을 주지 않는다)
 const RANGED_KINDS := ["ink", "fan", "tips", "ring"]
-const ROTATION := 3                          # 탄막 → 탄막 → 근접 을 되풀이한다 (근접 차례에 쓸 촉수가 없으면 다음 차례로 미룬다)
+const ROTATION := 2                          # 탄막 → 근접 을 되풀이한다 (근접 차례에 쓸 촉수가 없으면 다음 차례로 미룬다)
 const CLEAR_WAIT := 2.5                      # 그래도 이 시간이 지나면 시작한다 (탄이 오래 남아 있을 때)
 const CROWD_R := 1300.0                      # 플레이어 둘레 이 안에
 const CROWD_CAP := 30                        # 적 탄이 이보다 많으면 다음 공격을 미룬다 (화면을 꽉 채우지 않는다)
 const SPECIAL_EVERY := 4                    # 방전 그물(패리 불가)은 공격 이만큼마다 (드물게)
 const COMBO_HITS := 3                        # 연타 타수
 const SWEEPERS := [4, 5]                     # 휩쓸기·난타는 아래로 늘어진 두 촉수만, 항상 바깥 → 안쪽으로 (방향을 가늠하기 쉽게)
-const MARCH_X := [-640.0, 0.0, 640.0]        # 행진: 이 자리를 한쪽 끝부터 차례로 내려친다
 
 # ── 색 ─────────────────────────────────────────────────
 const C_BODY := Color(0.06, 0.08, 0.09)
@@ -245,8 +245,8 @@ func shield_pass() -> float:
 	return lerpf(1.0, SHIELD_PASS_MIN, shield_frac())
 
 
-## 방어막 너머 코어에 피해를 준다 (페이즈 1): 뚫는 비율만큼 코어에, 그리고 방어막을 닳게 한다.
-## 코어는 CORE_FLOOR 아래로 깎이지 않는다 (남는 몫은 방어막에). 방어막이 다 닳으면 깨진다. 페이즈 3이면 그대로 코어에
+## 방어막 너머 코어에 피해를 준다 (페이즈 1): 뚫는 비율만큼 코어에만 (방어막은 그대로).
+## 코어가 CORE_FLOOR 까지 깎이면 방어막이 깨진다. 페이즈 3이면 그대로 코어에
 func _feed_core(dmg: int) -> void:
 	if phase != 1:
 		core.damage(dmg)
@@ -256,13 +256,12 @@ func _feed_core(dmg: int) -> void:
 	pierce_k = k
 	pierce_n = shield_hit_n
 	var d := mini(maxi(1, int(round(dmg * k))), core.armor_hp - CORE_FLOOR)
-	var wear := dmg * SHIELD_WEAR
 	if d > 0:
 		core.damage(d)
 	else:
 		core.flash = 1.0
-		wear = float(dmg)                                  # 코어가 바닥: 일격이 고스란히 방어막을 깎는다
-	_wear_shield(wear)
+	if core.armor_hp <= CORE_FLOOR:
+		_shatter()
 
 
 func _wear_shield(v: float) -> void:
@@ -325,7 +324,8 @@ func _cut(i: int) -> void:
 	var sp := spines[i]
 	var tip := sp[N - 1]
 	var tdir := (tip - sp[N - 2]).normalized() if tip.distance_to(sp[N - 2]) > 1.0 else Vector2.DOWN
-	claws.append({"pos": tip, "vel": Vector2(signf(tip.x) * -60.0, -380.0), "rot": tdir.angle(), "rotv": randf_range(1.5, 2.5) * (1.0 if randf() < 0.5 else -1.0), "fly": false})
+	var side := hit_dir.x * 420.0 if t - hit_dir_t < 0.6 else signf(tip.x) * 260.0   # 맞은 방향으로 튕겨 나가며 높이 솟는다
+	claws.append({"pos": tip, "vel": Vector2(side, -CLAW_POP), "rot": tdir.angle(), "rotv": randf_range(9.0, 12.0) * (1.0 if randf() < 0.5 else -1.0), "fly": false})
 	_on_part_broken(i)
 	part_hp[i] = 0
 	regrow_t[i] = REGROW_DELAY
@@ -534,12 +534,16 @@ func _step_claws(dt: float) -> void:
 			c["pos"] = p + to.normalized() * stepd
 			continue
 		var v: Vector2 = c["vel"]
-		v.y = minf(CLAW_FALL, v.y + 520.0 * dt)
-		v.x = move_toward(v.x, 0.0, 40.0 * dt)
+		v.y = minf(CLAW_FALL, v.y + CLAW_G * dt)
+		v.x = move_toward(v.x, 0.0, 160.0 * dt)
 		p += v * dt
-		p.x = clampf(p.x, -1100.0, 1100.0)
+		if absf(p.x) > 1100.0:                                 # 벽에 튕긴다
+			p.x = signf(p.x) * 1100.0
+			v.x = -v.x * 0.5
+		p.y = maxf(p.y, -3000.0)
 		c["vel"] = v
 		c["pos"] = p
+		c["rotv"] = move_toward(float(c["rotv"]), signf(float(c["rotv"])) * 2.5, 6.0 * dt)   # 빠르게 돌다가 천천히
 		c["rot"] = float(c["rot"]) + float(c["rotv"]) * dt
 		if p.y > -30.0:
 			claws.erase(c)
@@ -741,7 +745,7 @@ func _fire(kind: String, ppos: Vector2, hard: bool):
 
 
 ## 연속 내려치기 (관측자 때의 행진·소용돌이·단발 내려치기를 하나로): 서로 다른 촉수가 처음부터 함께 올라와 차례로 내려친다.
-## 앞의 타들은 플레이어에게서 먼 쪽 고정 자리(MARCH_X)부터 다가오고, 마지막 타만 플레이어를 따라간다. 다음에 칠 타만 예고가 보인다.
+## 첫 타는 플레이어를 따라가 겨누고, 다음 타들은 그 첫 타 자리 위에 겹겹이 들려 있다가 같은 자리에 차례로 떨어진다. 다음에 칠 타만 예고가 보인다.
 ## 촉수가 하나뿐이면 단발 (플레이어를 따라감)
 func _pound(ready: Array[int], ppos: Vector2) -> Combo:
 	var ls: Array[int] = []
@@ -756,14 +760,21 @@ func _pound(ready: Array[int], ppos: Vector2) -> Combo:
 			src = rs if side == 0 else ls
 		order.append(src.pop_front())
 		side = 1 - side
-	var xs: Array = MARCH_X.duplicate()
-	if ppos.x < 0.0:                                         # 먼 쪽부터 다가온다
-		xs.reverse()
 	var makers := []
+	var first := []
 	for k in order.size():
 		var i: int = order[k]
-		var x: float = xs[k] if k < order.size() - 1 else NAN
-		makers.append(func(): return Hammer.new(i, true, 0.0, x))
+		if k == 0:
+			makers.append(func():
+				var h = Hammer.new(i, true)
+				first.append(h)
+				return h)
+		else:
+			makers.append(func():
+				var h = Hammer.new(i, true)
+				h.follow = first[0] if not first.is_empty() else null
+				h.stack = k
+				return h)
 	return Combo.new("pound", makers, 0.1)
 
 

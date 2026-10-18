@@ -11,6 +11,8 @@ var plan := [
 	["claw_fall", "fall", 50],
 	["claw_fly", "fly", 8],
 	["eye_close", "eye", 30],
+	["pound_raise", "pound", 70],
+	["claw_pop", "pop", 40],
 ]
 var idx := 0
 var local := 0
@@ -53,6 +55,11 @@ func _process(_d: float) -> bool:
 			"worn":
 				b.shield_hp = b.SHIELD_HP * 0.15
 				b.damage(sh, 16)
+			"pound":
+				var rd: Array[int] = [0, 1, 2, 3, 4, 5]
+				b.start_attack(b._pound(rd, Vector2(300, -1000)))
+			"pop":
+				b.damage_part(3, 16)
 			"fall", "fly":
 				b.shield_hp = b.SHIELD_HP * 0.6
 				b.damage_part(3, 16)
