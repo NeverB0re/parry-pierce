@@ -9,8 +9,9 @@ extends "res://scripts/colossus_base.gd"
 ##            판이 다 떨어지거나, 코어가 CORE_FLOOR 까지 깎이면(피해 누적) 산산조각 난다
 ##         2) 방어막이 깨지는 연출
 ##         3) 동력 코어 — 직접 노릴 수 있다
-## 촉수 = 부가 목표: 근접공격을 요격하면 촉수에 상처가 쌓이고(요격 2번, 강한 요격은 1번) 끊어지면 그 촉수의 패턴·발사점이 사라진다.
-##   REGROW_DELAY 뒤 천천히 다시 자란다 (다른 패턴이 한두 번 지나갈 무렵)
+## 촉수 = 부가 목표: 근접공격을 요격하면 촉수에 상처가 쌓이고(요격 2번, 강한 요격은 1번) 끊어지면 그 촉수의 패턴·발사점이 사라진다 (다시 자라지 않는다).
+##   한 패턴(연타·조이기 포함)에서 끊기는 촉수는 하나까지. 연타를 모두 요격하면 마지막 타의 촉수는 반드시 끊긴다.
+## 사냥 촉수 둘(6·7): 끊기지 않는다. 휩쓸기를 맡고, 다른 촉수가 줄수록 휩쓸기가 더 자주 나온다. 요격하면 코어에 피해만
 ## v0.50+: 탄막이 중심 (탄막 7 : 근접 3, 쉬는 시간 짧게). 촉수 끝·배경 다리·분사구가 모두 발사점 (barrage.gd).
 ##   탄막마다 저격 유도탄(시그니처)이 한 발씩 섞여 날아온다 (따로 쏘지 않는다).
 ## 몸은 DROP 만큼 낮게 걸려 있다 (코어 작게, 튕겨 올라가도 천장에 붙지 않게).
@@ -27,7 +28,6 @@ const Chase := preload("res://scripts/attacks/chase.gd")
 const Lash := preload("res://scripts/attacks/lash.gd")
 const Constrict := preload("res://scripts/attacks/constrict.gd")
 const Combo := preload("res://scripts/attacks/combo.gd")
-const Net := preload("res://scripts/attacks/net.gd")
 const Fan := preload("res://scripts/attacks/fan.gd")
 const Barrage := preload("res://scripts/attacks/barrage.gd")
 const Rings := preload("res://scripts/attacks/rings.gd")
@@ -53,17 +53,16 @@ const SIPHON := Vector2(0, -2120.0 + DROP)            # 먹물 포 (외투막 �
 # ── 촉수 ───────────────────────────────────────────────
 const N := 12                                # 척추 마디 수
 # 촉수 0~5 (짝수 = 왼쪽, 홀수 = 오른쪽): 뿌리는 모두 목깃 아래 (바깥 → 안쪽)
-const ROOTS := [Vector2(-520, -2235.0 + DROP), Vector2(520, -2235.0 + DROP), Vector2(-330, -2185.0 + DROP), Vector2(330, -2185.0 + DROP), Vector2(-120, -2160.0 + DROP), Vector2(120, -2160.0 + DROP)]
+const ROOTS := [Vector2(-520, -2235.0 + DROP), Vector2(520, -2235.0 + DROP), Vector2(-330, -2185.0 + DROP), Vector2(330, -2185.0 + DROP), Vector2(-120, -2160.0 + DROP), Vector2(120, -2160.0 + DROP), Vector2(-230, -2170.0 + DROP), Vector2(230, -2170.0 + DROP)]   # 0~5 싸우는 촉수, 6·7 사냥 촉수
 # 쉬는 자세: 뿌리에서 용암 가까이(IDLE_LOW)까지 길게 늘어졌다가, 남은 끝이 올라와 플레이어 쪽을 겨눈다 (코브라처럼).
 # 끝의 자리: 바깥 촉수일수록 넓고 높게 (플레이어를 둘러싼다)
 const IDLE_TIPS := [Vector2(-1000, -1750), Vector2(1000, -1750), Vector2(-760, -1380), Vector2(760, -1380), Vector2(-460, -1050), Vector2(460, -1050)]
 const IDLE_LOW := [-650.0, -650.0, -480.0, -480.0, -330.0, -330.0]   # 늘어진 가장 낮은 곳 (y)
 const AIM_K := 0.14                          # 쉬는 끝이 플레이어 쪽으로 끌리는 정도
 const IDLE_SWAY := [Vector2(60, 70), Vector2(60, 70), Vector2(50, 80), Vector2(50, 80), Vector2(60, 60), Vector2(60, 60)]          # 끝이 흔들리는 폭
-const BG_ROOTS := [Vector2(-230, -2170.0 + DROP), Vector2(230, -2170.0 + DROP)]     # 사냥 촉수 둘 (목깃 아래 안쪽에서, 표적·판정 없음)
-const BG_TIPS := [Vector2(-1110, -1950), Vector2(1110, -1950)]     # 용암 가까이까지 늘어졌다가 경기장 양옆 높이 치켜든다 (곤봉 끝 = 탄 발사점)
-const REGROW_DELAY := 8.0                    # 끊긴 촉수가 다시 자라기 시작할 때까지
-const REGROW := 1.6                          # 다시 자라나는 시간
+const HUNTER_ROOTS := [Vector2(-230, -2170.0 + DROP), Vector2(230, -2170.0 + DROP)]     # 사냥 촉수 둘 (6·7, 목깃 아래 안쪽에서)
+const HUNTER_TIPS := [Vector2(-1110, -1950), Vector2(1110, -1950)]     # 용암 가까이까지 늘어졌다가 경기장 양옆 높이 치켜든다 (곤봉 끝 = 탄 발사점)
+const TENTS := 8                             # 촉수 0~5 = 싸우는 촉수(끊어진다), 6·7 = 사냥 촉수(끊기지 않는다)
 const W_ROOT := 124.0                        # 촉수 굵기 (뿌리 → 끝)
 const W_TIP := 44.0
 const PART_AT := 3                           # 구동부가 달린 척추 마디
@@ -83,7 +82,7 @@ const CROWD_R := 1300.0                      # 플레이어 둘레 이 안에
 const CROWD_CAP := 30                        # 적 탄이 이보다 많으면 다음 공격을 미룬다 (화면을 꽉 채우지 않는다)
 const SPECIAL_EVERY := 4                    # 눈알 쓸기(패리 불가)는 공격 이만큼마다 (드물게)
 const COMBO_HITS := 3                        # 연타 타수
-const SWEEPERS := [4, 5]                     # 휩쓸기·난타는 아래로 늘어진 두 촉수만, 항상 바깥 → 안쪽으로 (방향을 가늠하기 쉽게)
+const SWEEPERS := [6, 7]                     # 휩쓸기는 사냥 촉수 둘이 맡는다, 항상 바깥 → 안쪽으로 (방향을 가늠하기 쉽게)
 
 # ── 색 ─────────────────────────────────────────────────
 const C_BODY := Color(0.06, 0.08, 0.09)
@@ -95,11 +94,8 @@ const C_PARRY := Color(1.0, 0.88, 0.35)
 const C_GLOW := Color(1.0, 0.78, 0.42)
 
 var spines: Array[PackedVector2Array] = []
-var bg_spines: Array[PackedVector2Array] = []
-var busy: Array = [null, null, null, null, null, null]   # 촉수를 붙잡은 공격 모듈
-var grown: Array[float] = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]   # 촉수가 자란 정도 (0 = 떨어져 나가 뿌리만, 1 = 다 자람)
-var regrow_t: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]   # 다시 자라기 시작할 때까지 남은 시간
-var bg_hold: Array = []                      # 방전 그물이 배경 다리 끝을 붙잡은 위치 [왼, 오] (빈 배열 = 쉼)
+var busy: Array = [null, null, null, null, null, null, null, null]   # 촉수를 붙잡은 공격 모듈
+var grown: Array[float] = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]   # 1 = 붙어 있음, 0 = 끊겨 뿌리만 (다시 자라지 않는다)
 var hit_dir := Vector2.ZERO                  # 마지막으로 요격당한 방향 (부서진 촉수가 그쪽으로 날아간다)
 var hit_dir_t := -99.0
 var siphon_glow := 0.0
@@ -154,20 +150,13 @@ func _ready() -> void:
 
 func reset() -> void:
 	spines.clear()
-	bg_spines.clear()
-	for i in 6:
+	for i in TENTS:
 		spines.append(PackedVector2Array())
 		busy[i] = null
 		grown[i] = 1.0
-		regrow_t[i] = 0.0
-	for k in 2:
-		bg_spines.append(PackedVector2Array())
 	super()
-	for i in 6:
+	for i in TENTS:
 		spines[i] = _idle_spine(i)
-	for k in 2:
-		bg_spines[k] = _bg_spine(k, BG_TIPS[k])
-	bg_hold = []
 	hit_dir_t = -99.0
 	siphon_glow = 0.0
 	debris.clear()
@@ -292,44 +281,70 @@ func _shatter() -> void:
 		_spawn_shard(at, randf_range(18.0, 30.0), Vector2.from_angle(a) * randf_range(500.0, 900.0) + Vector2(0, -300))
 
 
-## 촉수 요격 (main.gd _clash, 방어막 단계): 촉수에 상처가 쌓이고(PART_HP) 다 차면 끊어진다. 요격 피해는 방어막 너머 코어에도 (전류 줄기)
+## 촉수 요격 (main.gd _clash, 방어막 단계): 촉수에 상처가 쌓이고(PART_HP) 다 차면 끊어진다. 요격 피해는 방어막 너머 코어에도 (전류 줄기).
+## 사냥 촉수(6·7)는 끊기지 않고 코어에 피해만
 func damage_part(i: int, dmg: int) -> bool:
 	if not part_alive(i):
 		return false
 	zaps.append({"from": i, "t": 0.0})
 	_feed_core(dmg)
+	if i >= PANELS:
+		return false
 	return _wound(i, dmg)
 
 
 ## 코어 단계: 촉수를 요격 → 상처가 쌓이고 코어에 바로 피해. 부서지면 true (승리)
 func intercept_core(i: int, dmg: int) -> bool:
-	if part_alive(i):
+	if i < PANELS and part_alive(i):
 		_wound(i, dmg)
 	zaps.append({"from": i, "t": 0.0})
 	return damage_core(dmg)
 
 
-## 촉수에 상처: 다 차면 끊어 true. 아니면 금이 가고 불꽃이 튄다
+## 사냥 촉수는 늘 살아 있다 (요격 판정이 "part" 로 들어오게)
+func part_alive(i: int) -> bool:
+	if i >= PANELS:
+		return not dead
+	return super(i)
+
+
+## 촉수에 상처: 다 차면 끊어 true. 아니면 금이 가고 불꽃이 튄다.
+## 한 패턴(그 촉수를 붙잡은 공격, 연타면 연타 전체)에서 끊기는 촉수는 하나까지 — 이미 하나 끊겼으면 상처만 (1 남김).
+## 연타의 모든 타를 요격했다면 마지막 타의 촉수는 상처와 상관없이 끊긴다
 func _wound(i: int, dmg: int) -> bool:
 	var pos := part_pos(i)
-	part_hp[i] -= dmg
+	var mod = busy[i]
+	var grp = null
+	if mod != null:
+		grp = mod.combo if mod.get("combo") != null else mod
+		if not grp.hit_mods.has(mod):
+			grp.hit_mods.append(mod)
+	var kids = grp.get("kids") if grp != null else null
+	var all_hit: bool = kids != null and kids.size() >= 2 and grp.hit_mods.size() >= kids.size() and mod == kids[kids.size() - 1]
 	part_flash[i] = 1.0
+	if grp != null and grp.cut_done:
+		part_hp[i] = maxi(1, part_hp[i] - dmg)
+	else:
+		part_hp[i] -= dmg
+		if all_hit:
+			part_hp[i] = 0
 	if part_hp[i] > 0:
 		part_stage[i] = 2
 		emit(Ev.PART_STAGE, pos)
 		return false
+	if grp != null:
+		grp.cut_done = true
 	_cut(i)
 	emit(Ev.PART_BREAK, pos)
 	return true
 
 
-## 촉수를 끊는다: 조각이 날아가고, 그 촉수의 방어막 판이 떨어지고, 그 촉수를 쓰던 공격은 끊기고, REGROW_DELAY 뒤 다시 자란다
+## 촉수를 끊는다: 조각이 날아가고, 그 촉수의 방어막 판이 떨어지고, 그 촉수를 쓰던 공격은 끊긴다 (다시 자라지 않는다)
 func _cut(i: int) -> void:
 	part_flash[i] = 1.0
 	_on_part_broken(i)
 	_drop_panel(i)
 	part_hp[i] = 0
-	regrow_t[i] = REGROW_DELAY
 	if atk != null and atk.part == i:
 		finish_attack()
 
@@ -388,6 +403,15 @@ func tent_ready(i: int) -> bool:
 	return busy[i] == null and phase != 2 and part_alive(i) and grown[i] >= 1.0
 
 
+## 공격할 수 있는 싸우는 촉수 (0~5)
+func fighters_ready() -> Array[int]:
+	var out: Array[int] = []
+	for i in PANELS:
+		if tent_ready(i):
+			out.append(i)
+	return out
+
+
 ## 코어가 상할수록 예고가 짧아진다 (공격 모듈이 곱한다). 촉수를 끊는 건 손해가 아니다
 func tempo() -> float:
 	return 1.0 - 0.22 * core.frac()
@@ -426,6 +450,9 @@ static func _bezier_spine(root: Vector2, tip: Vector2, bend: float, n: int) -> P
 ## 쉬는 자세: 뿌리에서 용암 가까이까지 길게 늘어졌다가(J 자) 끝이 올라와 플레이어 쪽을 겨눈다. 끝은 천천히 흔들리고 플레이어를 따라 조금 끌린다.
 ## 바깥 촉수(0·1)는 가끔 움찔하며 뒤로 젖혔다 튕기듯 돌아온다 (위협). 자란 정도(grown)만큼만 뿌리에서 뻗는다 (떨어져 나간 촉수는 뿌리에 모인다)
 func _idle_spine(i: int) -> PackedVector2Array:
+	if i >= PANELS:
+		var k := i - PANELS
+		return _hunter_spine(k, HUNTER_TIPS[k] + Vector2(sin(t * 0.4 + k) * 40.0, sin(t * 0.6 + k) * 70.0))
 	var root: Vector2 = ROOTS[i]
 	var ph := t + i * 1.7
 	var sw: Vector2 = IDLE_SWAY[i]
@@ -453,8 +480,8 @@ func _idle_spine(i: int) -> PackedVector2Array:
 
 
 ## 사냥 촉수: 목깃 아래에서 용암 가까이까지 늘어졌다가 경기장 양옆으로 높이 치켜든다 (천천히 흔들린다)
-func _bg_spine(k: int, tip: Vector2) -> PackedVector2Array:
-	var root: Vector2 = BG_ROOTS[k]
+func _hunter_spine(k: int, tip: Vector2) -> PackedVector2Array:
+	var root: Vector2 = HUNTER_ROOTS[k]
 	var low := -180.0 + sin(t * 0.45 + k * 2.0) * 50.0
 	var c1 := Vector2(root.x * 1.6, low + 80.0)
 	var c2 := Vector2(tip.x * 0.95, low)
@@ -469,30 +496,18 @@ func _bg_spine(k: int, tip: Vector2) -> PackedVector2Array:
 func _step_effects(dt: float) -> void:
 	var live := active_attacks()
 	var ease_k := 1.0 - exp(-5.0 * dt)
-	for i in 6:
+	for i in TENTS:
 		if busy[i] != null and not live.has(busy[i]):
 			busy[i] = null
 		if busy[i] == null:
 			var to := _idle_spine(i)
-			if grown[i] < 1.0:                      # 떨어져 나갔거나 자라는 중: 자람에 맞춰 바로
+			if grown[i] < 1.0:                      # 떨어져 나감: 뿌리만
 				spines[i] = to
 				continue
 			var sp := spines[i]
 			for q in N:
 				sp[q] = sp[q].lerp(to[q], ease_k)
 			spines[i] = sp
-	for k in 2:
-		var tip: Vector2 = BG_TIPS[k] + Vector2(sin(t * 0.4 + k) * 40.0, sin(t * 0.6 + k) * 70.0)
-		var fast := false
-		if not bg_hold.is_empty() and not dead:
-			tip = bg_hold[k]
-			fast = true
-		var to := _bg_spine(k, tip)
-		var sp := bg_spines[k]
-		var kk := 1.0 - exp(-(14.0 if fast else 3.0) * dt)
-		for q in N:
-			sp[q] = sp[q].lerp(to[q], kk)
-		bg_spines[k] = sp
 	_step_debris(dt)
 
 
@@ -519,34 +534,14 @@ func _step_phase(dt: float) -> void:
 			zaps.erase(z)
 	siphon_glow = move_toward(siphon_glow, 0.0, dt * 2.0)
 	pierce = maxf(0.0, pierce - dt * 2.5)
-	for i in 6:                                  # 끊긴 촉수: 잠시 뒤 뿌리에서 천천히 다시 자란다
-		if part_alive(i) or dead:
-			continue
-		if regrow_t[i] > 0.0:
-			regrow_t[i] -= dt
-			continue
-		grown[i] = minf(1.0, grown[i] + dt / REGROW)
-		if grown[i] >= 1.0:
-			part_hp[i] = PART_HP
-			part_stage[i] = 0
 
 
-
-
-
-
-
-
-
-
-## 탄을 쏠 수 있는 발사점 [[번호, 위치], ...]: 분사구(-1) · 놀고 있는 촉수 끝(0~5) · 배경 다리 끝(6·7)
+## 탄을 쏠 수 있는 발사점 [[번호, 위치], ...]: 분사구(-1) · 놀고 있는 촉수 끝(0~5) · 사냥 촉수 곤봉(6·7)
 func emitters() -> Array:
 	var out := [[-1, SIPHON]]
-	for i in 6:
-		if tent_ready(i) and grown[i] >= 1.0 and not spines[i].is_empty():
+	for i in TENTS:
+		if tent_ready(i) and not spines[i].is_empty():
 			out.append([i, spines[i][N - 1]])
-	for k in 2:
-		out.append([6 + k, bg_spines[k][N - 1]])
 	return out
 
 
@@ -554,9 +549,7 @@ func emitters() -> Array:
 func emitter_pos(id: int) -> Vector2:
 	if id < 0:
 		return SIPHON
-	if id >= 6:
-		return bg_spines[id - 6][N - 1]
-	if tent_ready(id) and grown[id] >= 1.0 and not spines[id].is_empty():
+	if tent_ready(id) and not spines[id].is_empty():
 		return spines[id][N - 1]
 	return Vector2.INF
 
@@ -570,17 +563,9 @@ func emit_glow_set(id: int, v: float) -> void:
 		emit_glow[id] = v
 
 
-func die() -> void:
-	super()
-	bg_hold = []
-
-
 func _choose(ppos: Vector2) -> void:
 	var hard := phase == 3
-	var ready: Array[int] = []
-	for i in 6:
-		if tent_ready(i):
-			ready.append(i)
+	var ready := fighters_ready()
 	if want != "":                                           # 근접 패턴이 탄이 걷히길 기다리는 중
 		want_t += 0.2
 		if not _shots_clear(ppos) and want_t < CLEAR_WAIT:
@@ -588,7 +573,7 @@ func _choose(ppos: Vector2) -> void:
 			return
 		var w := want
 		want = ""
-		if w == "net" or _melee_ok(w, ready):
+		if w == "eye_beam" or _melee_ok(w, ready):
 			_start(w, ready, ppos, hard)
 			return
 	if shots_near(ppos, CROWD_R) > CROWD_CAP:                 # 앞 탄막이 아직 화면에 많으면 걷힐 때까지 다음 탄막을 미룬다 (쉴 공간)
@@ -628,7 +613,7 @@ func _choose(ppos: Vector2) -> void:
 func _melee_ok(m: String, ready: Array[int]) -> bool:
 	match m:
 		"sweep":
-			return ready.has(SWEEPERS[0]) or ready.has(SWEEPERS[1])
+			return tent_ready(SWEEPERS[0]) or tent_ready(SWEEPERS[1])
 		"pound", "chase":
 			return not ready.is_empty()
 		"constrict":
@@ -661,18 +646,16 @@ func _zone_w(kind: String, p: Vector2) -> float:
 
 func _start(kind: String, ready: Array[int], ppos: Vector2, hard: bool) -> void:
 	match kind:
-		"net":
-			_pick("net", Net.new(randf() < 0.5))
 		"eye_beam":                                          # 패리 불가: 외눈 광선이 한 바퀴 돌며 동심원 하나
 			_pick("eye_beam", EyeSweep.new(CORE_POS))
 		"pound":
 			_pick("pound", _pound(ready, ppos))
 		"chase":
 			_grab_start("chase", Chase.new(_nearest(ready, ppos.x)))
-		"sweep":                                             # 아래 두 촉수가 함께 바깥에서 안으로 하단을 쓴다 (고정)
+		"sweep":                                             # 사냥 촉수 둘이 함께 바깥에서 안으로 하단을 쓴다 (고정)
 			var sw: Array[int] = []
 			for i in SWEEPERS:
-				if ready.has(i):
+				if tent_ready(i):
 					sw.append(i)
 			if sw.size() == 2:
 				_pick("sweep", Combo.new("sweep", [func(): return Lash.new(sw[0], true), func(): return Lash.new(sw[1], true)], 0.0, true))
@@ -806,20 +789,12 @@ func _step_debris(dt: float) -> void:
 
 # ── 그리기 ─────────────────────────────────────────────
 func _draw() -> void:
-	for k in 2:                                         # 사냥 촉수 둘: 기다란 줄기 + 끝의 넓적한 곤봉 (배경, 판정 없음)
-		_draw_mech(bg_spines[k], 0.7, C_BODY_DARK, false)
-		var sp := bg_spines[k]
-		var d := (sp[N - 1] - sp[N - 3]).normalized()
-		draw_set_transform(sp[N - 1] - d * 40.0, d.angle())
-		draw_colored_polygon(PackedVector2Array([Vector2(-120, 0), Vector2(-20, -46), Vector2(110, -30), Vector2(150, 0), Vector2(110, 30), Vector2(-20, 46)]), C_BODY_DARK)
-		draw_polyline(PackedVector2Array([Vector2(-120, 0), Vector2(-20, -46), Vector2(110, -30), Vector2(150, 0)]), Color(C_RIM, 0.45), 3.0)
-		for q in 4:
-			draw_circle(Vector2(-40 + q * 45, 0), 9.0, Color(C_RIM, 0.4))
-		draw_set_transform(Vector2.ZERO, 0.0)
+	for i in range(PANELS, TENTS):                       # 사냥 촉수는 몸 뒤에서
+		_draw_arm(i)
 	_draw_mantle()
 	_draw_core()
 	_draw_cables()
-	for i in 6:
+	for i in PANELS:
 		_draw_arm(i)
 	_draw_emit_glow()
 	_draw_shield()
@@ -838,7 +813,7 @@ func _draw_emit_glow() -> void:
 		var g := emit_glow[id]
 		if g <= 0.02:
 			continue
-		var p := emitter_pos(id) if id < 6 else bg_spines[id - 6][N - 1]
+		var p := spines[id][N - 1] if id < TENTS and not spines[id].is_empty() else Vector2.INF
 		if p == Vector2.INF:
 			continue
 		draw_circle(p, 20.0 + 26.0 * g, Color(C_GLOW, 0.2 + 0.45 * g))
@@ -858,18 +833,25 @@ func _draw_arm(i: int) -> void:
 	var m = busy[i]
 	var striking: bool = m != null and m.delay <= 0.0 and m._harmful()
 	var lit: bool = m != null and focus_glow > 0.0 and m.delay <= 0.0 and m._clashable()
-	var revived := phase >= 2 and not dead
-	if phase == 1 and part_stage[i] >= 2:                 # 한 번 요격당한 촉수: 뿌리 관절에서 불꽃이 튄다 (다음 요격이면 끊어진다)
+	var revived := phase >= 2 and not dead and i < PANELS
+	var hunter := i >= PANELS
+	if not hunter and phase == 1 and part_stage[i] >= 2:                 # 한 번 요격당한 촉수: 뿌리 관절에서 불꽃이 튄다 (다음 요격이면 끊어진다)
 		if int(t * 8.0 + i) % 3 == 0:
 			draw_circle(spines[i][PART_AT] + Vector2(sin(t * 23.0 + i) * 18.0, cos(t * 19.0) * 18.0), 3.0, Color(1.0, 0.85, 0.5))
-	_draw_mech(spines[i], 1.0, C_STEEL, revived)
+	_draw_mech(spines[i], 0.72 if hunter else 1.0, C_BODY_DARK if hunter else C_STEEL, revived)
+	if hunter:                                           # 사냥 촉수 끝: 넓적한 곤봉
+		var sp := spines[i]
+		var d := (sp[N - 1] - sp[N - 3]).normalized()
+		draw_set_transform(sp[N - 1] - d * 40.0, d.angle())
+		draw_colored_polygon(PackedVector2Array([Vector2(-120, 0), Vector2(-20, -46), Vector2(110, -30), Vector2(150, 0), Vector2(110, 30), Vector2(-20, 46)]), C_BODY_DARK)
+		draw_polyline(PackedVector2Array([Vector2(-120, 0), Vector2(-20, -46), Vector2(110, -30), Vector2(150, 0)]), Color(C_RIM, 0.45), 3.0)
+		for q in 4:
+			draw_circle(Vector2(-40 + q * 45, 0), 9.0, Color(C_RIM, 0.4))
+		draw_set_transform(Vector2.ZERO, 0.0)
 	if striking or lit:                                  # 판정이 있는 공격 중 = 금색(패리할 수 있음) / 차지·조준 중 요격할 수 있으면 밝게
 		var c := Color(C_PARRY, 0.75) if striking else Color(1.0, 0.92, 0.6, 0.45 + 0.35 * sin(t * 12.0))
 		for k in range(m.hit_from, N - 1):
 			draw_line(spines[i][k], spines[i][k + 1], c, 5.0)
-	if grown[i] < 1.0:                                   # 자라는 중: 뿌리에서 불꽃
-		for c in 4:
-			draw_circle(root + Vector2.from_angle(t * 9.0 + c * 1.6) * 30.0, 4.0, Color(1.0, 0.8, 0.45, 0.9))
 
 
 ## 기계 촉수: 강철 마디판(사다리꼴) + 등줄기 + 유압 피스톤 + 관절 링·볼트 + 끝의 집게.

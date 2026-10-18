@@ -1,9 +1,10 @@
 extends "res://scripts/attacks/tentacle.gd"
-## 조이기 (근접, 회피 불가): 촉수 둘이 플레이어를 둘러싼 고리를 만들고(왼쪽 반원·오른쪽 반원, 위아래에 좁은 틈) 조여 든다.
-## 고리가 만들어진 뒤로는 고리에 닿으면 맞는다. 틈 없이 감싼다 → 한쪽 촉수를 요격(또는 패리)해서 풀어야 한다.
+## 조이기 (근접, 회피 불가): 촉수 둘이 플레이어를 칭칭 감는다 (각자 한 바퀴 넘게 나선으로 감아 서로 엇갈린다) → 조여 든다.
+## 감긴 뒤로는 고리에 닿으면 맞는다. 촉수 하나만으로도 한 바퀴를 넘게 감으므로, 두 촉수를 모두 요격해야 풀린다
+## (하나를 요격하면 그 촉수만 풀려 물러나고, 남은 촉수는 계속 조인다).
 ## 촉수를 2개 이상 잃은 뒤(남은 촉수가 화가 났을 때)와 코어 페이즈에서만 쓴다.
 ## 단계: prep(고리를 만들며 중심이 플레이어를 따라감) → set(고리 완성, 판정) → warn(점멸) → squeeze(조여 듦) → hold → 끝
-## 척추: 0~4 마디 = 뿌리에서 고리 윗끝으로 내려오는 곡선, 5~11 = 반원 (판정)
+## 척추: 0~3 마디 = 뿌리에서 감기 시작점으로 내려오는 곡선, 4~11 = 나선 (판정)
 
 const PREP := 0.8
 const PREP_TRACK := 0.7
@@ -13,19 +14,22 @@ const SQUEEZE := 0.9
 const HOLD := 0.2
 const R0 := 520.0
 const R_END := 40.0
-# 반원 각도 (y 아래 = +): 왼쪽은 맨 위 → 왼쪽 → 맨 아래, 오른쪽은 맨 위 → 오른쪽 → 맨 아래 (위아래에서 맞닿는다)
-const ARCS := [[PI * 1.5, PI * 0.5], [-PI * 0.5, PI * 0.5]]
+# 나선: 감기 시작 각도와 감는 양. 둘 다 같은 방향으로 감되 반 바퀴 어긋나 서로 엇갈린다
+const COIL_START := [PI * 1.5, PI * 0.5]
+const COIL_TURN := TAU * 1.15
+const COIL_IN := 0.22                 # 감을수록 안쪽으로 (나선) — 두 촉수가 겹쳐 칭칭 감긴 느낌
 
 var center := Vector2.ZERO
 var r := R0
 var _from: Array = []
+var released: Array[int] = []         # 요격당해 먼저 풀린 촉수
 
 
 ## a = 왼쪽 반원을 맡을 촉수, b = 오른쪽
 func _init(a: int, b: int) -> void:
 	kind = "constrict"
 	_grab([a, b], "prep")
-	hit_from = 5
+	hit_from = 4
 
 
 func _act(_dt: float, ppos: Vector2) -> void:
@@ -67,22 +71,47 @@ func _act(_dt: float, ppos: Vector2) -> void:
 
 func _pose_all() -> void:
 	for j in 2:
+		if released.has(tents[j]):                    # 먼저 풀린 촉수: 쉬는 자세로 물러난다
+			boss.spines[tents[j]] = blend(boss.spines[tents[j]], boss._idle_spine(tents[j]), 0.12)
+			continue
 		boss.spines[tents[j]] = _pose(j)
 
 
 func _pose(j: int) -> PackedVector2Array:
 	var root: Vector2 = boss.ROOTS[tents[j]]
-	var a0: float = ARCS[j][0]
-	var a1: float = ARCS[j][1]
-	var e := center + Vector2.from_angle(a0) * r
+	var a0: float = COIL_START[j]
+	var e := center + Vector2.from_angle(a0) * r * (1.0 + COIL_IN * 0.5)
 	var c1 := root + Vector2(0, 320)
-	var c2 := e + Vector2.from_angle(a0) * 260.0
+	var c2 := e + Vector2.from_angle(a0) * 300.0
 	var sp := PackedVector2Array()
-	for q in 5:
-		sp.append(root.bezier_interpolate(c1, c2, e, q / 5.0))
-	for q in 7:
-		sp.append(center + Vector2.from_angle(lerpf(a0, a1, q / 6.0)) * r)
+	for q in 4:
+		sp.append(root.bezier_interpolate(c1, c2, e, q / 4.0))
+	for q in 8:
+		var f := q / 7.0
+		sp.append(center + Vector2.from_angle(a0 + COIL_TURN * f) * r * (1.0 + COIL_IN * (0.5 - f)))
 	return sp
+
+
+func _active_tents() -> Array[int]:
+	var out: Array[int] = []
+	for i in tents:
+		if not released.has(i):
+			out.append(i)
+	return out
+
+
+## 요격: 첫 번째는 그 촉수만 풀려 물러나고 (남은 촉수는 계속 조인다), 두 번째에 모두 풀린다
+func on_parried(hb: Dictionary) -> void:
+	if phase == "recoil" or phase == "stagger" or phase == "end":
+		return
+	var i := int(hb.get("tent", tents[0]))
+	if released.size() + 1 < tents.size() and not released.has(i):
+		released.append(i)
+		lead = false
+		boss.hit_dir = hb.get("dir", Vector2.UP)
+		boss.hit_dir_t = boss.t
+		return
+	super(hb)
 
 
 func _harmful() -> bool:
@@ -103,17 +132,17 @@ func melee_warning() -> bool:
 	return phase == "prep" or phase == "set" or phase == "warn"
 
 
-## 예고: 고리가 쓸고 지나갈 두 반원 부채꼴
+## 예고: 감길 고리 전체 (원) + 촉수마다 표지 (요격할 곳이 둘)
 func draw() -> void:
 	if not (phase == "prep" or phase == "set" or phase == "warn"):
 		return
 	var c: CanvasItem = boss
 	var level := 0 if phase == "prep" else (1 if phase == "set" else 2)
-	var rr: float = r + boss.width_at(boss.N - 1) * 0.5
+	var rr: float = r * (1.0 + COIL_IN * 0.5) + boss.width_at(boss.N - 1) * 0.5
+	var pts := PackedVector2Array([center])
+	for q in 33:
+		pts.append(center + Vector2.from_angle(q * TAU / 32.0) * rr)
+	MeleeWarn.zone(c, pts, level, boss.t)
 	for j in 2:
-		var pts := PackedVector2Array([center])
-		for q in 17:
-			pts.append(center + Vector2.from_angle(lerpf(ARCS[j][0], ARCS[j][1], q / 16.0)) * rr)
-		MeleeWarn.zone(c, pts, level, boss.t)
-	MeleeWarn.tag(c, center + Vector2(-rr * 0.5, 0), level, boss.t)
-	MeleeWarn.tag(c, center + Vector2(rr * 0.5, 0), level, boss.t)
+		if not released.has(tents[j]):
+			MeleeWarn.tag(c, center + Vector2.from_angle(COIL_START[j]) * rr * 0.5, level, boss.t)

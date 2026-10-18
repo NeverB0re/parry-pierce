@@ -1646,15 +1646,38 @@ func _kraken_shield_test() -> void:
 	var a2: int = b.core.armor_hp
 	b.damage(sh, 12)
 	_check("fewer panels let more through (pass %.2f, core %d -> %d)" % [b.shield_pass(), a2, b.core.armor_hp], a2 - b.core.armor_hp > int(round(12 * b.SHIELD_PASS_MIN)))
-	for k in int((b.REGROW_DELAY + b.REGROW + 0.3) / DT):
+	for k in 600:
 		b.next_t = 99.0
 		b.step(DT, Vector2(0, -700))
-	_check("a cut tentacle slowly regrows, its panel stays gone (grown %.2f)" % b.grown[0], b.part_alive(0) and b.tent_ready(0) and b.panel_gone[0])
-	b.damage_part(0, 16)
-	_check("cutting a regrown tentacle drops nothing more (%.2f)" % b.shield_frac(), absf(b.shield_frac() - 4.0 / 6.0) < 0.01)
+	_check("a cut tentacle never regrows (grown %.2f)" % b.grown[0], not b.part_alive(0) and not b.tent_ready(0) and b.grown[0] == 0.0)
+	_check("hunting tentacles cannot be cut: an intercept only hurts the core", not b.damage_part(6, 99) and b.part_alive(6) and b.tent_ready(6))
 	for i in range(2, 6):
 		b.damage_part(i, 16)
 	_check("all six panels gone -> the shield breaks (phase %d)" % b.phase, b.shield_frac() == 0.0 and b.phase == 2)
+	main.reset_run()                                          # 한 패턴에 하나만 끊긴다 / 연타를 다 요격하면 마지막 타는 반드시
+	b.next_t = 99.0
+	var rd6: Array[int] = [0, 1, 2, 3, 4, 5]
+	var cb = b._pound(rd6, Vector2(300, -1200))
+	b.start_attack(cb)
+	b.step(DT, Vector2(300, -1200))
+	var ks: Array = cb.kids
+	b.damage_part(ks[0].tents[0], 16)
+	b.damage_part(ks[1].tents[0], 16)
+	_check("one cut per pattern: a strong intercept cuts the first, the second only wounds (%s, %s)" % [b.part_alive(ks[0].tents[0]), b.part_alive(ks[1].tents[0])],
+		not b.part_alive(ks[0].tents[0]) and b.part_alive(ks[1].tents[0]) and b.part_hp[ks[1].tents[0]] == 1)
+	main.reset_run()
+	b.next_t = 99.0
+	cb = b._pound(rd6, Vector2(300, -1200))
+	b.start_attack(cb)
+	b.step(DT, Vector2(300, -1200))
+	ks = cb.kids
+	for kd in ks:
+		b.damage_part(kd.tents[0], 8)
+	var alive_n := 0
+	for kd in ks:
+		if b.part_alive(kd.tents[0]):
+			alive_n += 1
+	_check("intercepting every hit of a combo cuts the last one (and only it)", ks.size() == 3 and alive_n == 2 and not b.part_alive(ks[2].tents[0]))
 
 	# 첫 타 여유: 단독 내려치기는 판정까지 LEAD_K 배, 연타의 두 번째부터는 원래 박자
 	main.reset_run()
@@ -1947,59 +1970,35 @@ func _v047_test() -> void:
 	var ring_hb3: Array = b.hitboxes(top_gap).filter(func(h): return h["id"] == "arm")
 	_check("constrict: no gap, the top is closed too", b.overlaps(ring_hb3[0], top_gap, 12.0) or b.overlaps(ring_hb3[1], top_gap, 12.0))
 	var hb0: Dictionary = b.clash_box(on_ring)
-	var hp0: int = b.part_hp[0]
+	var hp0: int = b.part_hp[con.tents[0]] + b.part_hp[con.tents[1]]
 	p.dash_kind = "charge"
 	p.dash_t = 0.1
 	p.vel = Vector2.LEFT * 3000.0
 	main._clash(hb0, on_ring)
-	_check("constrict intercept: that tentacle is wounded, ring released (hp %d->%d)" % [hp0, b.part_hp[0]], b.part_hp[0] == hp0 - 8 and (b.atk == null or not b.atk._harmful()))
+	var hpc: int = b.part_hp[con.tents[0]] + b.part_hp[con.tents[1]]
+	_check("constrict: the first intercept frees only that tentacle, the other still squeezes (hp %d->%d)" % [hp0, hpc], hpc == hp0 - 8 and b.atk != null and b.atk._harmful() and b.atk._active_tents().size() == 1)
+	var hb1: Dictionary = b.clash_box(c0 + Vector2(con.r, 0))
+	main._clash(hb1, c0 + Vector2(con.r, 0))
+	_check("constrict: the second intercept on the other tentacle frees the player", b.atk == null or not b.atk._harmful())
 
-	# 방전 그물: 패리 불가, 세로 띠가 좌→우 / 우→좌로 경기장을 훑는다 (아래→위는 없다)
-	for to_right in [true, false]:
-		main.reset_run()
-		b.next_t = 99.0
-		var net = b.Net.new(to_right)
-		b.start_attack(net)
-		var crossed := false
-		var px := -200.0 if to_right else 200.0
-		for k in 600:
-			main.hitstop = 0
-			p.position = Vector2(px, -1500)
-			p.vel = Vector2.ZERO
-			p.invuln = 99.0
-			main._physics_process(DT)
-			if b.beam_hit(Vector2(px, -1500), 12.0) != Vector2.ZERO:
-				crossed = true
-			if b.atk == null:
-				break
-		_check("net sweeps %s: the band crosses the player and ends (bg_hold cleared)" % ("left->right" if to_right else "right->left"), crossed and b.atk == null and b.bg_hold.is_empty())
-	main.reset_run()
-	b.next_t = 99.0
-	var net2 = b.Net.new(true)
-	b.start_attack(net2)
-	main.hitstop = 0
-	main._physics_process(DT)
-	var wp: Array = b.unparry_points(Vector2(300, -1500))
-	_check("net warning point is on the band at the player's height (%s)" % str(wp), wp.size() == 1 and absf(wp[0].y + 1500.0) < 1.0 and wp[0].x < -1000.0)
-	net2.x = 800.0
-	net2.x_prev = 790.0
-	_check("net: no warning once the band has passed the player", b.unparry_points(Vector2(300, -1500)).is_empty())
-	net2.x_prev = net2.x
-	net2.set_phase("sweep")
-	_check("net hit width equals the drawn band (inside hurts, 80px outside is safe)", b.beam_hit(Vector2(800.0 + net2.HALF - 5.0, -1500), 0.0) != Vector2.ZERO and b.beam_hit(Vector2(800.0 + net2.HALF + 80.0, -1500), 0.0) == Vector2.ZERO)
-	b.atk = null
-	b.bg_hold = []
-
-	# 코어 페이즈: 촉수 둘이 재기동, 소용돌이는 동시에 예고하는 촉수가 최대 2개
+	# 코어 페이즈 (피해 누적으로 방어막이 깨진 경우): 남은 촉수가 계속 싸운다. 소용돌이는 동시에 예고하는 촉수가 최대 2개
 	main.reset_run()
 	b.next_t = 99.0
 	for i in 6:
 		b._cut(i)
 	_check("every tentacle cut -> mantle opens", b.phase == 2)
-	for k in int((b.REGROW_DELAY + b.REGROW + 0.3) / DT):
+	main.reset_run()
+	b.next_t = 99.0
+	for i in [0, 1, 4, 5]:
+		b._cut(i)
+	var shd := {"kind": "shield", "n": Vector2.DOWN}
+	for k in 200:
+		if b.phase == 1:
+			b.damage(shd, 16)
+	for k in int((b.open_time + 0.3) / DT):
 		b.next_t = 99.0
 		b.step(DT, Vector2(0, -700))
-	_check("kraken core phase, cut tentacles regrown (phase %d, busy %s)" % [b.phase, str(b.busy)], b.phase == 3 and b.tent_ready(2) and b.tent_ready(3))
+	_check("kraken core phase with tentacles 2 and 3 left (phase %d, busy %s)" % [b.phase, str(b.busy)], b.phase == 3 and b.tent_ready(2) and b.tent_ready(3))
 	b.next_t = 99.0
 	b.atk = null
 	var rr: Array[int] = [2, 3]

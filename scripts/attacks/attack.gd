@@ -13,6 +13,9 @@ var dodged := false          # 회피한 공격: 그 뒤로는 맞지 않는다.
 var part := -2               # 이 공격이 쓰는 외부 시스템 번호. 그 부위가 부서지면 공격이 끊긴다 (-2 = 없음)
 
 
+var cut_done := false                 # (크라켄) 이 패턴에서 이미 촉수 하나가 끊겼다 — 한 패턴에 하나까지
+var hit_mods: Array = []              # (크라켄) 이 패턴에서 요격당한 모듈들 (연타를 다 요격했는지)
+
 func step(_dt: float, _ppos: Vector2) -> void:
 	pass
 

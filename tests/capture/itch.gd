@@ -22,7 +22,7 @@ var plan := [
 	["02_dash_through_barrage", "dash_fort", 8, Vector2(0, -1950), 0.5],
 	["03_parry_slowmo", "parry_fort", 22, Vector2(0, -1950), 0.5],
 	["04_dash_ink_barrage", "dash_kraken", 8, Vector2(0, -1550), 0.5],
-	["05_dash_through_net", "dash_net", 202, Vector2(0, -1900), 0.5],
+	["05_dash_through_beam", "dash_beam", 160, Vector2(0, -1900), 0.5],
 	["06_barrier_storm", "sat_burst", 120, Vector2(0, -1500), 0.42],
 	["07_barrier_open", "sat_open", 150, Vector2(0, -1550), 0.45],
 	["cover", "reverse_drive", 16, Vector2(0, -1500), 0.62],
@@ -75,13 +75,13 @@ func _setup(name: String) -> void:
 				b.start_attack(b.RadialBurst.new(b.CORE_POS, b.BURST_BEAMS))
 			else:
 				b._open()
-		"dash_net":
+		"dash_beam":
 			main.start_stage(2)
 			var b = main.boss
 			b.next_t = 999.0
 			pin_pos = Vector2(100, -1500)
 			p.reset(pin_pos, false)
-			b.start_attack(b.Net.new(true))
+			b.start_attack(b.EyeSweep.new(b.CORE_POS))
 
 
 func _tick(name: String) -> void:
@@ -111,7 +111,7 @@ func _tick(name: String) -> void:
 				pin = false
 				p.aim = (target - p.position).normalized()
 				p.launch_parry_dash()                         # 리버스 드라이브
-		"dash_net":
+		"dash_beam":
 			if f == 197:                                    # 다가오는 보라 띠를 돌진 무적으로 통과
 				pin = false
 				p.aim = Vector2(1.0, -0.05).normalized()

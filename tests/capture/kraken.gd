@@ -17,8 +17,8 @@ var plan := [
 	["sweep_hit", "sweep", 140, Vector2(700, -1300), Vector2(0, -1500), 0.25],
 	["constrict_warn", "constrict", 80, Vector2(0, -1300), Vector2(0, -1500), 0.3],
 	["constrict_sq", "constrict", 150, Vector2(0, -1300), Vector2(0, -1500), 0.3],
-	["net_wind", "net", 50, Vector2(250, -1200), Vector2(0, -1600), 0.24],
-	["net_sweep", "net", 120, Vector2(250, -1200), Vector2(0, -1600), 0.24],
+	["beam_wind", "beam", 50, Vector2(250, -1200), Vector2(0, -1600), 0.24],
+	["beam_sweep", "beam", 200, Vector2(250, -1200), Vector2(0, -1600), 0.24],
 	["ink", "ink", 75, Vector2(250, -1200), Vector2(0, -1700), 0.3],
 	["broken", "broken", 60, Vector2(250, -1200), Vector2(0, -1600), 0.24],
 	["core", "core", 60, Vector2(250, -1800), Vector2(0, -2100), 0.3],
@@ -100,7 +100,7 @@ func _process(_d: float) -> bool:
 				if pl[1] == "detach":
 					b.damage_part(1, 99)
 				a = null
-			"sweep": a = b.Lash.new(5)
+			"sweep": a = b.Lash.new(7)
 			"zap":
 				b.damage_part(1, 8)
 				b.damage_part(4, 16)
@@ -108,7 +108,7 @@ func _process(_d: float) -> bool:
 				for i in 6:
 					b.damage_part(i, 99)
 			"constrict": a = b.Constrict.new(0, 1)
-			"net": a = b.Net.new(true)
+			"beam": a = b.EyeSweep.new(b.CORE_POS)
 			"ink": a = b.Fan.new(-1, b.SIPHON, p.position)
 			"tips", "ring": a = b.Barrage.new(pl[1], b.emitters(), p.position)
 			"broken":

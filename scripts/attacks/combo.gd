@@ -29,6 +29,7 @@ func step(_dt: float, _ppos: Vector2) -> void:
 			if a == null:
 				continue
 			a.order = -1 if together else kids.size()
+			a.combo = self
 			if prev != null and not together:
 				a.after = prev
 				a.after_gap = interval

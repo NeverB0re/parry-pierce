@@ -23,6 +23,7 @@ var after_gap := 0.0                  # 앞 타가 풀린 뒤 이만큼 더 기�
 var trace_t := 0.0                    # 방향 점선이 그어진 시간 (예고가 보이는 동안 쌓인다)
 var fired_t := -1.0                   # 판정이 처음 나오거나 요격당한 시각 (boss.t)
 var lead := true                      # 아직 첫 타 전 (첫 판정이 나오거나 요격당하면 false). 연타의 두 번째부터는 false 로 시작
+var combo = null                      # 연타에 속하면 그 연타 (combo.gd)
 var _recoil_from: Array = []          # 움츠러들기 시작한 척추들
 var _recoil_to: Array = []
 
@@ -130,10 +131,15 @@ func _hb(i: int, ppos: Vector2) -> Dictionary:
 	return {"id": "arm", "segs": segs, "pos": best, "src": self, "tent": i, "gap": best_d}
 
 
+## 지금 판정·요격이 살아 있는 촉수 (조이기는 한쪽이 풀리면 다른 쪽만)
+func _active_tents() -> Array[int]:
+	return tents
+
+
 func hitboxes(ppos: Vector2, out: Array[Dictionary]) -> void:
 	if delay > 0.0 or not _harmful():
 		return
-	for i in tents:
+	for i in _active_tents():
 		var hb := _hb(i, ppos)
 		hb["push"] = _push(i, ppos)
 		hb["melee"] = true                     # 근접공격 = 회피 불가
@@ -145,13 +151,13 @@ func clash_box(ppos: Vector2) -> Dictionary:
 	if delay > 0.0 or not _clashable():
 		return {}
 	var best := {}
-	for i in tents:
+	for i in _active_tents():
 		var hb := _hb(i, ppos)
 		if best.is_empty() or float(hb["gap"]) < float(best["gap"]):
 			best = hb
 	if boss.phase == 1 and boss.part_alive(int(best["tent"])):
 		best["part"] = int(best["tent"])
-	elif boss.phase == 3:                      # 코어 페이즈: 다시 자란 촉수를 요격하면 코어에 바로 피해
+	elif boss.phase == 3:                      # 코어 페이즈: 남은 촉수를 요격하면 코어에 바로 피해
 		best["core"] = true
 	return best
 
@@ -187,7 +193,7 @@ func on_parried(hb: Dictionary) -> void:
 func assist_targets(from: Vector2, out: Array[Dictionary]) -> void:
 	if delay > 0.0 or not _clashable():
 		return
-	for i in tents:
+	for i in _active_tents():
 		out.append({"pos": _hb(i, from)["pos"], "r": 40.0, "intercept": true})
 
 
