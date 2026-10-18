@@ -250,16 +250,29 @@ func part_emphasis(i: int) -> float:
 	return 2.2 if gun_exposed else 0.35
 
 
-## 표적 테두리: 포대 = 포좌 반원 둘레, 사일로 = 사일로 상자
+## 표적 테두리: 사일로 = 사일로 상자 (보조 포탑은 원, 코어 포대는 _draw_part_outline)
 func part_outline(i: int) -> PackedVector2Array:
 	var out := PackedVector2Array()
-	if i == BIG:
-		var rc := CASEMATE.grow(34.0)
-		return PackedVector2Array([rc.position, Vector2(rc.end.x, rc.position.y), rc.end, Vector2(rc.position.x, rc.end.y)])
 	if i < 2:
 		return out                                     # 작은 포탑: 원 테두리
 	var p: Vector2 = SILOS[i - 2]
 	return PackedVector2Array([p + Vector2(-58, -68), p + Vector2(58, -68), p + Vector2(58, 68), p + Vector2(-58, 68)])
+
+
+## 코어 포대 표적 (v0.75): 금빛(= 패리할 수 있는 것)과 겹치지 않게 코어 둘레의 얇은 붉은 원 하나. 드러나면 조금 굵고 밝게 맥동한다
+func _draw_part_outline(i: int, p: Vector2, r: float, flick: float) -> void:
+	if i != BIG:
+		super(i, p, r, flick)
+		return
+	var breathe := 0.5 + 0.5 * sin(t * 2.2)
+	var col := Color(C_HEART, (0.35 + 0.2 * breathe) * flick).lerp(Color.WHITE, part_flash[i])
+	var w := 3.0
+	if gun_exposed:
+		col.a = minf(1.0, 0.75 + 0.25 * breathe)
+		w = 5.0
+		var u := fmod(t * 1.5, 1.0)
+		draw_arc(p, (r + 16.0) * (1.0 + 0.25 * u), 0.0, TAU, 48, Color(C_HEART, 0.6 * (1.0 - u)), 3.0)
+	draw_arc(p, r + 16.0, 0.0, TAU, 64, col, w)
 
 
 ## 부서진 포대는 포신이, 사일로는 해치가 떨어져 나간다
