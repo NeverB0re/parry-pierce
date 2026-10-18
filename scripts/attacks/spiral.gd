@@ -7,7 +7,7 @@ extends "res://scripts/attacks/attack.gd"
 ## boss 에 필요한 것: set_glow(c, v), bolt_mult()
 
 const Projectiles := preload("res://scripts/projectiles.gd")
-const WIND := 0.9
+const WIND := 0.7                     # 예고 (짧게: 회전형은 필드가 빈 뒤에만 나오므로 오래 기다리면 화면이 빈다)
 const DURATION := 2.8
 const RATE := 0.11                   # 잔탄 간격 (줄기마다 한 발)
 const RATE_HARD := 0.09

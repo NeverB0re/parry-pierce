@@ -334,7 +334,7 @@ func _run() -> void:
 	_air(Vector2(-700, -1500))
 	b.shots.clear()
 	_swing("swing", 0.0, 1.0, 1.0)
-	var mid: Vector2 = b.SHOULDERS[1].lerp(b.fists[1], 0.8)
+	var mid: Vector2 = b.fists[1].lerp(b.sword_tip(), 0.5)   # 검날 가운데 (v0.80: 판정은 무기·손)
 	var side: Vector2 = (b.fists[1] - b.SHOULDERS[1]).orthogonal().normalized()
 	_air(mid + side * 220.0)
 	_swing("swing", 0.0, 1.0, 1.0)
@@ -386,15 +386,14 @@ func _run() -> void:
 	_check("core phase", b.phase == 3)
 	b.next_t = 99.0
 	b.atk = null
-	var alive0: int = b.core.plates.size() - b.core.plates.filter(func(pl): return pl["gone"]).size()
-	_check("irregular plates built (%d plates)" % b.core.plates.size(), b.core.plates.size() >= 6)
+	_check("core armour = 3x3 plates, all on (%d)" % b.plates_left(), b.plates_left() == b.PLATE_N)
 	b.damage_core(32)
 	_check("armor 20%%: stage 1, armor_hp %d" % b.core.armor_hp, b.core.stage == 1 and b.core.armor_hp == 128 and not b.core.broken)
 	b.damage_core(64)
-	var gone_mid: int = b.core.plates.filter(func(pl): return pl["gone"]).size()
-	_check("armor 60%%: plates falling one by one (gone %d / %d), shards %d" % [gone_mid, b.core.plates.size(), b.shards.size()], gone_mid >= 1 and gone_mid < b.core.plates.size() and b.shards.size() == gone_mid)
+	var gone_mid: int = b.PLATE_N - b.plates_left()
+	_check("armor 60%%: plates falling one by one (gone %d / %d), shards %d" % [gone_mid, b.PLATE_N, b.shards.size()], gone_mid >= 1 and gone_mid < b.PLATE_N and b.shards.size() == gone_mid)
 	var died: bool = b.damage_core(9999)
-	_check("overkill breaks armor but NOT the core (armor %d, broken %s, died %s, core_hp %d)" % [b.core.armor_hp, b.core.broken, died, b.core.core_hp], b.core.armor_hp == 0 and b.core.broken and not died and b.core.core_hp == b.core.CORE_HP and b.core.plates.all(func(pl): return pl["gone"]))
+	_check("overkill breaks armor but NOT the core (armor %d, broken %s, died %s, core_hp %d)" % [b.core.armor_hp, b.core.broken, died, b.core.core_hp], b.core.armor_hp == 0 and b.core.broken and not died and b.core.core_hp == b.core.CORE_HP and b.plates_left() == 0)
 	var again: bool = b.damage_core(50)
 	_check("core guard right after armor break (no kill within guard)", not again and b.core.core_hp == b.core.CORE_HP)
 	_step(90)
@@ -842,7 +841,7 @@ func _v034_test() -> void:
 	b = main.boss
 	_air(Vector2(-700, -1500))
 	_swing("swing", 0.0, 1.0, 1.0)
-	var mid: Vector2 = b.SHOULDERS[1].lerp(b.fists[1], 0.8)
+	var mid: Vector2 = b.fists[1].lerp(b.sword_tip(), 0.5)   # 검날 가운데 (v0.80: 판정은 무기·손)
 	var side: Vector2 = (b.fists[1] - b.SHOULDERS[1]).orthogonal().normalized()
 	p.position = mid + side * 120.0
 	_swing("swing", 0.0, 1.0, 1.0)
@@ -1104,10 +1103,10 @@ func _v036_test() -> void:
 	main.start_stage(0)
 	var b = main.boss
 	_air(Vector2(-700, -1500))
-	_swing("swing", 0.0, 1.0, 1.0)
-	var mid: Vector2 = b.SHOULDERS[1].lerp(b.fists[1], 0.8)
+	_swing("warn", 0.2, 1.0, 2.0)
+	var mid: Vector2 = b.fists[1].lerp(b.sword_tip(), 0.5)   # 검날 가운데 (v0.80: 판정은 무기·손)
 	var side: Vector2 = (b.fists[1] - b.SHOULDERS[1]).orthogonal().normalized()
-	_air(mid + side * 220.0)
+	_air(mid + side * 190.0)
 	_swing("warn", 0.2, 1.0, 2.0)
 	var hp3: int = b.part_hp[3]
 	p.aim_phase = true

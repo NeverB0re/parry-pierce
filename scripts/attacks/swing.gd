@@ -1,9 +1,9 @@
 extends "res://scripts/attacks/attack.gd"
-## 팔 휘두르기: 팔 전체를 곧게 뻗어 부채꼴로 휩쓴다. 팔 어디에 닿아도 피해 → 패리하거나 회피 돌진(무적)으로 빠져나간다.
+## 무기 휘두르기 (관측자 검·방패): 팔을 뻗어 무기로 부채꼴을 휩쓴다. 무기(검날·방패)와 손에 닿으면 피해 → 패리하거나 회피 돌진(무적)으로 빠져나간다.
 ## 위치를 잡고 멈춰 있을 때(set·warn)와 휘두르는 중(swing)에는 차지 강습으로 요격할 수 있다. 들어올리는 중(prep)은 아니다.
 ## 패리·요격당하면 휩쓸던 반대쪽으로 밀려난 뒤(recoil) 잠시 멈춰(stagger) 관절이 드러난다.
 ## 단계: prep → set → warn → swing → hold → return  (요격·패리: → recoil → stagger → return)
-## boss 에 필요한 것: SHOULDERS, FIST_IDLE, fists, SWING_L, ELBOW_AT, UPPER_W, FORE_W, FIST_R, arm_box(a, ppos)
+## boss 에 필요한 것: SHOULDERS, FIST_IDLE, fists, hand_reach(a), swing_reach(a), weapon_segs(a, dir, hand, turn), arm_box(a, ppos), elbow_of(a)
 
 const MeleeWarn := preload("res://scripts/melee_warn.gd")
 const PREP := 0.9                    # 준비 모션: 팔이 뒤로 젖혀졌다 목표 위치로 (앞부분에서만 플레이어를 따라간다)
@@ -51,7 +51,7 @@ func aim_at(ppos: Vector2) -> void:
 
 func fist_at(a: float) -> Vector2:
 	var s := 1.0 if arm == 1 else -1.0
-	return boss.SHOULDERS[arm] + Vector2(s * cos(a), sin(a)) * boss.SWING_L
+	return boss.SHOULDERS[arm] + Vector2(s * cos(a), sin(a)) * boss.hand_reach(arm)
 
 
 func step(dt: float, ppos: Vector2) -> void:
@@ -157,11 +157,11 @@ func draw() -> void:
 	var level := 0 if phase == "prep" else (1 if phase == "set" else 2)
 	MeleeWarn.zone(c, area, level, boss.t)                 # 모든 근접공격이 같은 예고 모양(빗금 위험구간 + ⚠)을 쓴다
 	var mid := (th0 + th1) * 0.5
-	MeleeWarn.tag(c, sh + Vector2(s * cos(mid), sin(mid)) * boss.SWING_L * 0.55, level, boss.t)
+	MeleeWarn.tag(c, sh + Vector2(s * cos(mid), sin(mid)) * boss.swing_reach(arm) * 0.55, level, boss.t)
 	MeleeWarn.limb(c, PackedVector2Array([sh, boss.elbow_of(arm), boss.fists[arm]]), level, boss.t)   # 어느 팔이 치는지
 	var a0: float = th0 if s > 0.0 else PI - th0            # 휩쓰는 방향: 호를 따라 흐르는 큰 화살표 (팔 각도 → 화면 각도)
 	var a1: float = th1 if s > 0.0 else PI - th1
-	MeleeWarn.arc_trace(c, sh, boss.SWING_L * 0.8, a0, a1, trace_t / MeleeWarn.TRACE_TIME)
+	MeleeWarn.arc_trace(c, sh, boss.swing_reach(arm) * 0.8, a0, a1, trace_t / MeleeWarn.TRACE_TIME)
 
 
 ## 같은 각도면 계산을 재사용한다 (예고 중 매 프레임 다각형 합치기를 하지 않게)
@@ -173,43 +173,17 @@ func area_cached() -> PackedVector2Array:
 	return _area
 
 
-## 휩쓸기가 실제로 닿는 영역 (판정과 동일: 위팔/아래팔/주먹이 th0~th1 을 쓸고 지나가는 합집합)
+## 휘두르기 예고 영역: 무기가 쓸고 지나가는 부채꼴 띠 (손 안쪽 ~ 무기 끝). 판정과 대략 맞춘 단순한 모양
 func area() -> PackedVector2Array:
 	var s := 1.0 if arm == 1 else -1.0
 	var sh: Vector2 = boss.SHOULDERS[arm]
-	var reach: float = boss.SWING_L
-	var upper_w: float = boss.UPPER_W
-	var fore_w: float = boss.FORE_W
-	var fist_r: float = boss.FIST_R
-	var pieces: Array[PackedVector2Array] = []
-	var wedge := PackedVector2Array([sh])
+	var outer: float = boss.swing_reach(arm) / cos(SPAN / 48.0)
+	var inner: float = maxf(0.0, boss.hand_reach(arm) - boss.FIST_R)
+	var band := PackedVector2Array()
 	for j in 25:
 		var a := lerpf(th0, th1, j / 24.0)
-		wedge.append(sh + Vector2(s * cos(a), sin(a)) * ((reach + fist_r) / cos(SPAN / 48.0)))   # 현 근사가 판정 안쪽으로 파고들지 않게 약간 바깥
-	pieces.append(wedge)
-	for ti in 2:
-		var a := th0 if ti == 0 else th1
-		var d := Vector2(s * cos(a), sin(a))
-		var n := d.orthogonal()
-		var el: Vector2 = sh + d * reach * boss.ELBOW_AT
-		var fist := sh + d * reach
-		pieces.append(PackedVector2Array([sh + n * upper_w, el + n * upper_w, el - n * upper_w, sh - n * upper_w]))
-		pieces.append(PackedVector2Array([el + n * fore_w, fist + n * fore_w, fist - n * fore_w, el - n * fore_w]))
-		pieces.append(_disc(fist, fist_r))
-		pieces.append(_disc(el, upper_w))              # 위팔 끝의 둥근 마감
-	pieces.append(_disc(sh, upper_w))                  # 어깨 쪽 둥근 마감
-	var cur := pieces[0]
-	for k in range(1, pieces.size()):
-		for r in Geometry2D.merge_polygons(cur, pieces[k]):
-			if not Geometry2D.is_polygon_clockwise(r):
-				cur = r
-				break
-	return cur
-
-
-## 원을 바깥에 접하는 다각형으로 근사 (예고 영역이 판정을 빠뜨리지 않도록)
-static func _disc(c: Vector2, r: float) -> PackedVector2Array:
-	var out := PackedVector2Array()
-	for j in 24:
-		out.append(c + Vector2.from_angle(TAU * j / 24.0) * r / cos(PI / 24.0))
-	return out
+		band.append(sh + Vector2(s * cos(a), sin(a)) * outer)
+	for j in range(24, -1, -1):
+		var a := lerpf(th0, th1, j / 24.0)
+		band.append(sh + Vector2(s * cos(a), sin(a)) * inner)
+	return band

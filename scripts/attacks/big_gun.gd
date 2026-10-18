@@ -28,6 +28,7 @@ const SCATTER_LIFE := 6.0
 var fired_t := -1.0
 var calm_t := 0.0                    # 포탄도 조준도 없이 지난 시간
 var scatters := 0
+var opened := false
 
 
 func _init() -> void:
@@ -38,12 +39,14 @@ func _init() -> void:
 func step(dt: float, ppos: Vector2) -> void:
 	match phase:
 		"open":
+			if not opened:
+				opened = true
+				_scatter(SCATTER_AFTER, (ppos - boss.gun_center()).angle())   # 열리기 시작하며 한 번 뿜는다 (모으는 동안 비지 않게)
 			boss.gun_open = minf(1.0, t / OPEN)
 			_track(ppos, dt)
 			if t >= OPEN:
 				set_phase("aim")
 				boss.gun_exposed = true
-				_scatter(SCATTER_AFTER, (ppos - boss.gun_center()).angle())   # 열리며 한 번 뿜는다 (모으는 동안 비지 않게)
 		"aim":
 			_track(ppos, dt)
 			boss.gun_heat = minf(1.0, t / AIM)

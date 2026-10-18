@@ -394,6 +394,7 @@ func _choose(ppos: Vector2) -> void:
 			var lf2 = Fan.new(c, org, ppos, false)
 			lf2.wave_n = 2
 			lf2.count = 9
+			lf2.wind = 0.5
 			start_side(lf2)
 		"spiral":
 			var sp := Spiral.new(c, org, ppos, hard)
@@ -407,7 +408,7 @@ func _choose(ppos: Vector2) -> void:
 			if not hard:                                    # 한꺼번에 너무 많지 않게
 				f.wave_n = 2
 				f.count = 11
-				f.wind = 0.75
+				f.wind = 0.6
 			_pick("fan", f)
 			if randf() < 0.45 and not is_lingering("homing"):   # 가끔: 유도탄이 곁들여진다 (포드 → 없으면 배경 포탑)
 				start_side(Homing.new())
