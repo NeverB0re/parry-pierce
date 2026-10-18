@@ -2,9 +2,11 @@ extends "res://scripts/colossus_base.gd"
 ## 콜로서스 ② 탄막 요새 (패리 중심형). 포신으로 뒤덮인 계단식 포격 성채 — 무한궤도 위에 층층이 쌓인 포대가 화면 위 끝 너머까지 솟는다.
 ## 외형 리워크 (v0.69, docs/BOSS_fortress.md 3장): 그림만 바꿨고 판정·발사점은 아직 예전 자리 (다음 단계에서 대구경 포대·보조 시스템으로 옮긴다).
 ## 핵심: 잔탄(작은 탄)은 피하거나 패리로 흡수, 주탄(큰 탄·유도탄)을 패리해 리버스 드라이브로 꽂는다.
-## 페이즈: 1) 외부 시스템 파괴 — 좌/우 주포대(위), 좌/우 유도탄 사일로(아래)
-##         2) 개방 — 몸통 방폭문이 위아래로 열린다
-##         3) 반응로 — 팔각 장갑에 싸인 동력 코어. 탄막은 첨탑에서, 유도탄은 반응로 배기구에서
+## 페이즈: 1) 포격전 — 주 목표는 머리(지붕)의 대구경 포대. 포방패가 닫혀 있으면 피해가 크게 줄고, 쏠 때 드러난 포를 받아친 탄으로 때린다 (BIG_HITS 번).
+##            보조 시스템(양옆 작은 포탑 둘·유도탄 포드 둘)은 몸 바깥쪽 가장자리에 작게 붙어 있다 — 부수면 그쪽에서 탄이 안 나올 뿐, 차례는 다른 발사점이 잇는다
+##         2) 대구경 포가 부서지고 그 뒤에서 동력 코어가 드러난다
+##         3) 코어 — 장갑 없이 드러나 있다 (한 대면 터진다). 반응로 폭주로 마지막 저항
+## 플레이어는 몸통 가운데쯤에서 싸우며 머리 위의 대구경 포(코어)를 올려친다 (v0.73)
 ## 공격: 나선 탄막 · 부채 탄막(가운데 주탄) · 유도탄 · 융해 기뢰(바닥) · 프레스(근접, 회피 불가, 드물게) · 동심원 파동(패리 불가, 드물게)
 ##       · 반응로 폭주(코어 페이즈 전용). 코어 페이즈에선 기존 탄막도 강해진다(hard).
 ## 탄막형이라 화면이 비지 않게: 쉬는 시간이 짧고, 유도탄은 다른 공격과 겹쳐 쏘며(보조 공격),
@@ -23,8 +25,7 @@ const Overload := preload("res://scripts/attacks/overload.gd")
 const BigGun := preload("res://scripts/attacks/big_gun.gd")
 
 # ── 구조 ───────────────────────────────────────────────
-const REACTOR_POS := Vector2(0, -1640)      # 동력 코어(반응로) 중심
-const DOOR_RECT := Rect2(-270, -1920, 540, 560)   # 방폭문 (페이즈 1에 닫혀 있음)
+const REACTOR_POS := Vector2(0, -2660)      # 동력 코어 = 대구경 포대 자리 (포가 부서지면 그 뒤에서 드러난다)
 const ARMOR_HP := 180
 const PLATE_SITES := 10
 const CORE_R := 58.0
@@ -35,19 +36,21 @@ const REACTOR_OUTLINE := [
 	Vector2(-40, 262), Vector2(-90, 230), Vector2(-170, 170), Vector2(-215, 80), Vector2(-215, -80), Vector2(-170, -170),
 ]
 const PLATE_SITE_BOX := Rect2(-210, -250, 420, 500)
-const BATTERIES := [Vector2(-560, -2200), Vector2(560, -2200)]      # 주포대 (외부 시스템 0, 1)
-const BARREL_TIPS := [Vector2(-720, -2420), Vector2(720, -2420)]
-const SILOS := [Vector2(-650, -1260), Vector2(650, -1260)]           # 유도탄 사일로 (외부 시스템 2, 3)
-const SPIRE_TOP := Vector2(0, -2780)                                # 첨탑 포구 (주포대가 없으면 여기서)
-const VENTS := [Vector2(-330, -1640), Vector2(330, -1640)]          # 코어 페이즈 유도탄 배기구
+const BATTERIES := [Vector2(-690, -2230), Vector2(690, -2230)]      # 보조 포탑 (외부 시스템 0, 1): 3층 양옆 가장자리, 작게
+const BARREL_TIPS := [Vector2(-790, -2350), Vector2(790, -2350)]
+const SILOS := [Vector2(-880, -1380), Vector2(880, -1380)]           # 유도탄 포드 (외부 시스템 2, 3): 2층 바깥 가장자리, 작게
+const SPIRE_TOP := Vector2(0, -2290)                                # 3층 가운데 회전 포탑 (부서지지 않는 발사점)
+const BG_GUNS := [Vector2(-930, -2610), Vector2(930, -2610)]        # 배경 포탑 포구 (부서지지 않는 발사점)
+const GUN_PORT := Vector2(0, -2430)                                 # 닫힌 대구경 포대 아래 작은 포문 (닫혀 있어도 간단한 탄막)
+const VENTS := [Vector2(-300, -2620), Vector2(300, -2620)]          # 코어 페이즈 유도탄 배기구 (코어 양옆)
 const MORTARS := [Vector2(-430, -640), Vector2(430, -640)]          # 기뢰 박격포
 
 # ── 외부 시스템 ────────────────────────────────────────
 const PART_HP := 30
-const PART_R := [62.0, 62.0, 58.0, 58.0, 170.0]
+const PART_R := [46.0, 46.0, 50.0, 50.0, 190.0]
 const BIG := 4                       # 대구경 포대 (외부 시스템 4): 포방패가 닫힌 동안은 피해가 크게 줄고, 드러났을 때 맞으면 1/3 씩
-const BIG_HITS := 3
-const BIG_HP := 48
+const BIG_HITS := 5                  # 주 공략 대상이라 튼튼하게
+const BIG_HP := 80
 const BIG_CLOSED_K := 0.15           # 포방패 너머로 들어가는 피해 비율
 const BIG_EVERY := 3                 # 공격 이만큼마다 대구경 포 (탄막과 함께)
 const GUN_LEN := 430.0               # 다 나왔을 때 포신 길이
@@ -55,9 +58,9 @@ const OPEN_TIME := 1.6
 
 # ── 공격 고르기 ────────────────────────────────────────
 const LOW_ZONE_Y := -1000.0          # 이보다 아래면 기뢰 위주
-const GAP := Vector2(0.35, 0.7)      # 공격 사이 쉬는 시간 (짧게: 탄막형이라 화면이 비지 않게)
+const GAP := Vector2(0.2, 0.45)      # 공격 사이 쉬는 시간 (짧게: 한 번에 적게 쏘는 대신 끊기지 않게)
 const GAP_CORE := Vector2(0.2, 0.45) # 코어 페이즈는 더 몰아친다
-const GAP_SPIRAL := Vector2(1.0, 1.4) # 회전형 탄막 뒤: 남은 탄이 지나갈 시간을 준다 (겹치지 않게)
+const GAP_SPIRAL := Vector2(0.5, 0.8) # 회전형 탄막 뒤: 남은 탄이 지나갈 시간을 준다 (겹치지 않게)
 const CALM_SHOTS := 8                # 회전형 탄막은 필드의 탄이 이 이하이고 겹쳐 도는 공격이 없을 때만
 const SPECIAL_EVERY := 5             # 특수기(프레스·동심원)는 이만큼 공격한 뒤에야 다시 (드물게, 연달아 쓰지 않음)
 
@@ -69,7 +72,7 @@ const C_RUST := Color(0.36, 0.2, 0.12)
 const C_TREAD := Color(0.06, 0.06, 0.065)
 const C_GLOW := Color(1.0, 0.78, 0.42)
 
-var glow: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]   # 발사 전 달아오름: 부위 0~3, 4 첨탑, 5 박격포, 6 반응로(보라)
+var glow: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]   # 발사 전 달아오름: 부위 0~3, 4 회전 포탑, 5 박격포, 6 반응로(보라), 7·8 배경 포탑, 9 포문
 var gun_open := 0.0                  # 포방패가 열리고 포가 나온 정도 (0~1)
 var gun_aim := PI * 0.5              # 포신 방향 (아래 = PI/2)
 var gun_heat := 0.0                  # 쏘기 직전 포구가 달아오름
@@ -171,14 +174,9 @@ func part_outline(i: int) -> PackedVector2Array:
 		var rc := CASEMATE.grow(34.0)
 		return PackedVector2Array([rc.position, Vector2(rc.end.x, rc.position.y), rc.end, Vector2(rc.position.x, rc.end.y)])
 	if i < 2:
-		var b: Vector2 = BATTERIES[i]
-		for q in 13:
-			out.append(b + Vector2.from_angle(PI + q * PI / 12.0) * 116.0)
-		out.append(b + Vector2(130, 100))
-		out.append(b + Vector2(-130, 100))
-		return out
+		return out                                     # 작은 포탑: 원 테두리
 	var p: Vector2 = SILOS[i - 2]
-	return PackedVector2Array([p + Vector2(-116, -156), p + Vector2(116, -156), p + Vector2(116, 156), p + Vector2(-116, 156)])
+	return PackedVector2Array([p + Vector2(-58, -68), p + Vector2(58, -68), p + Vector2(58, 68), p + Vector2(-58, 68)])
 
 
 ## 부서진 포대는 포신이, 사일로는 해치가 떨어져 나간다
@@ -193,10 +191,10 @@ func _on_part_broken(i: int) -> void:
 	if i < 2:
 		var b: Vector2 = BATTERIES[i]
 		var tip: Vector2 = BARREL_TIPS[i]
-		debris.append({"pos": (b + tip) * 0.5, "half": (tip - b) * 0.5, "w": 46.0, "vel": Vector2(s * 280.0, -360.0), "rot": 0.0, "rotv": s * 3.2, "rest": false})
+		debris.append({"pos": (b + tip) * 0.5, "half": (tip - b) * 0.5, "w": 26.0, "vel": Vector2(s * 280.0, -360.0), "rot": 0.0, "rotv": s * 3.2, "rest": false})
 	else:
 		var p: Vector2 = SILOS[i - 2]
-		debris.append({"pos": p + Vector2(0, -90), "half": Vector2(80, 0), "w": 40.0, "vel": Vector2(s * 320.0, -300.0), "rot": 0.0, "rotv": s * 4.0, "rest": false})
+		debris.append({"pos": p + Vector2(0, -36), "half": Vector2(44, 0), "w": 24.0, "vel": Vector2(s * 320.0, -300.0), "rot": 0.0, "rotv": s * 4.0, "rest": false})
 
 
 # ── 진행 ───────────────────────────────────────────────
@@ -229,22 +227,42 @@ func _step_phase(dt: float) -> void:
 	gun_shake = move_toward(gun_shake, 0.0, dt * 1.2)
 	if not part_alive(BIG):
 		gun_open = 0.0
+	elif not is_lingering("big_gun") and (atk == null or atk.kind != "big_gun"):   # 포가 들어가며 포방패가 닫힌다
+		gun_open = move_toward(gun_open, 0.0, dt / 0.6)
+	if phase >= 2 and not core.broken:                 # 대구경 포 뒤의 코어는 장갑 없이 드러난다 (한 대면 터진다)
+		core.armor_hp = 0
+		core.broken = true
+		core.guard = 0.0
+		for pl in core.plates:
+			pl["gone"] = true
 
 
+## 공격 고르기: 한 번에 큰 패턴 하나 (+ 가끔 작은 곁가지). 대구경 포 차례(BIG_EVERY)에는 포가 주인공이고 가벼운 부채만 곁들인다.
+## 탄막 발사점은 살아 있는 후보(보조 포탑·회전 포탑·배경 포탑·닫힌 포문) 중 플레이어에게서 먼 쪽 — 보조 시스템을 부숴도 차례는 그대로, 방향만 바뀐다
 func _choose(ppos: Vector2) -> void:
 	var hard := phase == 3
 	since_special += 1
-	var calm: bool = lingering.is_empty() and shots.size() <= CALM_SHOTS    # 회전형 탄막은 다른 패턴이 쉴 때만 혼자
+	since_gun += 1
+	var calm: bool = lingering.is_empty() and shots.size() <= CALM_SHOTS
+	if phase == 1 and part_alive(BIG) and since_gun >= BIG_EVERY:     # 대구경 포 차례
+		since_gun = 0
+		_pick("big_gun", BigGun.new())
+		var e := _emitter(ppos)
+		var lf = Fan.new(e[0], e[1], ppos, false)
+		lf.wave_n = 2
+		lf.count = 9
+		start_side(lf)
+		return
 	var main_kind := ""
-	var high := ppos.y < -1900.0                             # 높은 곳: 천장 프레스가 노리는 곳
-	if since_special >= SPECIAL_EVERY and randf() < (0.75 if high else 0.35):   # 드물게: 천장 프레스(근접) / 심장부 동심원 파동(패리 불가)
+	var high := ppos.y < -1900.0
+	if since_special >= SPECIAL_EVERY and randf() < (0.75 if high else 0.35):   # 드물게: 천장 프레스(근접) / 반응로 동심원 파동(패리 불가)
 		since_special = 0
-		var press_ok := shots_clear(ppos)                    # 근접은 날아오는 탄이 걷힌 뒤에만
+		var press_ok := shots_clear(ppos)
 		main_kind = "press" if press_ok and (high or randf() < 0.4) else "rings"
-	elif ppos.y > LOW_ZONE_Y and last != "mines" and randf() < 0.6:   # 낮은 곳: 기뢰 위주
+	elif ppos.y > LOW_ZONE_Y and last != "mines" and randf() < 0.6:
 		main_kind = "mines"
 	else:
-		var pool: Array[String] = ["spiral", "fan"]
+		var pool: Array[String] = ["spiral", "fan", "fan"]
 		if hard:
 			pool.append("overload")
 			pool.append("overload")
@@ -256,30 +274,35 @@ func _choose(ppos: Vector2) -> void:
 		if pool.is_empty():
 			pool.append("fan")
 		main_kind = pool[randi() % pool.size()]
-	var c := _battery(ppos)
-	var org: Vector2 = SPIRE_TOP if c < 0 else BARREL_TIPS[c]
-	since_gun += 1                                         # 대구경 포: 공격 몇 번마다 탄막과 함께 (탄막 속에서 큰 포탄을 골라 받아치는 손맛)
-	if phase == 1 and part_alive(BIG) and since_gun >= BIG_EVERY and not is_lingering("big_gun") and main_kind != "press":
-		since_gun = 0
-		start_side(BigGun.new())
+	var em := _emitter(ppos)
+	var c: int = em[0]
+	var org: Vector2 = em[1]
 	match main_kind:
 		"press":
 			_pick("press", Press.new())
-		"rings":
+		"rings":                                            # 패리 불가 동심원 + 가벼운 부채 (모으는 동안 비지 않게)
 			_pick("rings", Rings.new(REACTOR_POS))
+			var lf2 = Fan.new(c, org, ppos, false)
+			lf2.wave_n = 2
+			lf2.count = 9
+			start_side(lf2)
 		"mines":
 			_pick("mines", Mines.new(ppos, hard))
-		"spiral":                                           # 고정 방향(플레이어 쪽 선택지)으로 휘두른다
+		"spiral":
 			var sp := Spiral.new(c, org, ppos, hard)
 			sp.fixed = true
 			sp.center = nearest_dir(org, ppos, DIRS_DOWN)
 			_pick("spiral", sp)
-		"fan":                                              # 고정 방향(플레이어 쪽 선택지), 부채마다 반 칸 어긋난다
+		"fan":
 			var f := Fan.new(c, org, ppos, hard)
 			f.fixed = true
 			f.aim = nearest_dir(org, ppos, DIRS_DOWN)
+			if not hard:                                    # 한꺼번에 너무 많지 않게
+				f.wave_n = 2
+				f.count = 11
+				f.wind = 0.75
 			_pick("fan", f)
-			if not homing_origins().is_empty():             # 일제 사격: 부채와 함께 사일로가 유도탄(요새의 시그니처, 겨누는 사격)을 쏜다
+			if randf() < 0.45 and not is_lingering("homing"):   # 가끔: 유도탄이 곁들여진다 (포드 → 없으면 배경 포탑)
 				start_side(Homing.new())
 		_:
 			_pick("overload", Overload.new(REACTOR_POS))
@@ -290,17 +313,19 @@ func _pick(kind: String, a) -> void:
 	start_attack(a)
 
 
-## 탄막 발사점: 페이즈 1은 플레이어에게서 더 먼(살아있는) 주포대, 없거나 코어 페이즈면 첨탑(-1)
-func _battery(ppos: Vector2) -> int:
-	if phase == 3:
-		return -1
-	if part_alive(0) and part_alive(1):
-		return 0 if ppos.distance_to(BARREL_TIPS[0]) >= ppos.distance_to(BARREL_TIPS[1]) else 1
-	if part_alive(0):
-		return 0
-	if part_alive(1):
-		return 1
-	return -1
+## 탄막 발사점 [발광 번호, 위치]: 살아 있는 후보 중 무작위 둘을 골라 플레이어에게서 더 먼 쪽 (탄이 날아올 시간).
+## 후보 = 보조 포탑(살아 있으면) · 회전 포탑 · 배경 포탑 둘 · 닫힌 대구경 포대의 포문 (코어 페이즈는 회전 포탑·배경 포탑)
+func _emitter(ppos: Vector2) -> Array:
+	var cands := [[-1, SPIRE_TOP], [-5, BG_GUNS[0]], [-6, BG_GUNS[1]]]
+	if phase == 1:
+		for i in 2:
+			if part_alive(i):
+				cands.append([i, BARREL_TIPS[i]])
+		if part_alive(BIG) and gun_open <= 0.0:
+			cands.append([-7, GUN_PORT])
+	var a: Array = cands[randi() % cands.size()]
+	var b: Array = cands[randi() % cands.size()]
+	return a if ppos.distance_to(a[1]) >= ppos.distance_to(b[1]) else b
 
 
 ## 유도탄 발사점 [[번호, 위치]]: 페이즈 1은 살아 있는 사일로, 코어 페이즈는 배기구 둘
@@ -312,11 +337,14 @@ func homing_origins() -> Array:
 		return out
 	for k in 2:
 		if part_alive(2 + k):
-			out.append([2 + k, SILOS[k] + Vector2(0, -110)])
+			out.append([2 + k, SILOS[k] + Vector2(0, -60)])
+	if out.is_empty():                                  # 포드를 다 부숴도 차례는 쉬지 않는다: 배경 포탑이 잇는다
+		out.append([-5, BG_GUNS[0]])
+		out.append([-6, BG_GUNS[1]])
 	return out
 
 
-## 발사 전 발광: 0~3 부위, -1 첨탑(코어 페이즈 배기구 포함), -3 박격포, -4 반응로(동심원 파동)
+## 발사 전 발광: 0~3 부위, -1 회전 포탑(코어 페이즈 배기구 포함), -3 박격포, -4 반응로(동심원 파동), -5·-6 배경 포탑, -7 포문
 func set_glow(c: int, v: float) -> void:
 	glow[_glow_idx(c)] = v
 
@@ -328,9 +356,18 @@ func glow_of(c: int) -> float:
 static func _glow_idx(c: int) -> int:
 	if c >= 0:
 		return c
-	if c == -4:
-		return 6
-	return 4 if c == -1 else 5
+	match c:
+		-4:
+			return 6
+		-1:
+			return 4
+		-5:
+			return 7
+		-6:
+			return 8
+		-7:
+			return 9
+	return 5
 
 
 # ── 그리기 ─────────────────────────────────────────────
@@ -344,8 +381,10 @@ func _draw() -> void:
 	_draw_sponsons()
 	_draw_roof()
 	_draw_casemate()
+	if phase >= 2:
+		_draw_reactor()
 	_draw_ciws()
-	_draw_doors()
+	_draw_bg_guns()
 	_draw_batteries()
 	_draw_silos()
 	_draw_treads()
@@ -391,7 +430,7 @@ func _draw_heat_aura() -> void:
 # 층: [아래 반폭, 위 반폭, 아래 y, 위 y]. 위층일수록 좁아져 층마다 턱(난간)이 생긴다
 const TIERS := [[1150.0, 1100.0, -420.0, -1150.0], [960.0, 900.0, -1150.0, -1950.0], [790.0, 710.0, -1950.0, -2700.0]]
 const ROOF := [430.0, 360.0, -2700.0, -3000.0]
-const CASEMATE := Rect2(-270, -2540, 540, 400)       # 대구경 포대의 포방패 (가운데, 지금은 닫힌 그림)
+const CASEMATE := Rect2(-250, -2860, 500, 400)       # 대구경 포대의 포방패 (머리 = 지붕 아래, 가운데)
 const C_BACK := Color(0.055, 0.06, 0.075)            # 배경 포탑 (멀리, 푸른 기)
 const DEPTH := Vector2(110.0, -70.0)                  # 비스듬히 본 깊이 (오른쪽 옆면·층 윗면이 보인다)
 const C_FACE := Color(0.13, 0.125, 0.13)              # 정면 장갑
@@ -519,8 +558,8 @@ func _draw_roof() -> void:
 	var ol := poly.duplicate()
 	ol.append(poly[0])
 	draw_polyline(ol, Color(C_RIM, 0.55), 4.0)
-	var wy := -2920.0
-	draw_rect(Rect2(-330, wy - 30, 660, 60), C_HULL_DARK)
+	var wy := -2950.0
+	draw_rect(Rect2(-330, wy - 24, 660, 48), C_HULL_DARK)
 	for k in 9:
 		var x := -290.0 + k * 72.5
 		var on := 0.0 if dead else (0.35 if int(t * 0.7 + k * 3.1) % 7 == 0 else 1.0)
@@ -530,14 +569,7 @@ func _draw_roof() -> void:
 	draw_line(o + Vector2(0, 40), o, C_HULL_DARK, 14.0)
 	draw_colored_polygon(PackedVector2Array([o + Vector2(-w, -10), o + Vector2(w, -10), o + Vector2(w * 0.7, 26), o + Vector2(-w * 0.7, 26)]), C_HULL)
 	draw_line(o + Vector2(-w, -10), o + Vector2(w, -10), Color(C_RIM, 0.6), 3.0)
-	var g := glow[4]                                                   # 회전 포탑 (나선 포화의 발사점)
-	var spin := t * (0.6 + 2.5 * g)
-	draw_circle(SPIRE_TOP, 70.0, C_HULL_DARK)
-	draw_arc(SPIRE_TOP, 70.0, 0.0, TAU, 24, Color(C_RIM, 0.6), 4.0)
-	for k in 4:
-		var a := spin + k * TAU / 4.0
-		_cap(SPIRE_TOP + Vector2.from_angle(a) * 40.0, SPIRE_TOP + Vector2.from_angle(a) * 110.0, 18.0, C_HULL)
-	draw_circle(SPIRE_TOP, 22.0 + 16.0 * g, Color(C_GLOW, 0.35 + 0.55 * g))
+
 
 
 ## 대구경 포대: 두꺼운 포방패(셔터 두 짝)가 닫혀 있다가, 쏠 때 양옆으로 열리고 안에서 거대한 포가 밀려 나와 플레이어를 겨눈다.
@@ -613,6 +645,28 @@ func _draw_casemate() -> void:
 		var b := a + Vector2(sd * (90.0 + 80.0 * op), 120.0)
 		draw_line(a, b, C_HULL_DARK, 22.0)
 		draw_line(a, a.lerp(b, 0.55 + 0.3 * op), Color(0.62, 0.66, 0.68, 0.6), 7.0)
+
+
+## 부서지지 않는 발사점: 3층 가운데 회전 포탑 · 배경 포탑 포구 둘 · 닫힌 대구경 포대 아래 포문 (판정 없음, 쏘기 전에 달아오른다)
+func _draw_bg_guns() -> void:
+	var g := glow[4]
+	var spin := t * (0.6 + 2.5 * g)
+	draw_circle(SPIRE_TOP, 66.0, C_HULL_DARK)
+	draw_arc(SPIRE_TOP, 66.0, 0.0, TAU, 24, Color(C_RIM, 0.6), 4.0)
+	for k in 4:
+		var a := spin + k * TAU / 4.0
+		_cap(SPIRE_TOP + Vector2.from_angle(a) * 36.0, SPIRE_TOP + Vector2.from_angle(a) * 104.0, 18.0, C_HULL)
+	draw_circle(SPIRE_TOP, 20.0 + 16.0 * g, Color(C_GLOW, 0.3 + 0.55 * g))
+	for k in 2:
+		var p: Vector2 = BG_GUNS[k]
+		var gk := glow[7 + k]
+		draw_circle(p, 46.0, C_BACK.lightened(0.15))
+		draw_arc(p, 46.0, 0.0, TAU, 18, Color(C_RIM, 0.35), 3.0)
+		draw_circle(p, 16.0 + 14.0 * gk, Color(C_GLOW, 0.25 + 0.6 * gk))
+	if part_alive(BIG) and phase == 1:
+		var gp := glow[9]
+		draw_rect(Rect2(GUN_PORT.x - 60, GUN_PORT.y - 18, 120, 36), C_HULL_DARK)
+		draw_circle(GUN_PORT, 12.0 + 12.0 * gp, Color(C_GLOW, 0.3 + 0.6 * gp))
 
 
 ## 근접 방공포 (잔탄의 출처): 층 난간마다 작은 포탑이 줄지어 플레이어를 따라 돌고, 가끔 짧게 번쩍인다
@@ -706,6 +760,7 @@ func _draw_smoke() -> void:
 
 
 
+## 보조 포탑 (외부 시스템 0·1): 3층 양옆 가장자리의 작은 쌍열 포탑. 부서지면 포신이 떨어지고 그루터기에서 불씨
 func _draw_batteries() -> void:
 	for i in 2:
 		var b: Vector2 = BATTERIES[i]
@@ -713,68 +768,39 @@ func _draw_batteries() -> void:
 		var d := (tip - b).normalized()
 		var n := d.orthogonal()
 		if part_alive(i):
-			var breathe := d * sin(t * 1.6 + i * 1.9) * 7.0 if glow[i] <= 0.0 else Vector2.ZERO   # 포신이 숨 쉬듯 들락거린다 (그림만)
-			b += breathe
-			for k in [-1.0, 1.0]:                       # 쌍열 포신
-				_cap(b + n * 26.0 * k, tip + n * 26.0 * k, 34.0, C_HULL_DARK)
-				draw_line(b + n * 26.0 * k, tip + n * 26.0 * k, Color(C_RIM, 0.35), 3.0)
+			for k in [-1.0, 1.0]:
+				_cap(b + n * 14.0 * k, tip + n * 14.0 * k, 18.0, C_HULL_DARK)
 			var g := glow[i]
-			draw_circle(tip, 26.0 + 20.0 * g, Color(C_GLOW, 0.12 + 0.55 * g))
+			draw_circle(tip, 16.0 + 14.0 * g, Color(C_GLOW, 0.12 + 0.55 * g))
 		else:
-			_cap(b, b + d * 70.0, 50.0, C_HULL_DARK)
-			draw_circle(b + d * 70.0, 18.0, Color(C_HEART, 0.25 + 0.15 * sin(t * 4.0)))
-		draw_circle(b, 110.0, C_HULL)
-		draw_arc(b, 110.0, PI, TAU, 26, C_RIM, 6.0)
-		draw_rect(Rect2(b.x - 130.0, b.y + 40.0, 260.0, 60.0), C_HULL_DARK)
+			_cap(b, b + d * 40.0, 26.0, C_HULL_DARK)
+			draw_circle(b + d * 40.0, 10.0, Color(C_HEART, 0.25 + 0.15 * sin(t * 4.0)))
+		draw_circle(b, 48.0, C_TOP)
+		draw_arc(b, 48.0, PI, TAU, 20, C_RIM, 4.0)
+		draw_rect(Rect2(b.x - 56.0, b.y + 20.0, 112.0, 28.0), C_HULL_DARK)
 
 
+## 유도탄 포드 (외부 시스템 2·3): 2층 바깥 가장자리의 작은 상자. 쏠 때 해치가 열린다. 부서지면 빈 구멍
 func _draw_silos() -> void:
 	for k in 2:
 		var p: Vector2 = SILOS[k]
-		var r := Rect2(p.x - 110.0, p.y - 150.0, 220.0, 300.0)
-		draw_rect(r, C_HULL_DARK)
-		draw_rect(r, Color(C_RIM, 0.6), false, 4.0)
-		for j in 3:
-			draw_line(Vector2(r.position.x, r.position.y + 80.0 + j * 70.0), Vector2(r.end.x, r.position.y + 80.0 + j * 70.0), Color(C_RIM, 0.25), 3.0)
-		var hatch := p + Vector2(0, -110)
+		var rc := Rect2(p.x - 52.0, p.y - 62.0, 104.0, 124.0)
+		draw_rect(rc, C_HULL_DARK)
+		draw_rect(rc, Color(C_RIM, 0.6), false, 3.0)
+		draw_line(Vector2(rc.position.x, p.y + 10.0), Vector2(rc.end.x, p.y + 10.0), Color(C_RIM, 0.25), 3.0)
+		var hatch := p + Vector2(0, -36)
 		if part_alive(2 + k):
 			var g := glow[2 + k]
-			var open := g * 50.0
-			draw_rect(Rect2(hatch.x - 90.0 - open, hatch.y - 18.0, 90.0, 36.0), C_HULL)
-			draw_rect(Rect2(hatch.x + open, hatch.y - 18.0, 90.0, 36.0), C_HULL)
+			var open := g * 26.0
+			draw_rect(Rect2(hatch.x - 44.0 - open, hatch.y - 12.0, 44.0, 24.0), C_TOP)
+			draw_rect(Rect2(hatch.x + open, hatch.y - 12.0, 44.0, 24.0), C_TOP)
 			if g > 0.0:
-				draw_rect(Rect2(hatch.x - open, hatch.y - 18.0, open * 2.0, 36.0), Color(C_GLOW, 0.3 + 0.6 * g))
+				draw_rect(Rect2(hatch.x - open, hatch.y - 12.0, open * 2.0, 24.0), Color(C_GLOW, 0.3 + 0.6 * g))
 		else:
-			draw_circle(hatch, 34.0, C_CAVITY)
-			draw_circle(hatch, 16.0, Color(C_HEART, 0.3 + 0.15 * sin(t * 4.0 + k)))
+			draw_circle(hatch, 22.0, C_CAVITY)
+			draw_circle(hatch, 10.0, Color(C_HEART, 0.3 + 0.15 * sin(t * 4.0 + k)))
 
 
-## 방폭문: 페이즈 1은 닫힘, 2는 위아래로 열리는 중, 3은 반응로
-func _draw_doors() -> void:
-	var open_k := 0.0 if phase == 1 else (1.0 if phase == 3 else clampf(open_t / OPEN_TIME, 0.0, 1.0))
-	if open_k > 0.0:
-		_draw_reactor()
-	if open_k >= 1.0:
-		return
-	var rc := DOOR_RECT
-	var half_h := rc.size.y * 0.5
-	var slide := ease(open_k, 2.2) * (half_h + 20.0)
-	var alpha := 1.0 - maxf(0.0, open_k - 0.7) / 0.3
-	for s in [-1.0, 1.0]:
-		var y0: float = rc.position.y + (0.0 if s < 0.0 else half_h) + s * slide
-		var door := Rect2(rc.position.x, y0, rc.size.x, half_h)
-		draw_rect(door, Color(C_HULL_DARK, alpha))
-		draw_rect(door, Color(C_RIM, 0.6 * alpha), false, 4.0)
-		for k in 5:                                   # 경고 줄무늬
-			var x := door.position.x + 40.0 + k * 100.0
-			draw_line(Vector2(x, door.position.y + 20.0), Vector2(x + 40.0, door.end.y - 20.0), Color(C_RUST, 0.7 * alpha), 10.0)
-	if open_k > 0.0:
-		var gap := slide * 2.0
-		draw_rect(Rect2(rc.position.x, REACTOR_POS.y - gap * 0.5, rc.size.x, gap), Color(C_HEART, 0.25 * (1.0 - open_k)))
-	else:
-		draw_line(Vector2(rc.position.x, REACTOR_POS.y), Vector2(rc.end.x, REACTOR_POS.y), Color(C_HEART, 0.18 + 0.1 * sin(t * 3.0)), 3.0)
-	if glow[6] > 0.0:                                 # 동심원 파동 예고: 문틈으로 보랏빛
-		draw_line(Vector2(rc.position.x, REACTOR_POS.y), Vector2(rc.end.x, REACTOR_POS.y), Color(1.0, 0.62, 0.86, glow[6]), 4.0 + 10.0 * glow[6])
 
 
 ## 반응로: 안쪽은 회전하는 제어봉과 맥동하는 코어, 바깥은 강철 판(장갑)

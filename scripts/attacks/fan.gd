@@ -20,6 +20,7 @@ var waves := 0
 var wave_n := WAVES
 var count := COUNT
 var interval := INTERVAL
+var wind := WIND                     # 예고(조준선) 시간
 var fixed := false                   # 고정: 플레이어를 겨누지 않고 aim 방향으로, 부채마다 반 칸씩 어긋나게 (틈이 번갈아 생긴다)
 
 
@@ -36,12 +37,12 @@ func _init(c: int, o: Vector2, ppos: Vector2, hard := false) -> void:
 
 
 func step(_dt: float, ppos: Vector2) -> void:
-	if t < WIND:
-		boss.set_glow(cannon, t / WIND)
+	if t < wind:
+		boss.set_glow(cannon, t / wind)
 		if not fixed:
 			aim = (ppos - origin).angle()
 		return
-	if t >= WIND + waves * interval:
+	if t >= wind + waves * interval:
 		if not fixed:
 			aim = (ppos - origin).angle()
 		var shift := (0.5 * SPREAD / (count - 1)) if fixed and waves % 2 == 1 else 0.0
@@ -62,7 +63,7 @@ func step(_dt: float, ppos: Vector2) -> void:
 
 ## 예고: 부채꼴 양끝과 가운데(주탄) 조준선
 func draw() -> void:
-	if t >= WIND + 0.3:
+	if t >= wind + 0.3:
 		return
 	var c: CanvasItem = boss
 	var gl: float = boss.glow_of(cannon)

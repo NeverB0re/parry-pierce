@@ -8,8 +8,8 @@ var out := ""
 var plan := [
 	["closed", "closed", 20],
 	["aim", "gun", 80],
-	["fired", "gun", 125],
-	["exposed", "gun", 175],
+	["fired", "gun", 180],
+	["exposed", "gun", 300],
 	["stagger", "hit", 12],
 	["broken", "broken", 40],
 ]
@@ -46,7 +46,7 @@ func _process(_d: float) -> bool:
 		main.start_stage(1)
 		b = main.boss
 		b.next_t = 999.0
-		p.reset(Vector2(350, -1300), false)
+		p.reset(Vector2(250, -1750), false)
 		match pl[1]:
 			"gun":
 				b.start_side(b.BigGun.new())
@@ -63,10 +63,10 @@ func _process(_d: float) -> bool:
 	local += 1
 	p.invuln = 999.0
 	p.vel = Vector2.ZERO
-	p.position = Vector2(350, -1300)
+	p.position = Vector2(250, -1750)
 	b.next_t = 999.0
-	main.cam.position = Vector2(0, -1900)
-	main.cam.zoom = Vector2(0.36, 0.36)
+	main.cam.position = Vector2(0, -2050)
+	main.cam.zoom = Vector2(0.3, 0.3)
 	main.hud.clear_banner()
 	if local == int(pl[2]):
 		root.get_texture().get_image().save_png("%s/fortress_%s.png" % [out, pl[0]])

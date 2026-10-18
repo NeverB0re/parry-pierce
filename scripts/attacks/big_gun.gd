@@ -8,14 +8,13 @@ extends "res://scripts/attacks/attack.gd"
 const Projectiles := preload("res://scripts/projectiles.gd")
 const OPEN := 0.7                    # 포방패가 열리고 포가 나온다
 const AIM := 0.9                     # 겨눈다 (포구가 달아오른다)
-const SHELL_SPEED := 470.0
-const SHELL_LIFE := 7.0
+const SHELL_SPEED := 210.0           # 느리게 다가오되 플레이어를 쫓는다 (projectiles SHELL_HOME) — 압도적이고 위협적으로
+const SHELL_LIFE := 11.0
 const ESCORT := 20                   # 호위탄 수 (빽빽하게: 고리 사이로 빠져나갈 틈이 없다 — 돌진으로 뚫고 들어가야 한다)
-const ESCORT_R := 110.0              # 호위탄 고리 반지름
-const LINGER := 1.4                  # 포탄이 사라지고 조준도 끝난 뒤 더 머무는 시간
-const MAX_OUT := 7.5                 # 그래도 이만큼 지나면 들어간다
+const ESCORT_R := 120.0              # 호위탄 고리 반지름 (포탄 둘레를 돌며 따라간다)
+const LINGER := 0.4                  # 포탄이 사라지고 조준도 끝난 뒤 더 머무는 시간 (리버스 드라이브가 날아가 닿을 만큼)
+const MAX_OUT := 12.0                # 그래도 이만큼 지나면 들어간다
 const STAGGER := 0.9                 # 맞으면 휘청이며 멈춘다
-const CLOSE := 0.6
 
 var fired_t := -1.0
 var calm_t := 0.0                    # 포탄도 조준도 없이 지난 시간
@@ -49,11 +48,6 @@ func step(dt: float, ppos: Vector2) -> void:
 		"stagger":
 			if t >= STAGGER:
 				_close()
-		"close":
-			boss.gun_open = maxf(0.0, 1.0 - t / CLOSE)
-			if t >= CLOSE:
-				boss.gun_open = 0.0
-				boss.finish_attack()
 
 
 ## 겨누기: 포신이 플레이어 쪽으로 천천히 돈다 (아래쪽 반원 안에서)
@@ -68,10 +62,11 @@ func _track(ppos: Vector2, dt: float) -> void:
 func _fire() -> void:
 	var m: Vector2 = boss.gun_muzzle()
 	var v: Vector2 = Vector2.from_angle(boss.gun_aim) * SHELL_SPEED * boss.bolt_mult()
-	boss.shots.spawn(m, v, SHELL_LIFE, Projectiles.WARMUP, 0.0, Projectiles.Kind.SHELL)
+	var g := Projectiles.new_group()
+	boss.shots.spawn(m, v, SHELL_LIFE, Projectiles.WARMUP, 0.0, Projectiles.Kind.SHELL, g)
 	for k in ESCORT:
 		var a := k * TAU / ESCORT
-		boss.shots.spawn(m + Vector2.from_angle(a) * ESCORT_R, v, SHELL_LIFE, Projectiles.WARMUP, 0.0, Projectiles.Kind.SMALL)
+		boss.shots.spawn(m + Vector2.from_angle(a) * ESCORT_R, v, SHELL_LIFE, Projectiles.WARMUP, 0.0, Projectiles.Kind.SMALL, g, a, ESCORT_R)
 	boss.gun_recoil = 1.0
 	boss.emit(Ev.STOMP, m)
 	boss.emit(Ev.BOLT, m)
@@ -91,9 +86,11 @@ func hit() -> void:
 		set_phase("stagger")
 
 
+## 들어간다: 포방패가 닫히는 그림은 요새가 마저 그린다 (이 패턴은 바로 끝나 다음 공격이 이어진다)
 func _close() -> void:
 	boss.gun_exposed = false
-	set_phase("close")
+	set_phase("end")
+	boss.finish_attack()
 
 
 func melee_warning() -> bool:

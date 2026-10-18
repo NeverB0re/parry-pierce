@@ -10,12 +10,15 @@ extends RefCounted
 enum Kind { BOLT, LAVA, SMALL, HOMING, SHELL }   # 일반 주탄 / 용융물 덩어리(포물선) / 잔탄 / 유도탄(크고 느리게 쫓아옴) / 대구경 포탄(크고 느린 주탄, 규칙은 주탄과 같다)
 
 const R := 16.0                       # 주탄 판정 반지름
-const RADII := [16.0, 16.0, 10.0, 24.0, 32.0]  # 종류별 판정 반지름
+const RADII := [16.0, 16.0, 10.0, 24.0, 40.0]  # 종류별 판정 반지름
 const WARMUP := 0.3                   # 발사 직후 50% 속도에서 출발해 이 시간 동안 100%까지
 const WARMUP_FLOOR := 0.5
 const HOMING_TIME := 3.6              # 유도탄은 발사 후 이 시간 동안만 방향을 튼다
 const HOMING_TURN := 2.0              # 초당 회전 (라디안)
 const HOMING_BLINK := 1.2             # 적 유도탄은 수명이 이만큼 남으면 점멸한다 (곧 사라진다는 표시)
+const SHELL_HOME := 9.0               # 대구경 포탄: 이 시간 동안 플레이어 쪽으로 천천히 방향을 튼다 (중요한 탄이 엉뚱한 데로 지나가지 않게)
+const SHELL_TURN := 1.1
+const ORBIT_SPIN := 1.3               # 호위탄이 포탄 둘레를 도는 속도 (rad/s)
 const REFLECT_SPEED := 1500.0         # 반사된 탄 속도
 const REFLECT_DMG := [1.0, 1.0, 0.5, 3.0, 3.0]   # 반사된 탄의 피해: 주탄 1 · 용융물 1 · 잔탄 0.5 · 유도탄 3 · 대구경 3 (main.gd 가 소수점을 모은다)
 const KILL_X := 1250.0                # 이 밖으로 나가면 사라진다 (벽 너머 / 용암 / 천장 위)
@@ -35,6 +38,10 @@ var grav := PackedFloat64Array()
 var kind := PackedByteArray()
 var mine := PackedByteArray()         # 1 = 플레이어 것 (반사됨)
 var dodged := PackedByteArray()       # 1 = 플레이어가 회피 무적으로 통과한 탄 (그 뒤로는 맞지 않는다)
+var grp := PackedInt32Array()         # 묶음 번호 (0 = 없음). 묶음의 우두머리(orb_r 0)를 나머지가 orb_r 반지름으로 돌며 따라간다
+var orb := PackedFloat64Array()       # 묶음 안의 각도
+var orb_r := PackedFloat64Array()
+static var _next_grp := 1
 
 static var _tex_bolt: Texture2D
 static var _tex_lava: Texture2D
@@ -59,9 +66,12 @@ func clear() -> void:
 	kind.clear()
 	mine.clear()
 	dodged.clear()
+	grp.clear()
+	orb.clear()
+	orb_r.clear()
 
 
-func spawn(p: Vector2, v: Vector2, lf: float, a := 0.0, g := 0.0, k := Kind.BOLT) -> void:
+func spawn(p: Vector2, v: Vector2, lf: float, a := 0.0, g := 0.0, k := Kind.BOLT, group := 0, orbit_a := 0.0, orbit_r := 0.0) -> void:
 	pos.append(p)
 	vel.append(v)
 	life.append(lf)
@@ -70,6 +80,15 @@ func spawn(p: Vector2, v: Vector2, lf: float, a := 0.0, g := 0.0, k := Kind.BOLT
 	kind.append(k)
 	mine.append(0)
 	dodged.append(0)
+	grp.append(group)
+	orb.append(orbit_a)
+	orb_r.append(orbit_r)
+
+
+## 새 묶음 번호 (대구경 포탄 + 호위탄)
+static func new_group() -> int:
+	_next_grp += 1
+	return _next_grp
 
 
 func remove(i: int) -> void:
@@ -81,6 +100,9 @@ func remove(i: int) -> void:
 	kind.remove_at(i)
 	mine.remove_at(i)
 	dodged.remove_at(i)
+	grp.remove_at(i)
+	orb.remove_at(i)
+	orb_r.remove_at(i)
 
 
 func is_lava(i: int) -> bool:
@@ -100,6 +122,9 @@ func step(dt: float, player: Vector2, boss_target: Vector2) -> PackedVector2Arra
 			var want := (boss_target if mine[i] == 1 else player) - pos[i]
 			var da := wrapf(want.angle() - v.angle(), -PI, PI)
 			v = v.rotated(clampf(da, -HOMING_TURN * dt, HOMING_TURN * dt))
+		elif kind[i] == Kind.SHELL and mine[i] == 0 and a < SHELL_HOME:
+			var da2 := wrapf((player - pos[i]).angle() - v.angle(), -PI, PI)
+			v = v.rotated(clampf(da2, -SHELL_TURN * dt, SHELL_TURN * dt))
 		var p := pos[i] + v * lerpf(WARMUP_FLOOR, 1.0, minf(1.0, a / WARMUP)) * dt
 		var lf := life[i] - dt
 		if lf <= 0.0 or p.y > KILL_FLOOR or p.x < -KILL_X or p.x > KILL_X or p.y < KILL_TOP:
@@ -113,6 +138,9 @@ func step(dt: float, player: Vector2, boss_target: Vector2) -> PackedVector2Arra
 		kind[w] = kind[i]
 		mine[w] = mine[i]
 		dodged[w] = dodged[i]
+		grp[w] = grp[i]
+		orb[w] = orb[i]
+		orb_r[w] = orb_r[i]
 		w += 1
 	if w < pos.size():
 		pos.resize(w)
@@ -123,7 +151,28 @@ func step(dt: float, player: Vector2, boss_target: Vector2) -> PackedVector2Arra
 		kind.resize(w)
 		mine.resize(w)
 		dodged.resize(w)
+		grp.resize(w)
+		orb.resize(w)
+		orb_r.resize(w)
+	_follow_groups()
 	return popped
+
+
+## 묶음: 우두머리 둘레를 돌며 따라간다. 우두머리가 사라지면(패리·수명) 마지막 속도 그대로 흩어진다
+func _follow_groups() -> void:
+	var lead := {}
+	for i in pos.size():
+		if grp[i] > 0 and orb_r[i] <= 0.0:
+			lead[grp[i]] = i
+	for i in pos.size():
+		if grp[i] <= 0 or orb_r[i] <= 0.0:
+			continue
+		if not lead.has(grp[i]) or mine[i] == 1:
+			grp[i] = 0
+			continue
+		var j: int = lead[grp[i]]
+		pos[i] = pos[j] + Vector2.from_angle(orb[i] + age[i] * ORBIT_SPIN) * orb_r[i]
+		vel[i] = vel[j]
 
 
 ## p 에서 거리 reach 안에 있는 적 탄들의 판정 상자 (탄마다 상자를 만들지 않고 가까운 것만)
@@ -240,9 +289,13 @@ func draw(ci: CanvasItem) -> void:
 				fade = 1.0 if fmod(sqrt(life[i]) * 10.0, 1.0) > 0.4 else 0.22
 				mod = Color(1, 1, 1, fade)
 		var tex: Texture2D = _tex_lava if k == Kind.LAVA else (_tex_homing if hot else _tex_bolt)
-		if k == Kind.SHELL and mine[i] == 0:        # 대구경 포탄: 크게 + 바깥으로 맥동하는 금빛 고리 (무겁다)
-			ci.draw_circle(pos[i], RADII[k] * 2.2 + 6.0 * pulse, Color(C_BOLT, 0.12))
-			ci.draw_arc(pos[i], RADII[k] + 10.0 + 4.0 * pulse, 0.0, TAU, 24, Color(1.0, 0.95, 0.7, 0.8), 3.0)
+		if k == Kind.SHELL and mine[i] == 0:        # 대구경 포탄: 크고 무겁게 — 번지는 열기, 맥동하는 금빛 고리 둘, 도는 날
+			ci.draw_circle(pos[i], RADII[k] * 3.0 + 10.0 * pulse, Color(1.0, 0.6, 0.2, 0.08))
+			ci.draw_circle(pos[i], RADII[k] * 2.0 + 6.0 * pulse, Color(C_BOLT, 0.16))
+			ci.draw_arc(pos[i], RADII[k] + 12.0 + 5.0 * pulse, 0.0, TAU, 28, Color(1.0, 0.95, 0.7, 0.85), 4.0)
+			for j in 6:
+				var a0 := -spin * 0.6 + j * TAU / 6.0
+				ci.draw_arc(pos[i], RADII[k] + 26.0, a0, a0 + 0.5, 6, Color(1.0, 0.8, 0.4, 0.7), 5.0)
 		ci.draw_texture_rect(tex, Rect2(pos[i] - half, half * 2.0), false, mod)
 		if k == Kind.HOMING:                      # 유도탄: 바깥에서 도는 끊긴 고리 (쫓아온다는 모양 단서). 적 것은 붉게 맥동한다
 			var rr: float = RADII[k] + 9.0

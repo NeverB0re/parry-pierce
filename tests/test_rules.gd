@@ -1013,11 +1013,12 @@ func _v035_test() -> void:
 	var hp_c: int = b.part_hp[b.BIG]
 	b.damage_part(b.BIG, 16)
 	_check("closed gun shield: damage is cut down hard (%d -> %d, exposed %s)" % [hp_c, b.part_hp[b.BIG], b.gun_exposed], not b.gun_exposed and hp_c - b.part_hp[b.BIG] >= 1 and hp_c - b.part_hp[b.BIG] <= 3 and b.part_emphasis(b.BIG) < 1.0)
-	b.gun_exposed = true
-	b.damage_part(b.BIG, 8)
-	b.gun_exposed = true
-	b.damage_part(b.BIG, 8)
-	_check("three exposed hits break the big gun and open the core (phase %d, other parts alive %d)" % [b.phase, b.parts_left()], not b.part_alive(b.BIG) and b.phase == 2 and b.parts_left() == 4)
+	var more := 0
+	while b.part_alive(b.BIG) and more < 10:
+		b.gun_exposed = true
+		b.damage_part(b.BIG, 8)
+		more += 1
+	_check("about BIG_HITS exposed hits break the big gun and open the core (%d more, phase %d, other parts alive %d)" % [more, b.phase, b.parts_left()], more == b.BIG_HITS - 1 and b.phase == 2 and b.parts_left() == 4)
 	b.lingering.clear()
 	b.shots.clear()
 
@@ -2155,15 +2156,16 @@ func _v047_test() -> void:
 		b.damage_part(i, 999)
 	_check("fortress opening (phase 2)", b.phase == 2)
 	main.debug.god = true
-	p.reset(Vector2(0, -1050), false)
-	var a0: int = b.core.armor_hp
+	main.hitstop = 0
+	main._physics_process(DT)
+	_check("the core behind the broken big gun is bare (no armour)", b.core.broken and b.core.armor_hp == 0 and b.core.center == b.gun_center())
+	p.reset(b.REACTOR_POS + Vector2(0, 520), false)
 	_dash_dir("dash", Vector2.UP)
 	for k in 40:
 		main.hitstop = 0
 		main._physics_process(DT)
 	main.debug.god = false
-	_check("dash hits the core while it is opening (armor %d -> %d)" % [a0, b.core.armor_hp], b.core.armor_hp == a0 - 1)
-	_check("hit from below rebounds outward, not into the core (y %.0f)" % p.position.y, not Geometry2D.is_point_in_polygon(p.position, b.core.shell_poly) and p.position.y > -1380.0)
+	_check("one dash into the bare core destroys it (state %d)" % main.state, main.state == main.State.WON)
 
 	# 잔탄 체력 링: 평소엔 안 보이고, 잔탄 하나에 2칸, 5초 뒤 3칸으로 돌아오고 잠시 뒤 사라진다
 	main.reset_run()
