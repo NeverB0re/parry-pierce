@@ -1,7 +1,7 @@
 # 콜로서스 기획 (9종 후보)
 
 > 상태: **기획 초안**. 구현 전에 공통 기반(2장)을 먼저 만들고, 보스는 하나씩 시제품으로 검증한다.
-> 관련 문서: 설정 [STORY.md](STORY.md) · 용어 [GLOSSARY.md](GLOSSARY.md) · 업그레이드 [PLAN_upgrade.md](PLAN_upgrade.md) · 전체 재검토 [REVIEW_roadmap.md](REVIEW_roadmap.md)
+> 관련 문서: **설계 원칙·회고 [DESIGN_boss_principles.md](DESIGN_boss_principles.md)** · 설정 [STORY.md](STORY.md) · 용어 [GLOSSARY.md](GLOSSARY.md) · 업그레이드 [PLAN_upgrade.md](PLAN_upgrade.md) · 전체 재검토 [REVIEW_roadmap.md](REVIEW_roadmap.md)
 
 ---
 
