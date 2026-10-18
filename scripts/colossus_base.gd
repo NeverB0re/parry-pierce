@@ -41,6 +41,8 @@ var events: Array[Dictionary] = []   # main.gd 가 매 프레임 꺼내 처리 (
 var strike_glow := false             # 플레이어가 공격 돌진 중 = 타격점이 드러난다
 var focus_glow := 0.0                # 방향 지정·차지 중: 노릴 수 있는 표적 강조 (0~1)
 var focus_from := Vector2.ZERO       # 강조 기준 위치(플레이어)
+var aim_from := Vector2.ZERO         # 플레이어 위치와 조준 방향 (main 이 매 프레임): 겨눈 쪽 표적의 테두리가 조금 더 밝다
+var aim_dir := Vector2.UP
 var look_at := Vector2(0, -1200)       # 플레이어 위치 (그림 전용: 대기 모션이 바라본다. 판정에는 쓰지 않는다)
 # 체력 게이지: 코어를 두른 링 (모든 보스 공통, _draw 에서 _draw_gauge 를 부른다)
 const GAUGE_W := 10.0
@@ -677,9 +679,47 @@ func _draw_part_marks() -> void:
 		var flick := 1.0
 		if part_stage[i] >= 3:                  # 거의 부서짐: 약점 빛이 깜빡인다
 			flick = 0.4 + 0.6 * float(int(t * 9.0 + i) % 3 != 0)
+		_draw_part_outline(i, p, r, flick)
 		var cc := Color(C_HEART, 0.85 * flick).lerp(Color.WHITE, part_flash[i])
-		draw_circle(p, r * 0.28, cc)
+		draw_circle(p, r * 0.14, cc)
 		_draw_part_damage(i, p, r, pulse)
+
+
+## 표적 테두리: 칠 수 있는 부위의 가장자리가 금빛으로 천천히 숨쉬듯 빛난다 (평소에도 어딜 칠지 보이게, 얇고 은은하게).
+## 겨눈 쪽(조준 방향·거리 안)이면 조금 더 밝고 굵게. 손상 2단계부터 테두리가 끊기고, 3단계는 깜빡인다
+func _draw_part_outline(i: int, p: Vector2, r: float, flick: float) -> void:
+	var breathe := 0.5 + 0.5 * sin(t * 2.2 + i * 1.3)
+	var to := p - aim_from
+	var aimed := to.length() < 1600.0 and to.normalized().dot(aim_dir) > cos(0.22)
+	var a := (0.55 + 0.25 * breathe + (0.2 if aimed else 0.0)) * flick
+	var col := Color(1.0, 0.84, 0.45, minf(1.0, a)).lerp(Color.WHITE, part_flash[i])
+	var w := 4.0 + (2.0 if aimed else 0.0)
+	var pts := part_outline(i)
+	var glow_c := Color(1.0, 0.7, 0.3, (0.12 + 0.1 * breathe + (0.12 if aimed else 0.0)) * flick)   # 바깥 번짐 (어두운 몸에서 잘 보이게)
+	if pts.is_empty():
+		draw_arc(p, r + 6.0, 0.0, TAU, 40, glow_c, w * 4.0)
+	else:
+		var gl := pts.duplicate()
+		gl.append(pts[0])
+		draw_polyline(gl, glow_c, w * 4.0)
+	if pts.is_empty():
+		var rr := r + 6.0
+		if part_stage[i] >= 2:
+			for k in 8:
+				var a0 := k * TAU / 8.0 + i
+				draw_arc(p, rr, a0, a0 + TAU / 8.0 * 0.62, 6, col, w)
+		else:
+			draw_arc(p, rr, 0.0, TAU, 40, col, w)
+		return
+	var closed := pts.duplicate()
+	closed.append(pts[0])
+	if part_stage[i] >= 2:                         # 끊긴 테두리: 변마다 가운데 일부만
+		for k in pts.size():
+			var a1: Vector2 = pts[k]
+			var b1: Vector2 = pts[(k + 1) % pts.size()]
+			draw_line(a1.lerp(b1, 0.12), a1.lerp(b1, 0.7), col, w)
+	else:
+		draw_polyline(closed, col, w)
 
 
 ## 외부 시스템 손상: 1 긁힘 → 2 빛나는 균열 + 불꽃 → 3 떨어져 나간 자리 + 연기
@@ -724,6 +764,11 @@ func part_max_hp(_i: int) -> int:
 
 func part_pos(_i: int) -> Vector2:
 	return Vector2.ZERO
+
+
+## 표적 테두리 모양 (월드 좌표 꼭짓점). 비우면 part_radius 원
+func part_outline(_i: int) -> PackedVector2Array:
+	return PackedVector2Array()
 
 
 func part_radius(_i: int) -> float:

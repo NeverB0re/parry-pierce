@@ -105,6 +105,20 @@ func part_pos(i: int) -> Vector2:
 	return BATTERIES[i] if i < 2 else SILOS[i - 2]
 
 
+## 표적 테두리: 포대 = 포좌 반원 둘레, 사일로 = 사일로 상자
+func part_outline(i: int) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	if i < 2:
+		var b: Vector2 = BATTERIES[i]
+		for q in 13:
+			out.append(b + Vector2.from_angle(PI + q * PI / 12.0) * 116.0)
+		out.append(b + Vector2(130, 100))
+		out.append(b + Vector2(-130, 100))
+		return out
+	var p: Vector2 = SILOS[i - 2]
+	return PackedVector2Array([p + Vector2(-116, -156), p + Vector2(116, -156), p + Vector2(116, 156), p + Vector2(-116, 156)])
+
+
 ## 부서진 포대는 포신이, 사일로는 해치가 떨어져 나간다
 func _on_part_broken(i: int) -> void:
 	var s := 1.0 if i % 2 == 1 else -1.0
@@ -363,7 +377,7 @@ func _draw_tiers() -> void:
 			draw_line(Vector2(sd * bw2, by), Vector2(sd * tw, ty + 60.0), Color(C_RIM, 0.35), 3.0)
 		draw_line(Vector2(-tw, ty + 6.0), Vector2(tw, ty + 6.0), Color(C_RIM, 0.75), 6.0)          # 난간 윗면
 		var fl := 0.6 + 0.4 * sin(t * 2.3 + ti)
-		draw_line(Vector2(-tw + 20.0, ty + 22.0), Vector2(tw - 20.0, ty + 22.0), Color(1.0, 0.45, 0.12, 0.35 * fl * lit), 8.0)   # 층 사이 열기
+		draw_line(Vector2(-tw + 20.0, ty + 22.0), Vector2(tw - 20.0, ty + 22.0), Color(0.75, 0.18, 0.05, 0.3 * fl * lit), 8.0)   # 층 사이 열기 (붉고 어둡게)
 		var h := by - ty
 		for q in 3:                                                    # 가로 장갑 띠
 			var y := ty + h * (0.3 + q * 0.25)
@@ -384,7 +398,7 @@ func _draw_tiers() -> void:
 				continue
 			var f2 := 0.55 + 0.45 * sin(t * (3.0 + k * 0.3) + row * 1.7 + k)
 			draw_rect(Rect2(x - 40, y - 11, 80, 22), Color(0.05, 0.02, 0.01))
-			draw_rect(Rect2(x - 33, y - 6, 66, 12), Color(1.0, 0.45 + 0.25 * f2, 0.12, (0.45 + 0.4 * f2) * lit))
+			draw_rect(Rect2(x - 33, y - 6, 66, 12), Color(0.8, 0.2 + 0.1 * f2, 0.05, (0.35 + 0.3 * f2) * lit))   # 장식 빛은 붉고 어둡게 (표적의 금빛 테두리와 구분)
 	for k in 8:                                                        # 경고 줄무늬 (1층 아래)
 		var x := -560.0 + k * 160.0
 		draw_line(Vector2(x, -520), Vector2(x + 60, -450), Color(C_RUST, 0.9), 16.0)

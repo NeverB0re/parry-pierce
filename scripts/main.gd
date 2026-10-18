@@ -435,6 +435,8 @@ func _physics_body(delta: float) -> void:
 	boss.strike_glow = player.is_attacking()
 	boss.focus_glow = 1.0 if (player.aim_phase or player.is_charged()) else 0.0
 	boss.focus_from = player.position
+	boss.aim_from = player.position
+	boss.aim_dir = player.aim
 	boss.focus_reach = player.parry_dash_reach() \
 		if player.aim_phase else Player.CHARGE_SPEED * Player.CHARGE_DASH_TIME
 	boss.hold_attacks = player.on_platform or debug.freeze   # 시작·부활 직후 날아오르기 전에는 공격이 시작되지 않는다 (F3: 디버그 정지)
