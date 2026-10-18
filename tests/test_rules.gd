@@ -647,7 +647,7 @@ func _fortress_test() -> void:
 	p.stats.reflect = false
 
 	# 공격 4종이 오류 없이 돌고 끝난다
-	for kd in ["spiral", "fan", "homing", "mines"]:
+	for kd in ["spiral", "fan", "homing"]:
 		main.start_stage(1)
 		b = main.boss
 		p.reset(Vector2(300, -1500), false)
@@ -657,7 +657,6 @@ func _fortress_test() -> void:
 			"spiral": a = b.Spiral.new(0, b.BARREL_TIPS[0])
 			"fan": a = b.Fan.new(0, b.BARREL_TIPS[0], p.position)
 			"homing": a = b.Homing.new()
-			"mines": a = b.Mines.new(Vector2(300, -400))
 		b.start_attack(a)
 		var most := 0
 		var smalls := 0
@@ -1030,6 +1029,19 @@ func _v035_test() -> void:
 		b.gun_exposed = true
 		b.damage_part(b.BIG, 16)
 	_check("hits on the core battery knock armour segments off the core (%d -> %d, shards +%d, armour %d)" % [seg0, b.segs_left(), b.shards.size() - sh0, b.core.armor_hp], b.segs_left() < seg0 and b.shards.size() > sh0 and b.core.armor_hp == b.part_hp[b.BIG])
+	# v0.75: 맨 코어(마지막 한 방)는 반사탄으로는 안 터지고 직접 때려야 터진다
+	b.part_hp[b.BIG] = 1
+	b.gun_exposed = true
+	b.damage_part(b.BIG, 8)
+	for k in int((b.open_time + 0.3) / DT):
+		b.step(DT, Vector2(300, -1300))
+	var bare: Dictionary = b.strike_hit(b.core.center, 20.0)
+	main.reflect_carry = 0.0
+	for k in 4:
+		b.emit(b.Ev.REFLECT_HIT, b.core.center, {"hit": bare, "dmg": 3.0})
+	main._drain_boss_events()
+	_check("bare fortress core shrugs off reflected shots (broken %s, dead %s)" % [b.core.broken, b.dead], b.core.broken and not b.dead and bare.get("kind", "") == "core" and not b.takes_reflect(bare))
+	_check("a direct strike on the bare core finishes it", b.damage(bare, 1))
 	b.lingering.clear()
 	b.shots.clear()
 
@@ -1061,7 +1073,7 @@ func _v035_test() -> void:
 			mains += 1
 	_check("overload: dense rings with main shots, then ends (max %d, mains %d)" % [most, mains], done and most >= ov.RINGS * ov.COUNT * 0.8 and mains >= 2)
 	# 코어 페이즈엔 기존 탄막도 강해진다
-	_check("hard spiral has 2 arms, hard fan 4 waves, hard mines 5", b.Spiral.new(-1, b.SPIRE_TOP, Vector2.ZERO, true).arms == 2 and b.Fan.new(-1, b.SPIRE_TOP, Vector2.ZERO, true).wave_n == 4 and b.Mines.new(Vector2.ZERO, true).mines.size() == 5)
+	_check("hard spiral has 2 arms, hard fan 4 waves", b.Spiral.new(-1, b.SPIRE_TOP, Vector2.ZERO, true).arms == 2 and b.Fan.new(-1, b.SPIRE_TOP, Vector2.ZERO, true).wave_n == 4)
 	main.start_stage(0)
 
 

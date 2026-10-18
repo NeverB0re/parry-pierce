@@ -640,6 +640,11 @@ func damage(hit: Dictionary, dmg: int) -> bool:
 	return false
 
 
+## 반사탄이 이 표적에 피해를 주는가 (기본: 언제나. 탄막 요새 = 맨 코어는 직접 때려야 한다)
+func takes_reflect(_hit: Dictionary) -> bool:
+	return true
+
+
 func damage_core(dmg: int) -> bool:
 	return core.damage(dmg)
 

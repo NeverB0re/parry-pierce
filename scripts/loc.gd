@@ -158,7 +158,7 @@ const EN := {
 	"근접공격은 모두 붉은 빗금 + ⚠ 표지로 예고됩니다. 천장이 내려오는 프레스는 정지선 아래로 피하거나 요격하세요.": "Melee attacks are always telegraphed with red hatching and a ⚠ marker. Avoid the ceiling press by dropping below its stop line, or intercept it.",
 	"작은 주황 별(잔탄)에 맞으면 실드 셀이 바로 깨지지 않고 기체가 달아오릅니다. 세 번 맞으면 셀이 깨지고, 한동안 안 맞으면 식습니다.": "A small orange star (stray shot) doesn't break a shield cell at once — your ship heats up instead. The third hit breaks a cell; stay unhit for a while to cool down.",
 	"잔탄은 패리하면 흡수만 됩니다. 연달아 막을 수 있습니다.": "Parrying stray shots only absorbs them, and you can block them one after another.",
-	"크고 둥근 금색 탄(주탄)과 붉은 불길의 유도탄은 패리하면 리버스 드라이브가 열립니다. 바닥 가까이에는 기뢰가 내려앉습니다.": "Parrying big round gold bullets (main shots) and red-flamed homing missiles opens a Reverse Drive. Mines settle near the floor.",
+	"크고 둥근 금색 탄(주탄)과 붉은 불길의 유도탄은 패리하면 리버스 드라이브가 열립니다.": "Parrying big round gold bullets (main shots) and red-flamed homing missiles opens a Reverse Drive.",
 	"크라켄의 표적은 방어막 속 외눈입니다. 돌진과 차지 강습은 방어막에 막히고, 리버스 드라이브와 요격만 외눈에 피해를 줍니다.": "The Kraken's target is the eye inside its shield. Dashes and Charge Strikes bounce off — only Reverse Drives and intercepts damage the eye.",
 	"촉수가 멈춰 붉게 점멸할 때 차지 강습으로 요격하면 외눈에 피해가 들어가고 촉수가 끊어집니다. 끊긴 촉수는 잠시 뒤 다시 자랍니다.": "Intercept a tentacle with a Charge Strike while it is stopped and flashing red to damage the eye and sever the tentacle. A severed tentacle regrows after a while.",
 	"요격하면 차지 쿨다운이 돌아오고 다음 차지가 빨라집니다. 연타는 첫 타를 요격해 이어 가세요.": "An intercept resets your charge cooldown and speeds up the next charge. Intercept the first hit of a combo to keep the chain going.",

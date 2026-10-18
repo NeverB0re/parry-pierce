@@ -140,7 +140,7 @@
 | `scripts/colossi/observer.gd` | 콜로서스 ① 관측자: 몸·외부 시스템·페이즈·공격 고르기·그림. 튜닝값은 맨 위 상수 |
 | `scripts/colossi/fortress.gd` | 콜로서스 ② 탄막 요새 |
 | `scripts/colossi/kraken.gd` | 콜로서스 ③ 크라켄: 촉수 척추(마디 12개)·방어막 외눈 코어·외투막·공격 고르기 |
-| `scripts/attacks/*.gd` | 공격 모듈 (예고 → 판정 → 회복): 관측자 `erupt`·`swing`·`beam`·`volley`·`burst`, 탄막 요새 `spiral`·`fan`·`homing`·`mines`·`press`·`rings`·`overload`, 크라켄 `tentacle`(촉수 공통)·`hammer`·`clap`·`chase`·`lash`·`constrict`·`combo`(연타)·`net` |
+| `scripts/attacks/*.gd` | 공격 모듈 (예고 → 판정 → 회복): 관측자 `erupt`·`swing`·`beam`·`volley`·`burst`, 탄막 요새 `spiral`·`fan`·`homing`·`press`·`rings`·`overload`, 크라켄 `tentacle`(촉수 공통)·`hammer`·`clap`·`chase`·`lash`·`constrict`·`combo`(연타)·`net` |
 | `scripts/armored_core.gd` | 장갑 + 동력 코어 (불규칙한 강철 판, 손상 단계, 한 발 더 규칙) |
 | `scripts/projectiles.gd` | 탄 시스템 (주탄·잔탄·유도탄·반사된 탄, 배열 묶음으로 한꺼번에 움직이고 그림) |
 | `scripts/ev.gd` | 콜로서스 → main 이벤트 상수 |

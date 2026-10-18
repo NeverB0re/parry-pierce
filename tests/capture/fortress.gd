@@ -49,12 +49,11 @@ func _process(_d: float) -> bool:
 		main.start_stage(1)
 		b = main.boss
 		b.next_t = 999.0
-		p.reset(Vector2(250, -1200) if pl[1] != "mines" else Vector2(250, -400), false)
+		p.reset(Vector2(250, -1200), false)
 		match pl[1]:
 			"spiral": b.start_attack(b.Spiral.new(0, b.BARREL_TIPS[0]))
 			"fan": b.start_attack(b.Fan.new(1, b.BARREL_TIPS[1], p.position))
 			"homing": b.start_attack(b.Homing.new())
-			"mines": b.start_attack(b.Mines.new(p.position))
 			"press": b.start_attack(b.Press.new())
 			"rings": b.start_attack(b.Rings.new(b.REACTOR_POS))
 			"overload":
@@ -92,7 +91,7 @@ func _process(_d: float) -> bool:
 	local += 1
 	p.invuln = 999.0
 	p.vel = Vector2.ZERO
-	p.position = Vector2(250, -400) if pl[1] == "mines" or pl[1] == "press" else Vector2(250, -1200)
+	p.position = Vector2(250, -400) if pl[1] == "press" else Vector2(250, -1200)
 	main.cam.position = pl[3]
 	main.cam.zoom = Vector2(pl[4], pl[4])
 	main.hud.clear_banner()

@@ -972,7 +972,7 @@ func _drain_boss_events() -> void:
 				sfx.play("hit_light", -2.0)
 				fx.burst(pos, int(10 + rd * 4), Color(0.75, 1.0, 1.0), 600.0, 0.3, 2.5)
 				fx.sprite(pos, 1, 90.0 + rd * 40.0, 0.3)
-				if dmg <= 0:
+				if dmg <= 0 or not boss.takes_reflect(ev["hit"]):
 					continue
 				tele.hit("reflect", dmg)
 				if boss.damage(ev["hit"], dmg):
