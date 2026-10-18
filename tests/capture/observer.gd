@@ -1,5 +1,5 @@
 extends SceneTree
-# 관측자 캡처 (창 모드, 자동 종료): 대기 → 대검 긋기 예고·긋기 → 쳐낸 대검이 코어에 꽂힘 → 방패 동심원 → 어깨포 파괴·장갑 손상.
+# 관측자 캡처 (창 모드, 자동 종료): 대기 → 대검 긋기 예고·긋기 → 쳐낸 대검이 튕겨 올라 돌다 떨어져 심장에 꽂힘 → 헤일로 사격 → 방패 동심원 → 어깨포 파괴·장갑 손상.
 # 인자: -- --notutorial --out=<dir>. 진행 저장·플레이 기록은 끈다
 var main
 var n := 0
@@ -9,7 +9,10 @@ var plan := [
 	["idle", "idle", 30],
 	["sword_warn", "sword", 95],
 	["sword_swing", "sword", 135],
-	["sword_stuck", "fling", 40],
+	["fling_up", "fling", 22],
+	["fling_fall", "fling", 62],
+	["sword_stuck", "fling", 85],
+	["halo", "halo", 75],
 	["rings", "rings", 95],
 	["damaged", "broken", 40],
 ]
@@ -60,6 +63,10 @@ func _process(_d: float) -> bool:
 				for k in 100:
 					b.step(1.0 / 60.0, ppos)
 				sw.on_parried({"id": "arm", "dmg": 8})
+			"halo":
+				var hs = b.HaloShot.new()
+				b.start_attack(hs)
+				hs.pick(ppos)
 			"rings":
 				b.start_attack(b.Rings.new(b.shield_center()))
 			"broken":

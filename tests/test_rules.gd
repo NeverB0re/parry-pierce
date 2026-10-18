@@ -353,7 +353,7 @@ func _run() -> void:
 	_check("clash: the greatsword is flung toward the core", _ph() == "fling")
 	_check("clash: player rises, no life lost", p.dash_t <= 0.0 and p.vel.y < -800.0 and main.lives == main.player.stats.shield_cells)
 	_fling()
-	_check("clash: the flung sword stabs the core for 8 (armour %d -> %d, phase %s)" % [hp3, b.core.armor_hp, _ph()], b.core.armor_hp == hp3 - 8 and _ph() == "stuck")
+	_check("clash: the flung sword stabs the core harder than a perfect drive (armour %d -> %d, phase %s)" % [hp3, b.core.armor_hp, _ph()], b.core.armor_hp == hp3 - b.Greatsword.FLING_DMG and _ph() == "stuck")
 
 	# ── 사전 저지: 위치 고정 후 멈춰 있을 때(set/warn)는 차지 돌진으로 끊을 수 있고, 들어올리는 중(prep)은 아니다 ──
 	for ph in ["set", "warn"]:
@@ -363,7 +363,7 @@ func _run() -> void:
 		_dash_dir("charge", -side)
 		_step(4)
 		_fling()
-		_check("pre-swing interrupt in %s: core -8, attack cut (armour %d->%d, phase %s)" % [ph, hp3, b.core.armor_hp, _ph()], b.core.armor_hp == hp3 - 8 and _ph() == "stuck")
+		_check("pre-swing interrupt in %s: flung into the core, attack cut (armour %d->%d, phase %s)" % [ph, hp3, b.core.armor_hp, _ph()], b.core.armor_hp == hp3 - b.Greatsword.FLING_DMG and _ph() == "stuck")
 	_air(mid + side * 220.0)
 	_swing("rise", 0.2, 1.0, 2.0)
 	hp3 = b.core.armor_hp
@@ -1127,7 +1127,7 @@ func _v036_test() -> void:
 	var flung: bool = _ph() == "fling"
 	_check("after reverse drive intercept: bounce, dash ready, world speed back", p.bouncing and p.dash_cd <= 0.0 and p.dash_kind == "" and main.world_scale() == 1.0)
 	_fling()
-	_check("reverse drive intercepts the sword and flings it into the core (armour %d -> %d, flung %s)" % [hp3, b.core.armor_hp, flung], flung and b.core.armor_hp == hp3 - p.stats.power_damage)
+	_check("reverse drive intercepts the sword and flings it into the core (armour %d -> %d, flung %s)" % [hp3, b.core.armor_hp, flung], flung and b.core.armor_hp == hp3 - b.Greatsword.FLING_DMG and b.Greatsword.FLING_DMG > p.stats.power_damage_perfect)
 	# 리버스 드라이브로 프레스 요격
 	main.start_stage(1)
 	b = main.boss
@@ -1356,7 +1356,7 @@ func _v037_test() -> void:
 	b = main.boss
 	b.next_t = 99.0
 	p.reset(Vector2(-700, -1500), false)
-	var vo = b.Volley.new(-1, b.HEAD_POS, p.position)
+	var vo = b.Volley.new(-1, b.shield_center(), p.position)
 	b.start_attack(vo)
 	for k in int(2.0 / DT):
 		p.invuln = 999.0
@@ -1370,7 +1370,7 @@ func _v037_test() -> void:
 	_check("observer volley: 3 main + 2 small per wave (%d small of %d)" % [vs, b.shots.size()], b.shots.size() == 5 and vs == 2)
 	b.shots.clear()
 	b.atk = null
-	b.start_attack(b.Burst.new(-1, b.HEAD_POS))
+	b.start_attack(b.Burst.new(-1, b.shield_center()))
 	for k in int(2.0 / DT):
 		p.invuln = 999.0
 		main._physics_process(DT)
@@ -2371,14 +2371,14 @@ func _zone_test() -> void:
 	_check("observer: no greatsword while a bullet is coming (%d)" % swung, swung == 0)
 	o.shots.clear()
 	swung = 0
-	seed(5)                                                          # 무작위 뽑기: 시드를 고정해 가끔 실패하지 않게
-	for i in 40:
+	var seen := {}
+	o.bag.clear()
+	for i in 10:                                                     # 한 바퀴씩: 두 바퀴(10번)면 패턴마다 꼭 두 번
 		o.atk = null
-		o.last = ""
 		o._choose(pp)
-		if o.atk != null and o.atk.kind == "sword":
-			swung += 1
-	_check("observer: greatsword is common when clear (%d/40)" % swung, swung >= 10)
+		if o.atk != null:
+			seen[o.atk.kind] = int(seen.get(o.atk.kind, 0)) + 1
+	_check("observer: every pattern comes round once per cycle (%s)" % str(seen), seen.size() == 5 and seen.values().all(func(v): return v == 2))
 	o.atk = null
 	main.reset_run()
 

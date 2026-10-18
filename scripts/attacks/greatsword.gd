@@ -1,7 +1,8 @@
 extends "res://scripts/attacks/attack.gd"
 ## 대검 긋기 (관측자의 근접, docs/BOSS_observer.md 4장): 허공에 떠 있는 대검이 플레이어 옆으로 날아올라 자세를 잡고,
 ## 회전축(sword_piv)을 중심으로 큰 호를 그으며 벤다. 날에 닿으면 피해 (근접 = 회피 돌진 무적으로 못 피한다).
-## 자세를 잡은 뒤(set·warn)와 긋는 중(swing)에는 차지 강습으로 요격할 수 있다 → 쳐낸 대검이 튕겨 날아가 코어에 꽂힌다(요격 피해).
+## 자세를 잡은 뒤(set·warn)와 긋는 중(swing)에는 차지 강습으로 요격할 수 있다 → 쳐낸 대검이 높이 튕겨 올라 돌며 떨어지다가
+## 심장(코어)에 꽂힌다 (FLING_DMG: 퍼펙트 리버스 드라이브보다 세다 — 보이는 만큼 아프게).
 ## 그냥 패리하면(피해 0) 밀려나 잠시 멈췄다 돌아간다.
 ## 단계: rise → set → warn → swing → hold → return   (요격: → fling → stuck → return, 패리: → recoil → stagger → return)
 ## boss 에 필요한 것: sword_piv, sword_ang (대검 자세), SWORD_REST, sword_rest_ang(), HILT_GAP, BLADE_L, BLADE_W, core, emit
@@ -18,8 +19,12 @@ const PIV_D := 560.0                 # 회전축 ~ 플레이어 거리 (플레�
 const RECOIL_ANGLE := 0.5
 const RECOIL_TIME := 0.6
 const STAGGER_TIME := 0.8
-const FLING := 0.45                  # 쳐낸 대검이 코어로 날아가는 시간
-const STUCK := 0.8                   # 코어에 꽂힌 채 떨린다
+const FLING := 1.25                  # 쳐낸 대검: 높이 튕겨 올랐다가(앞 RISE_K) 돌며 떨어져 심장에 꽂히기까지
+const FLING_RISE_K := 0.5
+const FLING_UP := 1250.0             # 심장 위로 이만큼까지 튕겨 오른다
+const FLING_SPIN := 3.0              # 도는 바퀴 수
+const FLING_DMG := 24                # 꽂힐 때 피해 (퍼펙트 리버스 드라이브 16 보다 크게)
+const STUCK := 0.9                   # 코어에 꽂힌 채 떨린다
 const RETURN_TIME := 1.1
 const AREA := Rect2(-950, -2650, 1900, 2150)   # 회전축이 머무는 범위 (경기장 안)
 
@@ -96,16 +101,25 @@ func step(dt: float, ppos: Vector2) -> void:
 		"stagger":
 			if t >= STAGGER_TIME:
 				_begin_return()
-		"fling":                                   # 칼끝을 코어로 향한 채 날아가 꽂힌다
+		"fling":                                   # 높이 튕겨 올라 돌다가, 칼끝을 아래로 세우며 떨어져 심장에 꽂힌다
 			var c: Vector2 = boss.core.center
-			var d := (c - from_piv).normalized()
-			var end_piv: Vector2 = c - d * (boss.HILT_GAP + boss.BLADE_L * 0.8)
+			var down := Vector2.DOWN
+			var end_piv: Vector2 = c - down * (boss.HILT_GAP + boss.BLADE_L * 0.85)
+			var apex := Vector2(lerpf(from_piv.x, c.x, 0.6), c.y - FLING_UP)
 			var k := minf(1.0, t / FLING)
-			boss.sword_piv = from_piv.lerp(end_piv, k * k)
-			boss.sword_ang = lerp_angle(from_ang, d.angle(), minf(1.0, k * 2.0))
+			var pos: Vector2
+			if k < FLING_RISE_K:                   # 오른다: 점점 느려진다
+				var u := k / FLING_RISE_K
+				pos = from_piv.lerp(apex, 1.0 - (1.0 - u) * (1.0 - u))
+			else:                                  # 떨어진다: 점점 빨라진다
+				var u := (k - FLING_RISE_K) / (1.0 - FLING_RISE_K)
+				pos = apex.lerp(end_piv, u * u)
+			boss.sword_piv = pos
+			var spin := from_ang + FLING_SPIN * TAU * (1.0 - (1.0 - k) * (1.0 - k))   # 돌다가 느려지며
+			boss.sword_ang = lerp_angle(spin, down.angle(), smoothstep(0.55, 0.9, k))   # 칼끝을 아래로 세운다
 			if k >= 1.0:
 				boss.emit(Ev.STOMP, c)
-				boss.emit(Ev.REFLECT_HIT, c, {"hit": {"kind": "core", "n": -d}, "dmg": float(fling_dmg), "sword": true})
+				boss.emit(Ev.REFLECT_HIT, c, {"hit": {"kind": "core", "n": Vector2.UP}, "dmg": float(fling_dmg), "sword": true})
 				set_phase("stuck")
 		"stuck":
 			if t >= STUCK:
@@ -169,7 +183,7 @@ func assist_targets(from: Vector2, out: Array[Dictionary]) -> void:
 func on_parried(hb: Dictionary) -> void:
 	if hb.get("id", "") != "arm":
 		return
-	fling_dmg = int(hb.get("dmg", 0))
+	fling_dmg = FLING_DMG if int(hb.get("dmg", 0)) > 0 else 0
 	from_piv = boss.sword_piv
 	from_ang = boss.sword_ang
 	th_from = boss.sword_ang

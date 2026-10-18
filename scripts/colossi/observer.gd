@@ -4,26 +4,27 @@ extends "res://scripts/colossus_base.gd"
 ##   금빛 탄 패리 → 리버스 드라이브로 되꽂기 · 떠다니는 대검 요격 → 쳐낸 검이 코어에 꽂힘 · 방패 동심원(패리 불가) 완전 동조 → 강한 일격
 ## 부위는 어깨포 둘뿐 (부목표: 부수면 그쪽 탄이 멎는다). 코어 장갑(3×3 판)이 다 떨어지면 맨 결정 — 직접 한 대면 터진다.
 ## 페이즈는 1 그대로 (개방 연출 없음): 부위와 코어를 함께 노린다.
-## 공격: 조준 연사 · 흩뿌리기(어깨포, 둘 다 부서지면 머리) · 대검 긋기(요격) · 방패 동심원(패리 불가) · 융해 지대 분출(바닥, 헤일로 사격으로 바뀔 예정)
+## 공격: 조준 연사 · 흩뿌리기(어깨포, 둘 다 부서지면 방패 보석) · 헤일로 사격 · 대검 긋기(요격) · 방패 동심원(패리 불가)
+## 고르기는 한 바퀴씩 (PATTERNS 를 섞어 차례로 다 쓴 뒤 다시 섞는다): 고르게, 그러나 순서는 매번 다르게
 ## 바닥 y=0, 위쪽이 음수. 몸 중심 x=0.
 
 const ArmoredCore := preload("res://scripts/armored_core.gd")
 const MeleeWarn := preload("res://scripts/melee_warn.gd")
-const Erupt := preload("res://scripts/attacks/erupt.gd")
+const HaloShot := preload("res://scripts/attacks/halo_shot.gd")
 const Greatsword := preload("res://scripts/attacks/greatsword.gd")
 const Rings := preload("res://scripts/attacks/rings.gd")
 const Volley := preload("res://scripts/attacks/volley.gd")
 const Burst := preload("res://scripts/attacks/burst.gd")
 
 # ── 구조 ───────────────────────────────────────────────
-const HEART_POS := Vector2(0, -1900)        # 동력 코어 중심 (가슴 갑옷에 박힌 하트 컷 보석)
+const HEART_POS := Vector2(0, -1790)        # 동력 코어 중심 (가슴 갑옷에 박힌 하트 컷 보석)
 const ARMOR_HP := 160                       # 장갑 체력. 다 부서져도 피해가 코어로 넘어가지 않는다
 const CORE_R := 62.0                        # 금고 안 결정 반지름
 # 하트 컷 보석 외곽선 (단위, 직선 12각): 가운데 오목한 위 + 두 둥근 어깨 + 아래 뾰족한 끝
 const HEART_SHAPE := [
 	Vector2(0.0, -0.55), Vector2(0.38, -0.95), Vector2(0.78, -0.88), Vector2(1.0, -0.5), Vector2(0.95, -0.05), Vector2(0.5, 0.5),
 	Vector2(0.0, 1.0), Vector2(-0.5, 0.5), Vector2(-0.95, -0.05), Vector2(-1.0, -0.5), Vector2(-0.78, -0.88), Vector2(-0.38, -0.95)]
-const HEART_S := 200.0                      # 보석 크기
+const HEART_S := 165.0                      # 보석 크기
 const HEART_IN := 0.58                      # 안쪽 심 크기 (바깥 면 = 장갑)
 const PLATE_N := 12                         # 바깥 면 수 (외곽선 변마다 하나)
 const PLATE_ORDER := [0, 6, 3, 9, 1, 7, 4, 10, 2, 8, 5, 11]   # 깨져 떨어지는 순서 (흩어지게)
@@ -45,15 +46,19 @@ const BLADE_W := 58.0
 const SHIELD_OFF := 60.0             # 손에서 방패 가운데까지 (팔 방향)
 const SHIELD_HALF := Vector2(280.0, 600.0)  # 방패 반폭 · 반길이: 몸 옆을 다 가리는 거대한 탑 방패
 const MUZZLES := [Vector2(-640, -2470), Vector2(640, -2470)]   # 양어깨 포대의 포구
-const HEAD_POS := Vector2(0, -2605)                             # 어깨포가 다 부서지면 탄을 잇는 발사점
 const EYES := [Vector2(-62, -2605), Vector2(62, -2605)]
 
 # ── 외부 시스템 ────────────────────────────────────────
 const PART_HP := 30                         # 0 왼쪽 어깨포, 1 오른쪽 어깨포
 const PART_R := [55.0, 55.0]
 
+# 헤일로: 머리 뒤 렌즈 고리 (헤일로 사격 발사점, 부서지지 않음)
+const HALO_C := Vector2(0, -2485)
+const HALO_R := 860.0
+const LENSES := 16
+
 # ── 공격 고르기 ────────────────────────────────────────
-const LOW_ZONE_Y := -900.0           # 이보다 아래(융해 지대 근처)면 분출 위주
+const PATTERNS := ["volley", "burst", "halo", "sword", "rings"]   # 한 바퀴에 하나씩
 
 # ── 색 ─────────────────────────────────────────────────
 const C_BODY := Color(0.075, 0.08, 0.10)
@@ -74,6 +79,8 @@ var last := ""                       # 직전 패턴 (연달아 같은 것을 �
 var cannon_glow: Array[float] = [0.0, 0.0]   # 발사 전 포구가 달아오르는 정도
 var sword_piv := SWORD_REST          # 대검 회전축 (손잡이 쪽 끝)
 var sword_ang := PI * 0.5            # 대검 방향 (회전축 → 칼끝)
+var halo_glow: Array[float] = []     # 렌즈별 발사 전 발광
+var bag: Array[String] = []          # 이번 바퀴에 남은 패턴
 
 
 func _init() -> void:
@@ -102,6 +109,10 @@ func reset() -> void:
 	cannon_glow = [0.0, 0.0]
 	sword_piv = SWORD_REST
 	sword_ang = sword_rest_ang()
+	halo_glow.clear()
+	for k in LENSES:
+		halo_glow.append(0.0)
+	bag.clear()
 
 
 # ── 외부 시스템 (어깨포 둘) ─────────────────────────────
@@ -217,6 +228,11 @@ func sword_rest_ang() -> float:
 	return PI * 0.5 + clampf((look_at.x - SWORD_REST.x) / 2000.0, -0.25, 0.25)
 
 
+## 헤일로 렌즈 k 의 위치 (천천히 돈다, _draw_halo 와 같다)
+func lens_pos(k: int) -> Vector2:
+	return HALO_C + Vector2.from_angle(k * TAU / LENSES + t * 0.06) * HALO_R
+
+
 func sword_tip() -> Vector2:
 	return sword_piv + Vector2.from_angle(sword_ang) * (HILT_GAP + BLADE_L)
 
@@ -286,6 +302,8 @@ func _step_effects(dt: float) -> void:
 func _step_phase(dt: float) -> void:
 	eye_glow = move_toward(eye_glow, 0.0, dt * 2.0)
 	shield_glow = move_toward(shield_glow, 0.0, dt * 2.0)
+	for k in halo_glow.size():
+		halo_glow[k] = move_toward(halo_glow[k], 0.0, dt * 1.5)
 	for i in 2:
 		cannon_glow[i] = move_toward(cannon_glow[i], 0.0, dt * 2.0)
 	if not _sword_busy():                                # 쉬는 대검: 제자리에서 천천히 오르내린다
@@ -297,17 +315,27 @@ func _step_phase(dt: float) -> void:
 	fists[1] = fists[1].lerp(reach, 1.0 - exp(-4.0 * dt))
 
 
-## 구역 가중치로 고른다: 낮은 곳 = 분출, 근접(대검)은 날아오는 탄이 걷힌 뒤에만, 그 밖 = 어깨포 사격. 동심원은 드물게.
+## 한 바퀴씩 고른다: 패턴 다섯을 섞어 차례로 쓰고, 다 쓰면 다시 섞는다 (바퀴가 바뀌어도 같은 패턴이 연달아 나오지 않게).
+## 대검(근접)은 날아오는 탄이 걷힌 뒤에만 — 지금 못 쓰면 이번 바퀴 뒤쪽으로 미룬다
 func _choose(ppos: Vector2) -> void:
-	var low := ppos.y > LOW_ZONE_Y
-	var w := {"erupt": 2.0 if low else 0.4, "rings": 0.7, "volley": 1.6 if not low else 0.6, "burst": 0.8}
-	if shots_clear(ppos):
-		w["sword"] = 2.0
-	var kind := weighted_pick(w, last)
+	if bag.is_empty():
+		bag.assign(PATTERNS)
+		bag.shuffle()
+		if bag[0] == last and bag.size() > 1:
+			bag.push_back(bag.pop_front())
+	var kind: String = bag[0]
+	if kind == "sword" and not shots_clear(ppos):
+		if bag.size() > 1:
+			kind = bag[1]
+		else:                                            # 대검만 남았는데 탄이 오는 중: 바퀴 밖에서 사격 하나를 끼운다 (대검은 남겨 둔다)
+			kind = "volley" if last != "volley" else "halo"
+	bag.erase(kind)
 	last = kind
 	match kind:
-		"erupt":
-			start_attack(Erupt.new(ppos))
+		"halo":
+			var hs := HaloShot.new()
+			start_attack(hs)
+			hs.pick(ppos)
 		"rings":
 			start_attack(Rings.new(shield_center()))
 		"sword":
@@ -316,11 +344,11 @@ func _choose(ppos: Vector2) -> void:
 			gs.aim_at(ppos)
 		_:
 			var c := _shooter(ppos)
-			var org: Vector2 = HEAD_POS if c < 0 else MUZZLES[c]
+			var org: Vector2 = shield_center() if c < 0 else MUZZLES[c]   # 어깨포가 다 부서지면 방패 보석이 쏜다
 			start_attack(Volley.new(c, org, ppos) if kind == "volley" else Burst.new(c, org))
 
 
-## 탄 발사점: 플레이어에게서 더 먼(살아있는) 어깨포, 둘 다 부서지면 머리(-1)
+## 탄 발사점: 플레이어에게서 더 먼(살아있는) 어깨포, 둘 다 부서지면 방패 보석(-1)
 func _shooter(ppos: Vector2) -> int:
 	if part_alive(0) and part_alive(1):
 		return 0 if ppos.distance_to(MUZZLES[0]) >= ppos.distance_to(MUZZLES[1]) else 1
@@ -329,7 +357,7 @@ func _shooter(ppos: Vector2) -> int:
 	return 1 if part_alive(1) else -1
 
 
-## 발사 전 발광: -1 = 눈, -4 = 방패 수정(동심원), 0·1 = 포구
+## 발사 전 발광: -1 = 방패 보석 금빛(탄막, 눈도 같이), -4 = 방패 보석 보라(동심원), 0·1 = 포구
 func set_glow(c: int, v: float) -> void:
 	if c == -4:
 		shield_glow = v
@@ -658,7 +686,10 @@ func _draw_shield(f: Vector2, d: Vector2) -> void:
 			var a := k * TAU / 6.0 + t * 0.5
 			var u := fmod(t * 1.6 + k * 0.17, 1.0)
 			draw_line(c + Vector2.from_angle(a) * lerpf(560.0, 170.0, u), c + Vector2.from_angle(a) * lerpf(500.0, 120.0, u), Color(C_UNPARRY_CORE, g * u), 4.0)
-	draw_colored_polygon(cr, C_UNPARRY.darkened(0.4).lerp(C_UNPARRY, g))
+	var eg := eye_glow                                                 # 탄막을 쏠 때 (어깨포가 다 부서진 뒤): 금빛으로 달아오른다
+	if eg > 0.0:
+		draw_circle(c, 160.0 + 140.0 * eg, Color(C_EYE, 0.2 * eg))
+	draw_colored_polygon(cr, C_UNPARRY.darkened(0.4).lerp(C_UNPARRY, g).lerp(C_EYE, eg))
 	draw_colored_polygon(PackedVector2Array([c + ax * 90.0, c + nx * 56.0, c - ax * 90.0, c - nx * 56.0]), Color(C_UNPARRY_CORE, 0.35 + 0.15 * sin(t * 1.6) + 0.5 * g))
 	draw_polyline(_closed(cr), Color(C_BONE, 0.6), 3.0)
 
@@ -709,10 +740,10 @@ func _draw_debris() -> void:
 ## 감시 후광 (관측자의 상징, 그림만): 머리 뒤에 걸린 거대한 렌즈 고리. 렌즈들이 차례로 깜빡이며 돌고,
 ## 플레이어 쪽 렌즈가 가장 밝게 빛나 늘 지켜보는 느낌. 뒤로 옅은 호박빛 후광과 가는 주사선
 func _draw_halo() -> void:
-	var c := HEAD_POS + Vector2(0, 120)
+	var c := HALO_C
 	var dim := 1.0 if not dead else maxf(0.0, 1.0 - death_t * 0.6)
 	_soft_glow(c, 1450.0, C_EYE, 0.12 * dim)
-	var r := 860.0
+	var r := HALO_R
 	draw_arc(c, r, 0.0, TAU, 96, C_BODY_DARK, 46.0)                    # 고리 몸통
 	draw_arc(c, r + 23.0, 0.0, TAU, 96, Color(C_RIM, 0.35), 3.0)
 	draw_arc(c, r - 23.0, 0.0, TAU, 96, Color(C_RIM, 0.2), 2.0)
@@ -720,9 +751,9 @@ func _draw_halo() -> void:
 		var a := k * TAU / 6.0 + PI / 6.0
 		draw_line(c + Vector2.from_angle(a) * 380.0, c + Vector2.from_angle(a) * (r - 20.0), Color(C_BODY_DARK, 0.9), 22.0)
 	var to_p := (look_at - c).angle()
-	for k in 16:                                                        # 렌즈 16개: 천천히 돌며 차례로 깜빡, 플레이어 쪽이 가장 밝다
-		var a := k * TAU / 16.0 + t * 0.06
-		var p := c + Vector2.from_angle(a) * r
+	for k in LENSES:                                                    # 렌즈 16개: 천천히 돌며 차례로 깜빡, 플레이어 쪽이 가장 밝다
+		var a := k * TAU / LENSES + t * 0.06
+		var p := lens_pos(k)
 		var seq := 0.5 + 0.5 * sin(t * 2.2 - k * 0.8)
 		var watch := maxf(0.0, cos(angle_difference(a, to_p))) ** 6
 		var g := (0.25 + 0.45 * seq + 0.6 * watch) * dim
@@ -731,6 +762,10 @@ func _draw_halo() -> void:
 		draw_circle(p, 14.0 + 8.0 * watch, Color(C_EYE, minf(1.0, g)))
 		if watch > 0.3:
 			draw_circle(p, 48.0 + 30.0 * watch, Color(C_EYE, 0.12 * watch * dim))
+		var hg: float = halo_glow[k] if k < halo_glow.size() else 0.0
+		if hg > 0.0:                                                    # 헤일로 사격: 쏠 렌즈가 금빛으로 커지며 달아오른다
+			draw_circle(p, 50.0 + 70.0 * hg, Color(C_EYE, 0.25 * hg))
+			draw_circle(p, 16.0 + 20.0 * hg, Color(1.0, 0.92, 0.7, 0.6 + 0.4 * hg))
 	var sweep := fmod(t * 0.25, 1.0) * TAU                              # 주사선: 고리 안을 천천히 훑는다
 	draw_line(c, c + Vector2.from_angle(sweep) * r, Color(C_EYE, 0.06 * dim), 10.0)
 
