@@ -995,15 +995,19 @@ func _v035_test() -> void:
 	var bg = b.BigGun.new()
 	b.start_side(bg)
 	var shell_n := 0
+	var loose_n := 0
 	var small_n := 0
 	for k in int((bg.OPEN + bg.AIM + 0.1) / DT):
 		b.step(DT, Vector2(300, -1300))
 	for i in b.shots.size():
 		if b.shots.kind[i] == b.shots.Kind.SHELL:
 			shell_n += 1
-		elif b.shots.kind[i] == b.shots.Kind.SMALL:
+		elif b.shots.kind[i] == b.shots.Kind.SMALL and b.shots.grp[i] != 0:
 			small_n += 1
+		elif b.shots.kind[i] == b.shots.Kind.SMALL:
+			loose_n += 1
 	_check("big gun opens, aims and fires one heavy shell ringed by escorts (shell %d, escorts %d, open %.2f)" % [shell_n, small_n, b.gun_open], shell_n == 1 and small_n == bg.ESCORT and b.gun_exposed and b.gun_open >= 1.0)
+	_check("v0.77: the core also sprays loose small bullets everywhere but toward the player (%d)" % loose_n, loose_n >= bg.SCATTER)
 	_check("the exposed gun is the brightest target", b.part_emphasis(b.BIG) > 1.5 and b.part_emphasis(0) == 1.0)
 	b.damage_part(b.BIG, 8)
 	_check("a hit on the exposed gun takes its full damage and staggers it (hp %d, phase %s)" % [b.part_hp[b.BIG], bg.phase], b.part_hp[b.BIG] == b.BIG_HP - 8 and bg.phase == "stagger")

@@ -11,6 +11,7 @@ const Ev := preload("res://scripts/ev.gd")
 const Projectiles := preload("res://scripts/projectiles.gd")
 
 const C_HEART := Color(1.0, 0.42, 0.22)          # 약점(외부 시스템·코어)의 빛
+const C_TARGET := Color(1.0, 0.3, 0.24)          # 표적 테두리 (붉게: 금빛은 패리할 수 있는 것에만 쓴다)
 const C_PLATE_EDGE := Color(0.62, 0.3, 0.14)     # 상시 표적 → 달궈진 가장자리
 const C_CAVITY := Color(0.10, 0.03, 0.04)
 
@@ -690,12 +691,10 @@ func _draw_part_marks() -> void:
 		if part_stage[i] >= 3:                  # 거의 부서짐: 약점 빛이 깜빡인다
 			flick = 0.4 + 0.6 * float(int(t * 9.0 + i) % 3 != 0)
 		_draw_part_outline(i, p, r, flick)
-		var cc := Color(C_HEART, 0.85 * flick).lerp(Color.WHITE, part_flash[i])
-		draw_circle(p, r * 0.14, cc)
 		_draw_part_damage(i, p, r, pulse)
 
 
-## 표적 테두리: 칠 수 있는 부위의 가장자리가 금빛으로 천천히 숨쉬듯 빛난다 (평소에도 어딜 칠지 보이게, 얇고 은은하게).
+## 표적 테두리: 칠 수 있는 부위의 가장자리가 붉게(C_TARGET) 천천히 숨쉬듯 빛난다 (평소에도 어딜 칠지 보이게, 얇고 은은하게).
 ## 겨눈 쪽(조준 방향·거리 안)이면 조금 더 밝고 굵게. 손상 2단계부터 테두리가 끊기고, 3단계는 깜빡인다
 func _draw_part_outline(i: int, p: Vector2, r: float, flick: float) -> void:
 	var breathe := 0.5 + 0.5 * sin(t * 2.2 + i * 1.3)
@@ -703,14 +702,14 @@ func _draw_part_outline(i: int, p: Vector2, r: float, flick: float) -> void:
 	var aimed := to.length() < 1600.0 and to.normalized().dot(aim_dir) > cos(0.22)
 	var emph := part_emphasis(i)
 	var a := (0.55 + 0.25 * breathe + (0.2 if aimed else 0.0)) * flick * minf(1.0, emph)
-	var col := Color(1.0, 0.84, 0.45, minf(1.0, a)).lerp(Color.WHITE, part_flash[i])
+	var col := Color(C_TARGET, minf(1.0, a)).lerp(Color.WHITE, part_flash[i])
 	var w := (4.0 + (2.0 if aimed else 0.0)) * (1.0 + maxf(0.0, emph - 1.0) * 0.8)
 	if emph > 1.0:                                   # 드러난 약점: 크게 맥동하는 고리가 바깥으로 퍼진다 (가장 먼저 노릴 곳)
 		var u := fmod(t * 1.5, 1.0)
-		draw_arc(p, r * (1.1 + 0.5 * u), 0.0, TAU, 40, Color(1.0, 0.9, 0.6, 0.7 * (1.0 - u)), 5.0)
-		draw_circle(p, r * 1.2, Color(1.0, 0.8, 0.4, 0.1 + 0.08 * breathe))
+		draw_arc(p, r * (1.1 + 0.5 * u), 0.0, TAU, 40, Color(C_TARGET, 0.7 * (1.0 - u)), 5.0)
+		draw_circle(p, r * 1.2, Color(C_TARGET, 0.1 + 0.08 * breathe))
 	var pts := part_outline(i)
-	var glow_c := Color(1.0, 0.7, 0.3, (0.12 + 0.1 * breathe + (0.12 if aimed else 0.0)) * flick)   # 바깥 번짐 (어두운 몸에서 잘 보이게)
+	var glow_c := Color(C_TARGET, (0.12 + 0.1 * breathe + (0.12 if aimed else 0.0)) * flick)   # 바깥 번짐 (어두운 몸에서 잘 보이게)
 	if pts.is_empty():
 		draw_arc(p, r + 6.0, 0.0, TAU, 40, glow_c, w * 4.0)
 	else:

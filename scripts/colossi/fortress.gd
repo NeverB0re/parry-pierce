@@ -27,14 +27,12 @@ const BigGun := preload("res://scripts/attacks/big_gun.gd")
 # ── 구조 ───────────────────────────────────────────────
 const REACTOR_POS := Vector2(0, -1550)      # 동력 코어 = 코어 포대 (포방패 안, 2층 가운데)
 const ARMOR_HP := 110                       # = BIG_HP: 코어 포대의 체력이 곧 코어 장갑 (깎일수록 장갑판이 떨어져 나간다)
-const PLATE_SITES := 9
 const CORE_R := 58.0
 # 반응로 외곽선 (REACTOR_POS 기준): 모서리를 깎은 팔각형 + 위아래 냉각 돌기
 const REACTOR_OUTLINE := [
 	Vector2(-60, -160), Vector2(60, -160), Vector2(150, -100), Vector2(175, 0), Vector2(150, 100),
 	Vector2(60, 160), Vector2(-60, 160), Vector2(-150, 100), Vector2(-175, 0), Vector2(-150, -100),
 ]
-const PLATE_SITE_BOX := Rect2(-170, -160, 340, 320)
 const BATTERIES := [Vector2(-690, -2230), Vector2(690, -2230)]      # 보조 포탑 (외부 시스템 0, 1): 3층 양옆 가장자리, 작게
 const BARREL_TIPS := [Vector2(-790, -2350), Vector2(790, -2350)]
 const SILOS := [Vector2(-880, -1380), Vector2(880, -1380)]           # 유도탄 포드 (외부 시스템 2, 3): 2층 바깥 가장자리, 작게
@@ -49,7 +47,8 @@ const PART_R := [46.0, 46.0, 50.0, 50.0, 190.0]
 const BIG := 4                       # 대구경 포대 (외부 시스템 4): 체력제. 포방패가 닫힌 동안은 피해가 크게 줄고, 드러났을 때는 그대로 들어간다
 const BIG_HP := 110                  # 주 공략 대상이라 튼튼하게 (리버스 드라이브 8 / PERFECT 16, 반사탄은 0.5~3)
 const BIG_CLOSED_K := 0.15           # 포방패 너머로 들어가는 피해 비율
-const BIG_EVERY := 3                 # 공격 이만큼마다 대구경 포 (탄막과 함께)
+const BIG_EVERY := 3                 # 공격 이만큼마다 대구경 포 (단독 패턴)
+const GUN_HOLD := 1.5                # 대구경 포 차례에 필드가 비길 기다리는 최대 시간 (남은 탄·자리를 내준 공격)
 const SHELL_OUT := 200.0             # 포탄이 만들어지는 자리 (코어 앞, 플레이어 쪽으로)
 const SEGS := 8                      # 코어 장갑 조각 수 (조리개처럼 둘러싼 사다리꼴, 체력이 깎일수록 하나씩 떨어진다)
 const SEG_ORDER := [0, 4, 2, 6, 1, 5, 3, 7]   # 떨어지는 순서 (남은 수가 n 이면 앞에서 n 개를 뺀 나머지가 남는다)
@@ -81,6 +80,7 @@ var gun_recoil := 0.0
 var gun_exposed := false             # 포가 드러나 있다 = 제대로 피해가 들어간다
 var gun_shake := 0.0                 # 맞고 휘청임
 var since_gun := 0
+var gun_hold := 0.0
 var debris: Array[Dictionary] = []
 var last := ""                       # 직전에 고른 주 공격 (같은 탄막 반복 방지)
 var since_special := 0
@@ -93,7 +93,7 @@ func _init() -> void:
 
 
 func _ready() -> void:
-	core = ArmoredCore.new(self, REACTOR_POS, REACTOR_OUTLINE, ARMOR_HP, PLATE_SITE_BOX, PLATE_SITES, 23)
+	core = ArmoredCore.new(self, REACTOR_POS, REACTOR_OUTLINE, ARMOR_HP, Rect2(), 0, 23)   # 불규칙 장갑판 없음 (장갑 = 코어 포대의 조각 SEGS)
 	reset()
 
 
@@ -111,6 +111,7 @@ func reset() -> void:
 	gun_exposed = false
 	gun_shake = 0.0
 	since_gun = 0
+	gun_hold = 0.0
 
 
 # ── 외부 시스템 ────────────────────────────────────────
@@ -180,6 +181,11 @@ func _hit_core_armor(d: int) -> bool:
 		shards.append({"pos": gun_center() + cen, "vel": Vector2.from_angle(a) * randf_range(420.0, 650.0) + Vector2(0, -320), "rot": 0.0, "rotv": randf_range(-5.0, 5.0), "pts": pts})
 		emit(Ev.CORE_STAGE, gun_center() + cen, {"stage": SEGS - n, "fell": 1})
 	return broke
+
+
+## 코어 포대의 손상은 장갑 조각(SEGS)이 보여 주므로, 공통 손상 단계(튀는 파편·끊긴 테두리·균열)는 쓰지 않는다
+func _part_stage_of(i: int) -> int:
+	return 0 if i == BIG else super(i)
 
 
 ## 남은 장갑 조각 수 (체력 비례)
@@ -259,27 +265,29 @@ func part_outline(i: int) -> PackedVector2Array:
 	return PackedVector2Array([p + Vector2(-58, -68), p + Vector2(58, -68), p + Vector2(58, 68), p + Vector2(-58, 68)])
 
 
-## 코어 포대 표적 (v0.75): 금빛(= 패리할 수 있는 것)과 겹치지 않게 코어 둘레의 얇은 붉은 원 하나. 드러나면 조금 굵고 밝게 맥동한다
+## 코어 포대 표적: 코어 둘레의 붉은 원 하나 (다른 표적 테두리와 같은 굵기). 드러나면 굵고 밝게 맥동한다
 func _draw_part_outline(i: int, p: Vector2, r: float, flick: float) -> void:
 	if i != BIG:
 		super(i, p, r, flick)
 		return
 	var breathe := 0.5 + 0.5 * sin(t * 2.2)
-	var col := Color(C_HEART, (0.35 + 0.2 * breathe) * flick).lerp(Color.WHITE, part_flash[i])
-	var w := 3.0
+	var col := Color(C_TARGET, (0.5 + 0.25 * breathe) * flick).lerp(Color.WHITE, part_flash[i])
+	var w := 4.0
 	if gun_exposed:
-		col.a = minf(1.0, 0.75 + 0.25 * breathe)
-		w = 5.0
+		col.a = 1.0
+		w = 7.0
 		var u := fmod(t * 1.5, 1.0)
-		draw_arc(p, (r + 16.0) * (1.0 + 0.25 * u), 0.0, TAU, 48, Color(C_HEART, 0.6 * (1.0 - u)), 3.0)
+		draw_arc(p, (r + 16.0) * (1.0 + 0.25 * u), 0.0, TAU, 48, Color(C_TARGET, 0.6 * (1.0 - u)), 4.0)
+	draw_arc(p, r + 16.0, 0.0, TAU, 64, Color(C_TARGET, 0.15 * flick), w * 4.0)   # 바깥 번짐
 	draw_arc(p, r + 16.0, 0.0, TAU, 64, col, w)
 
 
 ## 부서진 포대는 포신이, 사일로는 해치가 떨어져 나간다
 func _on_part_broken(i: int) -> void:
 	var s := 1.0 if i % 2 == 1 else -1.0
-	if i == BIG:                                        # 코어 장갑이 다 떨어졌다: 맨 코어가 드러난다 (다음 페이즈)
+	if i == BIG:                                        # 코어 장갑이 다 떨어졌다: 맨 코어가 바로 드러난다 (다음 페이즈)
 		gun_exposed = false
+		_bare_core()
 		return
 	if i < 2:
 		var b: Vector2 = BATTERIES[i]
@@ -322,30 +330,34 @@ func _step_phase(dt: float) -> void:
 		gun_open = 0.0
 	elif not is_lingering("big_gun") and (atk == null or atk.kind != "big_gun"):   # 포가 들어가며 포방패가 닫힌다
 		gun_open = move_toward(gun_open, 0.0, dt / 0.6)
-	if phase >= 2 and not core.broken:                 # 대구경 포 뒤의 코어는 장갑 없이 드러난다 (한 대면 터진다)
-		core.armor_hp = 0
-		core.broken = true
-		core.guard = 0.0
-		for pl in core.plates:
-			pl["gone"] = true
+	if phase >= 2 and not core.broken:                 # 디버그 건너뛰기 등
+		_bare_core()
 
 
-## 공격 고르기: 한 번에 큰 패턴 하나 (+ 가끔 작은 곁가지). 대구경 포 차례(BIG_EVERY)에는 포가 주인공이고 가벼운 부채만 곁들인다.
+## 코어 포대가 부서지면 장갑 없이 드러난 코어만 남는다 (한 대면 터진다)
+func _bare_core() -> void:
+	core.armor_hp = 0
+	core.broken = true
+	core.guard = 0.0
+
+
+## 공격 고르기: 한 번에 큰 패턴 하나 (+ 가끔 작은 곁가지). 대구경 포 차례(BIG_EVERY)에는 포 혼자 쏜다 — 필드가 빌 때까지 잠깐(GUN_HOLD) 기다렸다가.
 ## 탄막 발사점은 살아 있는 후보(보조 포탑·회전 포탑·배경 포탑·닫힌 포문) 중 플레이어에게서 먼 쪽 — 보조 시스템을 부숴도 차례는 그대로, 방향만 바뀐다
 func _choose(ppos: Vector2) -> void:
 	var hard := phase == 3
+	var calm: bool = lingering.is_empty() and shots.size() <= CALM_SHOTS
+	if phase == 1 and part_alive(BIG) and since_gun + 1 >= BIG_EVERY:   # 대구경 포 차례: 단독 (겹치는 탄막 없이)
+		if not calm and gun_hold < GUN_HOLD:
+			gun_hold += 0.1
+			next_t = 0.1
+			return
+		since_gun = 0
+		gun_hold = 0.0
+		since_special += 1
+		_pick("big_gun", BigGun.new())
+		return
 	since_special += 1
 	since_gun += 1
-	var calm: bool = lingering.is_empty() and shots.size() <= CALM_SHOTS
-	if phase == 1 and part_alive(BIG) and since_gun >= BIG_EVERY:     # 대구경 포 차례
-		since_gun = 0
-		_pick("big_gun", BigGun.new())
-		var e := _emitter(ppos)
-		var lf = Fan.new(e[0], e[1], ppos, false)
-		lf.wave_n = 2
-		lf.count = 9
-		start_side(lf)
-		return
 	var main_kind := ""
 	var high := ppos.y < -1900.0
 	if since_special >= SPECIAL_EVERY and randf() < (0.75 if high else 0.35):   # 드물게: 천장 프레스(근접) / 반응로 동심원 파동(패리 불가)
@@ -971,51 +983,23 @@ func _draw_silos() -> void:
 
 
 
-## 반응로: 안쪽은 회전하는 제어봉과 맥동하는 코어, 바깥은 강철 판(장갑)
+## 코어 페이즈: 부서진 코어 포대 자리에 장갑 없이 드러난 코어 (한 대면 터진다) + 양옆 유도탄 배기구
 func _draw_reactor() -> void:
 	var hc := REACTOR_POS
-	var f: float = core.frac()
-	var beat := 0.5 + 0.5 * sin(t * (4.0 + f * 5.0))
-	var lit := strike_glow or focus_glow > 0.0
-	var shell: PackedVector2Array = core.shell_poly
 	if dead:
-		draw_colored_polygon(shell, Color(0.12, 0.05, 0.03))
 		var k := minf(1.0, death_t / 1.2)
 		draw_circle(hc, CORE_R + k * 240.0, Color(C_HEART, 0.5 * (1.0 - k)))
 		draw_arc(hc, CORE_R + k * 450.0, 0.0, TAU, 48, Color(1, 0.9, 0.7, 1.0 - k), 6.0)
 		return
-	var burnt := 1.0 if core.broken else 0.0                 # 껍질이 다 벗겨지면 반응로 안이 검게 그을린다 (눈이 코어에만 가게)
-	draw_colored_polygon(shell, Color(0.1, 0.06, 0.04).lerp(Color(0.05, 0.035, 0.03), burnt))
-	draw_colored_polygon(core.shell_inner, Color(0.2, 0.09, 0.05).lerp(Color(0.4, 0.14, 0.06), f * 0.6).lerp(Color(0.09, 0.05, 0.03), burnt))
-	for k in 6:                                       # 제어봉 (돌아간다)
-		var a := t * (0.6 + f) + k * TAU / 6.0
-		draw_line(hc + Vector2.from_angle(a) * 80.0, hc + Vector2.from_angle(a) * 170.0, Color(0.5, 0.3, 0.15, 0.8), 10.0)
-	var flick := 1.0
-	if core.broken:
-		flick = 0.55 + 0.45 * float(int(t * 14.0) % 3 != 0)
-	var pr := CORE_R * (1.0 + 0.06 * beat)
-	var ca := 0.35 + 0.65 * minf(1.0, f * 1.3)
-	if core.broken:                                  # 껍질이 다 벗겨짐: 한 대면 터지는 코어만 드러난다
-		_draw_exposed_core(hc, CORE_R, C_HEART)
-	else:
-		draw_circle(hc, pr * 2.0, Color(C_HEART, (0.08 + 0.1 * beat) * ca * flick))
-		draw_circle(hc, pr * 1.3, Color(C_HEART, 0.35 * ca * flick))
-		draw_circle(hc, pr, Color(C_HEART, ca * flick).lerp(Color.WHITE, core.flash * 0.6))
-		draw_circle(hc + Vector2(-pr * 0.3, -pr * 0.3), pr * 0.4, Color(1.0, 0.85, 0.6, ca * flick))
-	core.draw_plates(self, t, lit, beat)
+	_draw_exposed_core(hc, CORE_R, C_HEART)
 	for v in VENTS:                                   # 코어 페이즈 유도탄 배기구
 		var g := glow[4]
 		draw_circle(v, 40.0, C_HULL_DARK)
 		draw_arc(v, 40.0, 0.0, TAU, 20, C_RIM, 4.0)
 		draw_circle(v, 14.0 + 12.0 * g, Color(C_GLOW, 0.3 + 0.6 * g))
-	var smoke := int(f * 6.0)
-	for k in smoke:
-		var life := fmod(t * 0.5 + k * 0.17, 1.0)
-		var sp := hc + Vector2(sin(k * 2.3 + t * 0.8) * 120.0, -150.0 - life * 190.0)
-		draw_circle(sp, 14.0 + life * 30.0, Color(0.3, 0.3, 0.33, 0.35 * (1.0 - life)))
 	if focus_glow > 0.0:
 		var in_reach := hc.distance_to(focus_from) <= focus_reach + 200.0
-		draw_arc(hc, 290.0, 0.0, TAU, 48, Color(1.0, 0.85, 0.55, focus_glow * (0.6 if in_reach else 0.25)), 3.0)
+		draw_arc(hc, 290.0, 0.0, TAU, 48, Color(C_TARGET, focus_glow * (0.6 if in_reach else 0.25)), 4.0)
 
 
 func _draw_debris() -> void:

@@ -8,7 +8,7 @@ var out := ""
 var plan := [
 	["closed", "closed", 20],
 	["aim", "gun", 80],
-	["fired", "gun", 180],
+	["fired", "gun", 140],
 	["exposed", "gun", 300],
 	["stagger", "hit", 12],
 	["broken", "broken", 40],
