@@ -1007,18 +1007,23 @@ func _v035_test() -> void:
 	_check("big gun opens, aims and fires one heavy shell ringed by escorts (shell %d, escorts %d, open %.2f)" % [shell_n, small_n, b.gun_open], shell_n == 1 and small_n == bg.ESCORT and b.gun_exposed and b.gun_open >= 1.0)
 	_check("the exposed gun is the brightest target", b.part_emphasis(b.BIG) > 1.5 and b.part_emphasis(0) == 1.0)
 	b.damage_part(b.BIG, 8)
-	_check("a hit on the exposed gun takes a third and staggers it (hp %d, phase %s)" % [b.part_hp[b.BIG], bg.phase], b.part_hp[b.BIG] == b.BIG_HP - b.BIG_HP / b.BIG_HITS and bg.phase == "stagger")
+	_check("a hit on the exposed gun takes its full damage and staggers it (hp %d, phase %s)" % [b.part_hp[b.BIG], bg.phase], b.part_hp[b.BIG] == b.BIG_HP - 8 and bg.phase == "stagger")
 	for k in int(3.0 / DT):
 		b.step(DT, Vector2(300, -1300))
 	var hp_c: int = b.part_hp[b.BIG]
 	b.damage_part(b.BIG, 16)
-	_check("closed gun shield: damage is cut down hard (%d -> %d, exposed %s)" % [hp_c, b.part_hp[b.BIG], b.gun_exposed], not b.gun_exposed and hp_c - b.part_hp[b.BIG] >= 1 and hp_c - b.part_hp[b.BIG] <= 3 and b.part_emphasis(b.BIG) < 1.0)
+	_check("closed gun shield: damage is cut down hard (%d -> %d, exposed %s)" % [hp_c, b.part_hp[b.BIG], b.gun_exposed], not b.gun_exposed and hp_c - b.part_hp[b.BIG] == 2 and b.part_emphasis(b.BIG) < 1.0)
 	var more := 0
-	while b.part_alive(b.BIG) and more < 10:
+	while b.part_alive(b.BIG) and more < 30:
 		b.gun_exposed = true
-		b.damage_part(b.BIG, 8)
+		b.damage_part(b.BIG, 16)
 		more += 1
-	_check("about BIG_HITS exposed hits break the big gun and open the core (%d more, phase %d, other parts alive %d)" % [more, b.phase, b.parts_left()], more == b.BIG_HITS - 1 and b.phase == 2 and b.parts_left() == 4)
+	_check("the big gun has hit points: about seven PERFECT drives break it and open the core (%d, phase %d, other parts alive %d)" % [more, b.phase, b.parts_left()], more >= 6 and more <= 8 and b.phase == 2 and b.parts_left() == 4)
+	main.start_stage(1)
+	b = main.boss
+	b.gun_exposed = true
+	b.damage_part(b.BIG, 1)
+	_check("small hits (reflected bullets) on the exposed gun only chip it, no stagger", b.part_hp[b.BIG] == b.BIG_HP - 1 and b.gun_shake == 0.0)
 	b.lingering.clear()
 	b.shots.clear()
 

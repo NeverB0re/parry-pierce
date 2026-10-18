@@ -2,7 +2,7 @@ extends "res://scripts/colossus_base.gd"
 ## 콜로서스 ② 탄막 요새 (패리 중심형). 포신으로 뒤덮인 계단식 포격 성채 — 무한궤도 위에 층층이 쌓인 포대가 화면 위 끝 너머까지 솟는다.
 ## 외형 리워크 (v0.69, docs/BOSS_fortress.md 3장): 그림만 바꿨고 판정·발사점은 아직 예전 자리 (다음 단계에서 대구경 포대·보조 시스템으로 옮긴다).
 ## 핵심: 잔탄(작은 탄)은 피하거나 패리로 흡수, 주탄(큰 탄·유도탄)을 패리해 리버스 드라이브로 꽂는다.
-## 페이즈: 1) 포격전 — 주 목표는 머리(지붕)의 대구경 포대. 포방패가 닫혀 있으면 피해가 크게 줄고, 쏠 때 드러난 포를 받아친 탄으로 때린다 (BIG_HITS 번).
+## 페이즈: 1) 포격전 — 주 목표는 머리(지붕)의 대구경 포대. 포방패가 닫혀 있으면 피해가 크게 줄고, 쏠 때 드러난 포를 받아친 탄으로 때린다 (체력제 BIG_HP).
 ##            보조 시스템(양옆 작은 포탑 둘·유도탄 포드 둘)은 몸 바깥쪽 가장자리에 작게 붙어 있다 — 부수면 그쪽에서 탄이 안 나올 뿐, 차례는 다른 발사점이 잇는다
 ##         2) 대구경 포가 부서지고 그 뒤에서 동력 코어가 드러난다
 ##         3) 코어 — 장갑 없이 드러나 있다 (한 대면 터진다). 반응로 폭주로 마지막 저항
@@ -48,9 +48,8 @@ const MORTARS := [Vector2(-430, -640), Vector2(430, -640)]          # 기뢰 박
 # ── 외부 시스템 ────────────────────────────────────────
 const PART_HP := 30
 const PART_R := [46.0, 46.0, 50.0, 50.0, 190.0]
-const BIG := 4                       # 대구경 포대 (외부 시스템 4): 포방패가 닫힌 동안은 피해가 크게 줄고, 드러났을 때 맞으면 1/3 씩
-const BIG_HITS := 5                  # 주 공략 대상이라 튼튼하게
-const BIG_HP := 80
+const BIG := 4                       # 대구경 포대 (외부 시스템 4): 체력제. 포방패가 닫힌 동안은 피해가 크게 줄고, 드러났을 때는 그대로 들어간다
+const BIG_HP := 110                  # 주 공략 대상이라 튼튼하게 (리버스 드라이브 8 / PERFECT 16, 반사탄은 0.5~3)
 const BIG_CLOSED_K := 0.15           # 포방패 너머로 들어가는 피해 비율
 const BIG_EVERY := 3                 # 공격 이만큼마다 대구경 포 (탄막과 함께)
 const GUN_LEN := 430.0               # 다 나왔을 때 포신 길이
@@ -147,13 +146,14 @@ func damage_part(i: int, dmg: int) -> bool:
 	if not part_alive(i):
 		return false
 	if gun_exposed:
-		gun_shake = 1.0
-		for m in active_attacks():
-			if m.kind == "big_gun":
-				m.hit()
-		return super(i, BIG_HP / BIG_HITS)
+		if dmg >= 4:                                    # 큰 일격(리버스 드라이브 등)이면 휘청이며 들어간다. 반사탄 같은 작은 피해는 피해만
+			gun_shake = 1.0
+			for m in active_attacks():
+				if m.kind == "big_gun":
+					m.hit()
+		return super(i, dmg)
 	part_flash[i] = 0.4
-	return super(i, maxi(1, int(round(dmg * BIG_CLOSED_K))))
+	return super(i, int(floor(dmg * BIG_CLOSED_K)))
 
 
 ## 대구경 포대가 부서지면 코어가 열린다 (나머지 외부 시스템은 조건이 아니다)
