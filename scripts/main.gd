@@ -594,10 +594,6 @@ func _check_attacks() -> void:
 ## 요격(받아치기 / 사전 저지): 차지 강습이나 리버스 드라이브가 근접공격에 부딪힘 (player.gd 가 이동 중에 호출). 팔이 위치를 잡고 멈춰 있을 때(set·warn)도,
 ## 휘두르는 중에도 가능. 그 팔 관절에 즉시 피해 + 공격이 끊기고 팔이 밀려나 멈춘다
 func try_clash(p: Vector2) -> bool:
-	var ci: int = boss.claw_at(p, Player.RADIUS)
-	if ci >= 0:
-		_claw_strike(ci, p)
-		return true
 	var hb: Dictionary = boss.clash_box(p)
 	if not hb.is_empty() and boss.overlaps(hb, p, Player.RADIUS):
 		_clash(hb, p)
@@ -605,23 +601,6 @@ func try_clash(p: Vector2) -> bool:
 	return false
 
 
-## 떨어지는 집게를 차지 강습·리버스 드라이브로 쳐 낸다: 요격처럼 튕겨 나오고(차지 쿨다운 초기화), 집게는 눈알로 날아간다
-func _claw_strike(ci: int, p: Vector2) -> void:
-	var dir: Vector2 = player.vel.normalized()
-	player.pass_target = {}
-	player.bounce_off(dir, player.dash_kind, true)
-	boss.launch_claw(ci)
-	last_strike_t = run_time
-	tele.add("claw_strike")
-	player.on_intercept()
-	_buzz(60)
-	hitstop = maxf(hitstop, 0.14)
-	shake = maxf(shake, 18.0)
-	sfx.play("hit_drive", 4.0)
-	sfx.play("hit_charge", 0.0)
-	fx.burst(p, 30, Color(1.0, 0.8, 0.45), 1100.0, 0.5, 4.0)
-	fx.rays_burst(p, 12, Color(1.0, 0.9, 0.6), 420.0, 0.35, 6.0)
-	fx.ring(p, Color(1.0, 0.9, 0.6), 220.0, 0.35, 8.0)
 
 
 ## 리버스 드라이브·동조 일격 성공: 쌓인 잔탄 긁힘(과열) 한 칸을 치료한다. 5초 식는 시계도 다시 시작
@@ -996,22 +975,6 @@ func _drain_boss_events() -> void:
 				tele.hit("reflect", dmg)
 				if boss.damage(ev["hit"], dmg):
 					_core_destroyed(pos)
-			Ev.CLAW_HIT:                        # 쳐 낸 집게가 눈알에 꽂힘: 방어막을 크게 깎거나, 코어가 그대로 터진다
-				tele.mark("claw_hit", run_time)
-				if ev.get("kill", false):
-					if state == State.PLAY:
-						_core_destroyed(pos)
-					continue
-				hitstop = maxf(hitstop, 0.22)
-				shake = maxf(shake, 30.0)
-				zoom_punch = 0.7
-				hud.flash(0.18, Color(0.8, 1.0, 1.0))
-				sfx.play("crack", 6.0)
-				sfx.play("hit_perfect", 2.0)
-				fx.burst(pos, 50, Color(0.75, 1.0, 1.0), 1300.0, 0.6, 4.5)
-				fx.burst(pos, 24, Color(1.0, 0.85, 0.5), 900.0, 0.5, 3.5)
-				fx.rays_burst(pos, 16, Color(0.85, 1.0, 1.0), 520.0, 0.45, 7.0)
-				fx.ring(pos, Color(0.6, 1.0, 1.0), 320.0, 0.5, 10.0)
 			Ev.PRESS:                           # 프레스가 정지선에 닿음
 				shake = maxf(shake, 26.0)
 				sfx.play("stomp", 6.0)

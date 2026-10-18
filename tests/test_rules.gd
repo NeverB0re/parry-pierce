@@ -1619,9 +1619,10 @@ func _kraken_shield_test() -> void:
 			bounced = true
 	_check("charge into the shield: blocked, no core damage, bounced out (core %d)" % b.core.armor_hp, b.core.armor_hp == a0 and bounced)
 	main.on_strike(sh, 12, p.position, Vector2.UP, "power", false, false)
-	_check("reverse drive pierces a full shield only partly and leaves the shield alone (core %d -> %d, shield %.1f)" % [a0, b.core.armor_hp, b.shield_hp],
-		b.core.armor_hp == a0 - int(round(12 * b.SHIELD_PASS_MIN)) and b.shield_hp == b.SHIELD_HP)
-	b.shield_hp = b.SHIELD_HP * 0.2
+	_check("reverse drive pierces a full shield only partly and leaves the panels alone (core %d -> %d, shield %.2f)" % [a0, b.core.armor_hp, b.shield_frac()],
+		b.core.armor_hp == a0 - int(round(12 * b.SHIELD_PASS_MIN)) and b.shield_frac() == 1.0)
+	for j in 5:
+		b.panel_gone[j] = true
 	var a1: int = b.core.armor_hp
 	b.damage(sh, 12)
 	_check("a worn shield lets more through (pass %.2f, core %d -> %d)" % [b.shield_pass(), a1, b.core.armor_hp], a1 - b.core.armor_hp > int(round(12 * b.SHIELD_PASS_MIN)) and b.pierce > 0.0)
@@ -1637,45 +1638,23 @@ func _kraken_shield_test() -> void:
 	b.next_t = 99.0
 	var c1: int = b.core.armor_hp
 	b.damage_part(0, 8)
-	_check("one intercept wounds a tentacle and hurts the core through the shield (%d -> %d)" % [c1, b.core.armor_hp], b.part_alive(0) and b.part_hp[0] == b.PART_HP - 8 and b.core.armor_hp < c1 and b.claws.is_empty())
+	_check("one intercept wounds a tentacle and hurts the core through the shield (%d -> %d)" % [c1, b.core.armor_hp], b.part_alive(0) and b.part_hp[0] == b.PART_HP - 8 and b.core.armor_hp < c1 and not b.panel_gone[0])
 	b.damage_part(0, 8)
-	_check("the second intercept cuts it and drops its claw (claws %d)" % b.claws.size(), not b.part_alive(0) and b.claws.size() == 1 and b.phase == 1)
+	_check("the second intercept cuts it and its shield panel drops (%.2f left)" % b.shield_frac(), not b.part_alive(0) and b.panel_gone[0] and absf(b.shield_frac() - 5.0 / 6.0) < 0.01 and b.phase == 1)
 	b.damage_part(1, 16)
-	_check("a strong intercept cuts at once", not b.part_alive(1) and b.claws.size() == 2)
-	b.claws.pop_back()
-	var y0: float = b.claws[0]["pos"].y
-	var y_min := y0
-	for k in 130:
-		b.next_t = 99.0
-		b.step(DT, Vector2(0, -700))
-		y_min = minf(y_min, b.claws[0]["pos"].y)
-	var vy: float = b.claws[0]["vel"].y
-	_check("the claw first flies up high (%.0f above)" % (y0 - y_min), y0 - y_min > 400.0)
-	_check("then falls at a capped speed (y %.0f -> %.0f, vy %.0f)" % [y0, b.claws[0]["pos"].y, vy], vy > 0.0 and vy <= b.CLAW_FALL + 0.01)
-	var cp: Vector2 = b.claws[0]["pos"]
-	_check("striking the falling claw finds it", b.claw_at(cp + Vector2(60, 0), 20.0) == 0 and b.claw_at(cp + Vector2(400, 0), 20.0) == -1)
-	var s0: float = b.shield_hp
-	b.events.clear()
-	b.launch_claw(0)
-	for k in 90:
-		b.next_t = 99.0
-		b.step(DT, Vector2(0, -700))
-	var hit_ev := false
-	for e in b.events:
-		if e["type"] == b.Ev.CLAW_HIT and not e["kill"]:
-			hit_ev = true
-	_check("a struck claw flies into the eye and breaks off a big piece of the shield (%.0f -> %.0f)" % [s0, b.shield_hp], b.claws.is_empty() and hit_ev and absf(s0 - b.shield_hp - b.CLAW_SHIELD) < 0.01)
-	b.events.clear()
+	_check("a strong intercept cuts at once and drops that tentacle's panel", not b.part_alive(1) and b.panel_gone[1] and not b.panel_gone[2])
+	var a2: int = b.core.armor_hp
+	b.damage(sh, 12)
+	_check("fewer panels let more through (pass %.2f, core %d -> %d)" % [b.shield_pass(), a2, b.core.armor_hp], a2 - b.core.armor_hp > int(round(12 * b.SHIELD_PASS_MIN)))
 	for k in int((b.REGROW_DELAY + b.REGROW + 0.3) / DT):
 		b.next_t = 99.0
 		b.step(DT, Vector2(0, -700))
-	_check("a cut tentacle slowly regrows (grown %.2f)" % b.grown[0], b.part_alive(0) and b.tent_ready(0))
-	b.claws.clear()
-	b.claws.append({"pos": Vector2(300, -900), "vel": Vector2.ZERO, "rot": 0.0, "rotv": 0.0, "fly": false})
-	for k in int(1000.0 / b.CLAW_FALL / DT) + 60:
-		b.step(DT, Vector2(0, -700))
-	_check("an unstruck claw sinks into the lava", b.claws.is_empty())
-	b.events.clear()
+	_check("a cut tentacle slowly regrows, its panel stays gone (grown %.2f)" % b.grown[0], b.part_alive(0) and b.tent_ready(0) and b.panel_gone[0])
+	b.damage_part(0, 16)
+	_check("cutting a regrown tentacle drops nothing more (%.2f)" % b.shield_frac(), absf(b.shield_frac() - 4.0 / 6.0) < 0.01)
+	for i in range(2, 6):
+		b.damage_part(i, 16)
+	_check("all six panels gone -> the shield breaks (phase %d)" % b.phase, b.shield_frac() == 0.0 and b.phase == 2)
 
 	# 첫 타 여유: 단독 내려치기는 판정까지 LEAD_K 배, 연타의 두 번째부터는 원래 박자
 	main.reset_run()
@@ -2016,12 +1995,10 @@ func _v047_test() -> void:
 	b.next_t = 99.0
 	for i in 6:
 		b._cut(i)
-	b._wear_shield(b.SHIELD_HP)
-	_check("shield worn away -> mantle opens", b.phase == 2)
+	_check("every tentacle cut -> mantle opens", b.phase == 2)
 	for k in int((b.REGROW_DELAY + b.REGROW + 0.3) / DT):
 		b.next_t = 99.0
 		b.step(DT, Vector2(0, -700))
-	b.claws.clear()
 	_check("kraken core phase, cut tentacles regrown (phase %d, busy %s)" % [b.phase, str(b.busy)], b.phase == 3 and b.tent_ready(2) and b.tent_ready(3))
 	b.next_t = 99.0
 	b.atk = null
@@ -2047,16 +2024,7 @@ func _v047_test() -> void:
 	var ca: int = b.core.armor_hp
 	_check("core phase: intercepting a tentacle wounds it and hurts the core (%d)" % ca, not b.intercept_core(2, 8) and b.core.armor_hp == ca - 8 and b.part_alive(2))
 	b.intercept_core(2, 8)
-	_check("core phase: the second intercept cuts it and drops a claw", not b.part_alive(2) and b.claws.size() == 1)
-	b.events.clear()
-	b.launch_claw(0)
-	for k in 90:
-		b.step(DT, Vector2(0, -700))
-	var kill := false
-	for e in b.events:
-		if e["type"] == b.Ev.CLAW_HIT and e["kill"]:
-			kill = true
-	_check("core phase: a claw driven into the bare eye destroys it", kill)
+	_check("core phase: the second intercept cuts it", not b.part_alive(2))
 	b.atk = null
 	b.lingering.clear()
 	var es = b.EyeSweep.new(b.CORE_POS)
@@ -2075,7 +2043,6 @@ func _v047_test() -> void:
 	b.atk = null
 	b.lingering.clear()
 	b.events.clear()
-	b.claws.clear()
 
 	var eye = b.Rings.new(b.CORE_POS)                      # 코어 단계: 눈알 동심원 (패리 불가)
 	eye.count = 3

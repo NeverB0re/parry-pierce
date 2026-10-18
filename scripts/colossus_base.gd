@@ -637,15 +637,6 @@ func damage_core(dmg: int) -> bool:
 	return core.damage(dmg)
 
 
-## 떨어지는 보너스 물체(크라켄의 잘린 집게)를 치는가: 번호 (없으면 -1) / 쳐 낸다
-func claw_at(_p: Vector2, _r: float) -> int:
-	return -1
-
-
-func launch_claw(_k: int) -> void:
-	pass
-
-
 # ── 그리기 (공통 부분) ─────────────────────────────────
 func _cap(a: Vector2, b: Vector2, w: float, c: Color) -> void:
 	draw_line(a, b, c, w)

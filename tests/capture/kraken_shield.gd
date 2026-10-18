@@ -1,5 +1,5 @@
 extends SceneTree
-# 크라켄 집게·방어막 캡처 (창 모드, 자동 종료): 온전한 방어막을 뚫는 일격 → 닳은 방어막을 깊이 뚫는 일격 + 떨어지는 집게 → 날아가는 집게.
+# 크라켄 방어막·몸통 캡처 (창 모드, 자동 종료): 온전한 방어막을 뚫는 일격 → 판이 떨어진 방어막 → 동력선·상처 입은 촉수 → 눈알 → 연속 내려치기 → 눈알 쓸기.
 # 인자: -- --notutorial --out=<dir>. 진행 저장·플레이 기록은 끈다
 var main
 var n := 0
@@ -8,11 +8,10 @@ var out := ""
 var plan := [
 	["pierce_full", "full", 6],
 	["pierce_worn", "worn", 6],
-	["claw_fall", "fall", 50],
-	["claw_fly", "fly", 8],
+	["panels", "panels", 50],
+	["wide", "wide", 50],
 	["eye_close", "eye", 30],
 	["pound_raise", "pound", 70],
-	["claw_pop", "pop", 40],
 	["beam_wind", "beam", 50],
 	["beam_sweep", "beam", 260],
 ]
@@ -55,29 +54,25 @@ func _process(_d: float) -> bool:
 			"full":
 				b.damage(sh, 16)
 			"worn":
-				b.shield_hp = b.SHIELD_HP * 0.15
+				for j in 4:
+					b.panel_gone[j] = true
 				b.damage(sh, 16)
+			"panels":
+				b.damage_part(0, 16)
+				b.damage_part(3, 16)
+				b.damage_part(4, 8)
 			"pound":
 				var rd: Array[int] = [0, 1, 2, 3, 4, 5]
 				b.start_attack(b._pound(rd, Vector2(300, -1000)))
 			"beam":
 				b.start_attack(b.EyeSweep.new(b.CORE_POS))
-			"pop":
-				b.damage_part(3, 16)
-			"fall", "fly":
-				b.shield_hp = b.SHIELD_HP * 0.6
-				b.damage_part(3, 16)
-				if pl[1] == "fly":
-					for k in 40:
-						b.step(1.0 / 60.0, p.position)
-					b.launch_claw(0)
 	local += 1
 	p.invuln = 999.0
 	p.vel = Vector2.ZERO
 	p.position = Vector2(300, -1000)
 	b.next_t = 999.0
-	main.cam.position = b.CORE_POS if pl[1] == "eye" else Vector2(0, -1300 if pl[1] == "beam" else -1500)
-	var z := 1.0 if pl[1] == "eye" else (0.3 if pl[1] == "beam" else 0.42)
+	main.cam.position = b.CORE_POS if pl[1] == "eye" else Vector2(0, -1600 if pl[1] == "wide" else (-1300 if pl[1] == "beam" else -1500))
+	var z := 1.0 if pl[1] == "eye" else (0.24 if pl[1] == "wide" else (0.3 if pl[1] == "beam" else 0.42))
 	main.cam.zoom = Vector2(z, z)
 	main.hud.clear_banner()
 	if local == int(pl[2]):
