@@ -2365,6 +2365,7 @@ func _zone_test() -> void:
 	for i in 40:
 		o.atk = null
 		o.last = ""
+		o.sword_hold = 0.0                                           # 기다리는 시간 안에서는
 		o._choose(pp)
 		if o.atk != null and o.atk.kind == "sword":
 			swung += 1
@@ -2379,6 +2380,20 @@ func _zone_test() -> void:
 		if o.atk != null:
 			seen[o.atk.kind] = int(seen.get(o.atk.kind, 0)) + 1
 	_check("observer: every pattern comes round once per cycle (%s)" % str(seen), seen.size() == 5 and seen.values().all(func(v): return v == 2))
+	# 대검만 남았는데 탄이 계속 오면: 잠깐 기다렸다가 그래도 긋는다 (탄막으로 바퀴를 채우지 않는다)
+	o.bag.assign(["sword"])
+	o.sword_hold = 0.0
+	var waited := 0
+	for i in 30:
+		o.atk = null
+		o.shots.clear()
+		o.shots.spawn(pp + Vector2(-400, 0), Vector2(300, 0), 5.0)
+		o._choose(pp)
+		if o.atk != null:
+			break
+		waited += 1
+	_check("observer: a held greatsword waits for the field, then still comes (waited %d, atk %s, bag %s)" % [waited, o.attack_kind(), str(o.bag)], waited >= 1 and o.attack_kind() == "sword" and o.bag.is_empty())
+	o.shots.clear()
 	o.atk = null
 	main.reset_run()
 

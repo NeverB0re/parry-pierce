@@ -59,6 +59,7 @@ const LENSES := 16
 
 # ── 공격 고르기 ────────────────────────────────────────
 const PATTERNS := ["volley", "burst", "halo", "sword", "rings"]   # 한 바퀴에 하나씩
+const SWORD_HOLD := 2.5              # 대검 차례에 탄이 걷히길 기다리는 최대 시간
 
 # ── 색 ─────────────────────────────────────────────────
 const C_BODY := Color(0.075, 0.08, 0.10)
@@ -81,6 +82,7 @@ var sword_piv := SWORD_REST          # 대검 회전축 (손잡이 쪽 끝)
 var sword_ang := PI * 0.5            # 대검 방향 (회전축 → 칼끝)
 var halo_glow: Array[float] = []     # 렌즈별 발사 전 발광
 var bag: Array[String] = []          # 이번 바퀴에 남은 패턴
+var sword_hold := 0.0
 
 
 func _init() -> void:
@@ -113,6 +115,7 @@ func reset() -> void:
 	for k in LENSES:
 		halo_glow.append(0.0)
 	bag.clear()
+	sword_hold = 0.0
 
 
 # ── 외부 시스템 (어깨포 둘) ─────────────────────────────
@@ -316,7 +319,8 @@ func _step_phase(dt: float) -> void:
 
 
 ## 한 바퀴씩 고른다: 패턴 다섯을 섞어 차례로 쓰고, 다 쓰면 다시 섞는다 (바퀴가 바뀌어도 같은 패턴이 연달아 나오지 않게).
-## 대검(근접)은 날아오는 탄이 걷힌 뒤에만 — 지금 못 쓰면 이번 바퀴 뒤쪽으로 미룬다
+## 대검(근접)은 날아오는 탄이 걷힌 뒤에만 — 제 차례에 잠깐(SWORD_HOLD) 기다리고, 그래도 안 걷히면 다음 패턴을 먼저 쓴다.
+## 대검만 남았으면 기다린 뒤 그대로 긋는다 (바퀴 밖의 탄막을 끼우지 않는다: 탄막만 이어지던 v0.81 버그)
 func _choose(ppos: Vector2) -> void:
 	if bag.is_empty():
 		bag.assign(PATTERNS)
@@ -325,10 +329,13 @@ func _choose(ppos: Vector2) -> void:
 			bag.push_back(bag.pop_front())
 	var kind: String = bag[0]
 	if kind == "sword" and not shots_clear(ppos):
-		if bag.size() > 1:
+		if sword_hold < SWORD_HOLD:                     # 제 차례에서 잠깐 기다린다 (순서가 늘 맨 뒤로 밀려 뻔해지지 않게)
+			sword_hold += 0.15
+			next_t = 0.15
+			return
+		if bag.size() > 1:                              # 그래도 안 걷히면 다음 패턴 먼저 (대검은 이번 바퀴에 남는다)
 			kind = bag[1]
-		else:                                            # 대검만 남았는데 탄이 오는 중: 바퀴 밖에서 사격 하나를 끼운다 (대검은 남겨 둔다)
-			kind = "volley" if last != "volley" else "halo"
+	sword_hold = 0.0
 	bag.erase(kind)
 	last = kind
 	match kind:
