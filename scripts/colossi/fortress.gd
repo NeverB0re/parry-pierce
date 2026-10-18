@@ -34,7 +34,8 @@ const REACTOR_OUTLINE := [
 	Vector2(60, 160), Vector2(-60, 160), Vector2(-150, 100), Vector2(-175, 0), Vector2(-150, -100),
 ]
 const BATTERIES := [Vector2(-690, -2230), Vector2(690, -2230)]      # 보조 포탑 (외부 시스템 0, 1): 3층 양옆 가장자리, 작게
-const BARREL_TIPS := [Vector2(-790, -2350), Vector2(790, -2350)]
+const BARREL_TIPS := [Vector2(-790, -2350), Vector2(790, -2350)]   # 쉴 때의 포구 (포신은 플레이어를 따라 돈다: battery_tip)
+const BARREL_LEN := 156.0
 const SILOS := [Vector2(-880, -1380), Vector2(880, -1380)]           # 유도탄 포드 (외부 시스템 2, 3): 2층 바깥 가장자리, 작게
 const SPIRE_TOP := Vector2(0, -2800)                                # 지붕 회전 포탑 (부서지지 않는 발사점)
 const BG_GUNS := [Vector2(-930, -2610), Vector2(930, -2610)]        # 배경 포탑 포구 (부서지지 않는 발사점)
@@ -80,6 +81,7 @@ var gun_recoil := 0.0
 var gun_exposed := false             # 포가 드러나 있다 = 제대로 피해가 들어간다
 var gun_shake := 0.0                 # 맞고 휘청임
 var since_gun := 0
+var battery_aim: Array[float] = [0.0, 0.0]   # 보조 포탑 포신 방향 (플레이어를 천천히 따라간다)
 var gun_hold := 0.0
 var debris: Array[Dictionary] = []
 var last := ""                       # 직전에 고른 주 공격 (같은 탄막 반복 방지)
@@ -112,6 +114,8 @@ func reset() -> void:
 	gun_shake = 0.0
 	since_gun = 0
 	gun_hold = 0.0
+	for i in 2:
+		battery_aim[i] = (BARREL_TIPS[i] - BATTERIES[i]).angle()
 
 
 # ── 외부 시스템 ────────────────────────────────────────
@@ -125,6 +129,11 @@ func part_max_hp(i: int) -> int:
 
 func part_radius(i: int) -> float:
 	return PART_R[i]
+
+
+## 보조 포탑 포구: 포신이 플레이어 쪽을 겨눈다
+func battery_tip(i: int) -> Vector2:
+	return BATTERIES[i] + Vector2.from_angle(battery_aim[i]) * BARREL_LEN
 
 
 func part_pos(i: int) -> Vector2:
@@ -286,7 +295,7 @@ func _on_part_broken(i: int) -> void:
 		return
 	if i < 2:
 		var b: Vector2 = BATTERIES[i]
-		var tip: Vector2 = BARREL_TIPS[i]
+		var tip: Vector2 = battery_tip(i)
 		debris.append({"pos": (b + tip) * 0.5, "half": (tip - b) * 0.5, "w": 26.0, "vel": Vector2(s * 280.0, -360.0), "rot": 0.0, "rotv": s * 3.2, "rest": false})
 	else:
 		var p: Vector2 = SILOS[i - 2]
@@ -320,6 +329,8 @@ func _step_phase(dt: float) -> void:
 	for i in glow.size():
 		glow[i] = move_toward(glow[i], 0.0, dt * 2.0)
 	gun_recoil = move_toward(gun_recoil, 0.0, dt * 3.0)
+	for i in 2:                                         # 보조 포탑 포신이 플레이어를 따라 돈다
+		battery_aim[i] = lerp_angle(battery_aim[i], (look_at - BATTERIES[i]).angle(), 1.0 - exp(-3.0 * dt))
 	gun_shake = move_toward(gun_shake, 0.0, dt * 1.2)
 	if not part_alive(BIG):
 		gun_open = 0.0
@@ -411,12 +422,21 @@ func _pick(kind: String, a) -> void:
 
 ## 탄막 발사점 [발광 번호, 위치]: 살아 있는 후보 중 무작위 둘을 골라 플레이어에게서 더 먼 쪽 (탄이 날아올 시간).
 ## 후보 = 보조 포탑(살아 있으면) · 회전 포탑 · 배경 포탑 둘 · 닫힌 대구경 포대의 포문 (코어 페이즈는 회전 포탑·배경 포탑)
+## 보조 포탑이 살아 있으면 절반은 그 포탑이 쏜다 (부술 이유가 보이게: 부수면 그쪽 탄이 멎는다)
 func _emitter(ppos: Vector2) -> Array:
 	var cands := [[-1, SPIRE_TOP], [-5, BG_GUNS[0]], [-6, BG_GUNS[1]]]
 	if phase == 1:
+		var bats := []
 		for i in 2:
 			if part_alive(i):
-				cands.append([i, BARREL_TIPS[i]])
+				bats.append([i, battery_tip(i)])
+		if not bats.is_empty() and randf() < 0.5:
+			var fb: Array = bats[0]
+			for bt in bats:
+				if ppos.distance_to(bt[1]) > ppos.distance_to(fb[1]):
+					fb = bt
+			return fb
+		cands.append_array(bats)
 		if part_alive(BIG) and gun_open <= 0.0:
 			cands.append([-7, GUN_PORT])
 	var a: Array = cands[randi() % cands.size()]
@@ -939,7 +959,7 @@ func _draw_smoke() -> void:
 func _draw_batteries() -> void:
 	for i in 2:
 		var b: Vector2 = BATTERIES[i]
-		var tip: Vector2 = BARREL_TIPS[i]
+		var tip: Vector2 = battery_tip(i)
 		var d := (tip - b).normalized()
 		var n := d.orthogonal()
 		if part_alive(i):
