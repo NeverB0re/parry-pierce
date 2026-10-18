@@ -19,6 +19,7 @@ var origin := Vector2.ZERO
 var n := 8
 var a0 := 0.0
 var spin := SPIN
+var active := ACTIVE
 var rot := 0.0
 var rot_prev := 0.0
 var dodged_beams: Array[int] = []
@@ -36,8 +37,7 @@ func _init(o: Vector2, count := 8) -> void:
 func step(_dt: float, _ppos: Vector2) -> void:
 	match phase:
 		"wind":
-			for i in n:
-				boss.set_glow(boss.node_toward(_angle(i)), minf(1.0, t / WIND))
+			_wind_glow(minf(1.0, t / WIND))
 			if t >= WIND:
 				phase = "fire"
 				t = 0.0
@@ -45,8 +45,19 @@ func step(_dt: float, _ppos: Vector2) -> void:
 		"fire":
 			rot_prev = rot
 			rot = spin * t
-			if t >= ACTIVE:
+			if t >= active:
 				boss.finish_attack()
+
+
+## 모으는 동안 발사점이 달아오른다 (하위 모듈이 바꾼다)
+func _wind_glow(k: float) -> void:
+	for i in n:
+		boss.set_glow(boss.node_toward(_angle(i)), k)
+
+
+## 줄기가 시작되는 반지름 (그 안쪽은 판정 없음)
+func _inner() -> float:
+	return boss.BARRIER_R
 
 
 func _angle(i: int, r := INF) -> float:
@@ -77,7 +88,7 @@ func _beam_at(p: Vector2, r: float) -> int:
 		return -1
 	var rel := p - origin
 	var dist := rel.length()
-	if dist < boss.BARRIER_R - r:
+	if dist < _inner() - r:
 		return -1
 	var w := (HALF + r) / maxf(dist, 1.0)
 	var a := rel.angle()
@@ -110,7 +121,7 @@ func mark_dodged(p: Vector2, r: float) -> void:
 
 func draw() -> void:
 	var c: CanvasItem = boss
-	var br: float = boss.BARRIER_R
+	var br: float = _inner()
 	if phase == "wind":
 		var kk := clampf(t / WIND, 0.0, 1.0)
 		var blink := 0.6 + 0.4 * sin(boss.t * 22.0)
@@ -118,7 +129,7 @@ func draw() -> void:
 			var a := _angle(i)
 			c.draw_line(origin + Vector2.from_angle(a) * br, end_at(a), Color(C_UNPARRY_CORE, (0.15 + 0.35 * kk) * blink), 2.0 + 2.0 * kk)
 			c.draw_line(origin + Vector2.from_angle(a) * br, end_at(a), Color(C_UNPARRY, 0.08 * kk), 90.0 * kk)
-			MeleeWarn.arc_trace(c, origin, TRACE_R, a, a + spin * ACTIVE, t / MeleeWarn.TRACE_TIME)   # 회전 방향: 줄기가 쓸고 갈 길이 한 번 그어지고 끝에 화살표
+			MeleeWarn.arc_trace(c, origin, TRACE_R, a, a + spin * active, t / MeleeWarn.TRACE_TIME)   # 회전 방향: 줄기가 쓸고 갈 길이 한 번 그어지고 끝에 화살표
 		return
 	var fl := 0.9 + 0.2 * sin(boss.t * 36.0)
 	for i in n:

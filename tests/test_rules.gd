@@ -2057,6 +2057,23 @@ func _v047_test() -> void:
 		if e["type"] == b.Ev.CLAW_HIT and e["kill"]:
 			kill = true
 	_check("core phase: a claw driven into the bare eye destroys it", kill)
+	b.atk = null
+	b.lingering.clear()
+	var es = b.EyeSweep.new(b.CORE_POS)
+	b.start_attack(es)
+	var ring_seen := false
+	var max_rot := 0.0
+	for k in int((es.WIND + es.SWEEP * 0.7) / DT):
+		b.step(DT, Vector2(0, -700))
+		max_rot = maxf(max_rot, absf(es.rot))
+		for m in b.lingering:
+			if m.kind == "rings":
+				ring_seen = true
+	var bp: Vector2 = b.CORE_POS + Vector2.from_angle(es._angle(0)) * 600.0
+	_check("eye sweep: one beam from the pupil turns around the arena and a ring goes out on the way (rot %.2f, ring %s)" % [max_rot, ring_seen],
+		ring_seen and max_rot > PI and es.beam_hit(bp, 10.0) != Vector2.ZERO)
+	b.atk = null
+	b.lingering.clear()
 	b.events.clear()
 	b.claws.clear()
 

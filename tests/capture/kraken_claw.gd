@@ -13,6 +13,8 @@ var plan := [
 	["eye_close", "eye", 30],
 	["pound_raise", "pound", 70],
 	["claw_pop", "pop", 40],
+	["beam_wind", "beam", 50],
+	["beam_sweep", "beam", 260],
 ]
 var idx := 0
 var local := 0
@@ -58,6 +60,8 @@ func _process(_d: float) -> bool:
 			"pound":
 				var rd: Array[int] = [0, 1, 2, 3, 4, 5]
 				b.start_attack(b._pound(rd, Vector2(300, -1000)))
+			"beam":
+				b.start_attack(b.EyeSweep.new(b.CORE_POS))
 			"pop":
 				b.damage_part(3, 16)
 			"fall", "fly":
@@ -72,8 +76,8 @@ func _process(_d: float) -> bool:
 	p.vel = Vector2.ZERO
 	p.position = Vector2(300, -1000)
 	b.next_t = 999.0
-	main.cam.position = b.CORE_POS if pl[1] == "eye" else Vector2(0, -1500)
-	var z := 1.0 if pl[1] == "eye" else 0.42
+	main.cam.position = b.CORE_POS if pl[1] == "eye" else Vector2(0, -1300 if pl[1] == "beam" else -1500)
+	var z := 1.0 if pl[1] == "eye" else (0.3 if pl[1] == "beam" else 0.42)
 	main.cam.zoom = Vector2(z, z)
 	main.hud.clear_banner()
 	if local == int(pl[2]):

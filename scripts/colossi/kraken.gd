@@ -15,7 +15,7 @@ extends "res://scripts/colossus_base.gd"
 ##   탄막마다 저격 유도탄(시그니처)이 한 발씩 섞여 날아온다 (따로 쏘지 않는다).
 ## 몸은 DROP 만큼 낮게 걸려 있다 (코어 작게, 튕겨 올라가도 천장에 붙지 않게).
 ## 공격: 몸통 내려치기 · 압착(촉수 둘) · 추적 감아치기 · 휩쓸기 · 조이기(촉수 2개 이상 잃은 뒤) · 먹물 포(부채 탄막, 가운데 주탄)
-##       · 방전 그물(패리 불가, 드물게) · 연속 내려치기(combo.gd). 패턴 통합: 내려치기·소용돌이·행진 → 연속 내려치기, 휩쓸기·난타 → 휩쓸기,
+##       · 눈알 쓸기(패리 불가, 드물게: 외눈 광선이 한 바퀴 + 동심원 하나, v0.66 — 방전 그물·눈알 동심원을 대신) · 연속 내려치기(combo.gd). 패턴 통합: 내려치기·소용돌이·행진 → 연속 내려치기, 휩쓸기·난타 → 휩쓸기,
 ##       압착·조이기 → 조이기, 먹물 부채·회전 → 먹물, 촉수 끝·양쪽 줄기 → 촉수 끝 물결
 ## 근접 패턴의 첫 타는 예고가 느리다 (tentacle.gd LEAD_K).
 ## 촉수 모양은 척추(마디 N 개)로 그린다: 강철 마디판 + 관절 링 + 유압 피스톤 + 집게 끝. 쉬는 촉수는 크라켄이, 공격 중인 촉수는 그 공격 모듈(attacks/tentacle.gd)이 움직인다.
@@ -31,6 +31,7 @@ const Net := preload("res://scripts/attacks/net.gd")
 const Fan := preload("res://scripts/attacks/fan.gd")
 const Barrage := preload("res://scripts/attacks/barrage.gd")
 const Rings := preload("res://scripts/attacks/rings.gd")
+const EyeSweep := preload("res://scripts/attacks/eye_sweep.gd")
 
 # ── 구조 ───────────────────────────────────────────────
 const DROP := 640.0                          # 몸을 천장에서 이만큼 내려 걸었다 (튕겨 올라가도 천장에 붙지 않게)
@@ -42,8 +43,11 @@ const CORE_FLOOR := 100                      # 방어막이 남은 채 코어가
 const SHIELD_R := 205.0                      # 방어막 반지름
 const SHIELD_SHATTER := 1.6                  # 방어막이 깨지는 연출 시간 (페이즈 2)
 const CORE_R := 46.0
-const EYE_RX := 150.0                        # 눈알(코어 껍질) 반지름 (가로·세로)
-const EYE_RY := 112.0
+const EYE_RX := 150.0                        # 눈알(코어 껍질) 반지름 (가로·세로): 완전히 둥근 기계 눈
+const EYE_RY := 150.0
+const EYE_LOOK := 28.0                       # 광학부가 굴러가는 최대 거리 (광선은 이만큼 떨어진 동공 중심에서 나온다)
+const PANELS := 6                            # 방어막 판 수 (집게 하나에 판 둘이 떨어져 나간다)
+const PANEL_SPIN := 0.15
 const SIPHON := Vector2(0, -2120.0 + DROP)            # 먹물 포 (외투막 아래 분사구)
 
 # ── 촉수 ───────────────────────────────────────────────
@@ -82,7 +86,7 @@ const ROTATION := 2                          # 탄막 → 근접 을 되풀이�
 const CLEAR_WAIT := 2.5                      # 그래도 이 시간이 지나면 시작한다 (탄이 오래 남아 있을 때)
 const CROWD_R := 1300.0                      # 플레이어 둘레 이 안에
 const CROWD_CAP := 30                        # 적 탄이 이보다 많으면 다음 공격을 미룬다 (화면을 꽉 채우지 않는다)
-const SPECIAL_EVERY := 4                    # 방전 그물(패리 불가)은 공격 이만큼마다 (드물게)
+const SPECIAL_EVERY := 4                    # 눈알 쓸기(패리 불가)는 공격 이만큼마다 (드물게)
 const COMBO_HITS := 3                        # 연타 타수
 const SWEEPERS := [4, 5]                     # 휩쓸기·난타는 아래로 늘어진 두 촉수만, 항상 바깥 → 안쪽으로 (방향을 가늠하기 쉽게)
 
@@ -117,12 +121,14 @@ var shield_flash := 0.0                      # 방어막에 무언가 부딪힘 
 var shield_hit_n := Vector2.UP               # 부딪힌 쪽
 var cracks: Array[PackedVector2Array] = []   # 코어 균열선 (피해가 쌓일수록 앞에서부터 더 많이 그린다)
 var shield_hp := SHIELD_HP
-var shield_cracks: Array[PackedVector2Array] = []   # 방어막 금 (닳을수록 더 많이)
+var panel_gone: Array[bool] = [false, false, false, false, false, false]   # 떨어져 나간 방어막 판
 var pierce := 0.0                            # 방금 방어막을 뚫은 일격 연출 (1 → 0)
 var pierce_k := 0.0                          # 그 일격이 뚫고 들어간 비율 (얼마나 깊이 들어갔나)
 var pierce_n := Vector2.DOWN
 var claws: Array[Dictionary] = []            # 잘린 집게 {pos, vel, rot, rotv, fly}
-var rot_k := 0                               # 탄막·탄막·근접 순서
+var rot_k := 0                               # 탄막·근접 순서
+var eye_look := Vector2.ZERO                 # 광선을 쏘는 동안 광학부가 바라보는 곳 (eye_look_t 가 최근일 때만)
+var eye_look_t := -99.0
 
 
 func _init() -> void:
@@ -150,16 +156,6 @@ func _ready() -> void:
 			p = Vector2(clampf(p.x, -EYE_RX * 0.9, EYE_RX * 0.9), clampf(p.y, -EYE_RY * 0.88, EYE_RY * 0.88))
 			line.append(p)
 		cracks.append(line)
-	for k in 9:                                          # 방어막 금: 가장자리에서 안쪽으로
-		var a := k * TAU / 9.0 + rng.randf_range(-0.2, 0.2)
-		var p := Vector2.from_angle(a) * SHIELD_R
-		var line := PackedVector2Array([p])
-		var d := -Vector2.from_angle(a)
-		for s in 3:
-			d = d.rotated(rng.randf_range(-0.7, 0.7))
-			p += d * rng.randf_range(30.0, 50.0)
-			line.append(p)
-		shield_cracks.append(line)
 	reset()
 
 
@@ -190,6 +186,8 @@ func reset() -> void:
 	zaps.clear()
 	shield_flash = 0.0
 	shield_hp = SHIELD_HP
+	for j in PANELS:
+		panel_gone[j] = false
 	pierce = 0.0
 	claws.clear()
 	rot_k = 0
@@ -268,6 +266,29 @@ func _wear_shield(v: float) -> void:
 	shield_hp = maxf(0.0, shield_hp - v)
 	if phase == 1 and shield_hp <= 0.0:
 		_shatter()
+
+
+## 남은 내구도만큼만 판을 남긴다: 맞은 쪽에 가까운 판부터 떨어져 나간다 (조각이 튄다)
+func _drop_panels(hit_a: float) -> void:
+	var keep := int(ceil(shield_frac() * PANELS - 0.01))
+	var left := 0
+	for j in PANELS:
+		if not panel_gone[j]:
+			left += 1
+	while left > keep:
+		var best := -1
+		for j in PANELS:
+			if not panel_gone[j] and (best < 0 or absf(angle_difference(panel_angle(j), hit_a)) < absf(angle_difference(panel_angle(best), hit_a))):
+				best = j
+		panel_gone[best] = true
+		left -= 1
+		var pa := panel_angle(best)
+		for k in 4:
+			_spawn_shard(CORE_POS + Vector2.from_angle(pa + randf_range(-0.4, 0.4)) * SHIELD_R, randf_range(16.0, 26.0), Vector2.from_angle(pa) * randf_range(500.0, 800.0) + Vector2(0, -250))
+
+
+func panel_angle(j: int) -> float:
+	return j * TAU / PANELS + t * PANEL_SPIN
 
 
 ## 방어막이 산산조각 난다 → 페이즈 2(연출) → 3(코어 노출)
@@ -574,6 +595,7 @@ func _claw_impact(at: Vector2, dir: Vector2) -> void:
 			_spawn_shard(at, randf_range(14.0, 24.0), (-dir).rotated(randf_range(-0.8, 0.8)) * randf_range(400.0, 700.0) + Vector2(0, -200))
 		emit(Ev.CLAW_HIT, at, {"kill": false})
 		_wear_shield(CLAW_SHIELD)
+		_drop_panels((-dir).angle())
 		return
 	emit(Ev.CLAW_HIT, at, {"kill": true})
 
@@ -635,14 +657,12 @@ func _choose(ppos: Vector2) -> void:
 		return
 	since_special += 1
 	var kind := ""
-	if since_special >= SPECIAL_EVERY and randf() < 0.55 and rot_k % ROTATION != ROTATION - 1:    # 드물게: 방전 그물 (패리 불가, 탄막 차례 하나를 대신)
+	if since_special >= SPECIAL_EVERY and randf() < 0.55 and rot_k % ROTATION != ROTATION - 1:    # 드물게: 눈알 쓸기 (패리 불가, 탄막 차례 하나를 대신)
 		since_special = 0
 		rot_k += 1
-		kind = "net"
+		kind = "eye_beam"
 	else:
 		var fire: Array[String] = ["ink", "tips", "ring"]     # 탄막마다 저격 유도탄이 함께 날아온다 (_start)
-		if hard:
-			fire.append("eye")                               # 코어 단계: 눈알 동심원 (패리 불가, 탄막 자리를 다 차지하지 않게 가끔)
 		var melee: Array[String] = []
 		for m in ["pound", "pound", "chase", "sweep", "constrict", "constrict"]:   # 시그니처: 연속 내려치기 · 조이기
 			if _melee_ok(m, ready):
@@ -657,7 +677,7 @@ func _choose(ppos: Vector2) -> void:
 		for k in pool:
 			w[k] = float(w.get(k, 0.0)) + _zone_w(k, ppos)
 		kind = weighted_pick(w, last)
-	if not RANGED_KINDS.has(kind) and kind != "eye" and not _shots_clear(ppos):   # 근접·그물: 날아오는 탄이 걷힐 때까지 기다린다 (요격하려면 멈춰야 하므로)
+	if not RANGED_KINDS.has(kind) and kind != "eye" and kind != "eye_beam" and not _shots_clear(ppos):   # 근접·그물: 날아오는 탄이 걷힐 때까지 기다린다 (요격하려면 멈춰야 하므로)
 		want = kind
 		want_t = 0.0
 		next_t = 0.2
@@ -704,6 +724,8 @@ func _start(kind: String, ready: Array[int], ppos: Vector2, hard: bool) -> void:
 	match kind:
 		"net":
 			_pick("net", Net.new(randf() < 0.5))
+		"eye_beam":                                          # 패리 불가: 외눈 광선이 한 바퀴 돌며 동심원 하나
+			_pick("eye_beam", EyeSweep.new(CORE_POS))
 		"pound":
 			_pick("pound", _pound(ready, ppos))
 		"chase":
@@ -1049,7 +1071,6 @@ func _draw_core() -> void:
 			pts.append(hc + q)
 		draw_polyline(pts, Color(0.05, 0.02, 0.02), 7.0)
 		draw_polyline(pts, Color(1.0, 0.55, 0.22, 0.55 + 0.4 * beat), 3.0)
-	_draw_lids(hc)
 	var smoke := int(f * 6.0)
 	for k in smoke:
 		var life := fmod(t * 0.5 + k * 0.17, 1.0)
@@ -1070,84 +1091,33 @@ func _draw_core() -> void:
 		draw_arc(hc, EYE_RX + 40.0, 0.0, TAU, 48, Color(1.0, 0.85, 0.55, focus_glow * (0.6 if in_reach else 0.25)), 3.0)
 
 
-## 타원 위의 점 (rx, ry 반지름, 각도 a)
-static func _ell(c: Vector2, rx: float, ry: float, a: float) -> Vector2:
-	return c + Vector2(cos(a) * rx, sin(a) * ry)
-
-
-## 뱀눈 (그림만, 판정은 core.shell_poly 그대로): 핏빛 테두리 → 호박빛 안쪽의 홍채, 그 위를 덮은 기계 조리개 날,
-## 렌즈 고리와 눈금, 세로로 찢어진 동공이 플레이어를 따라간다 (동심원을 모을 때·맞을 때 벌어진다). 동공 깊은 곳에 코어 불씨
+## 둥근 기계 눈 (그림만, 판정은 core.shell_poly): 강철 구체 하우징(이음매·볼트·윗쪽 반사광) 한가운데의 광학부 —
+## 어두운 베젤 + 조각난 발광 홍채 고리 + 검은 렌즈 + 하얗게 달아오른 동공. 광학부가 플레이어 쪽으로 굴러간다. 동심원·광선을 모을 때는 보라로 달아오른다
 func _draw_iris(hc: Vector2, f: float, beat: float, flick: float) -> void:
-	var rx := EYE_RX
-	var ry := EYE_RY
-	var hot := Color(1.0, 0.72, 0.16).lerp(Color(0.85, 0.35, 0.1), f)
-	for k in 6:                                                   # 홍채: 바깥 핏빛 → 안쪽 호박빛
-		var s := 1.0 - k * 0.15
-		var ring := PackedVector2Array()
-		for q in 24:
-			ring.append(_ell(hc, rx * s, ry * s, q * TAU / 24.0))
-		draw_colored_polygon(ring, Color(0.32, 0.03, 0.02).lerp(hot, k / 5.0).lerp(Color.WHITE, core.flash * 0.3))
-	var look := _ppos - hc                                        # 동공이 플레이어를 따라간다
-	var pc := hc + Vector2(clampf(look.x * 0.03, -46.0, 46.0), clampf(look.y * 0.02, -18.0, 18.0))
-	for k in 18:                                                  # 기계 조리개 날 (천천히 돈다)
-		var a := k * TAU / 18.0 + t * 0.08
-		draw_line(pc + Vector2.from_angle(a) * 26.0, _ell(hc, rx * 0.95, ry * 0.95, a + 0.32), Color(0.28, 0.04, 0.02, 0.6), 3.0)
-	var lens := PackedVector2Array()                              # 렌즈 고리 + 눈금 (초점을 맞추듯 돈다)
-	for q in 41:
-		lens.append(_ell(pc, rx * 0.5, ry * 0.62, q * TAU / 40.0))
-	draw_polyline(lens, Color(1.0, 0.85, 0.5, 0.35 * flick), 2.0)
+	var R := EYE_RX
+	draw_circle(hc, R, Color(0.2, 0.23, 0.26).lerp(Color(0.12, 0.1, 0.1), f))             # 하우징
+	draw_circle(hc + Vector2(R * 0.18, R * 0.22), R * 0.86, Color(0.13, 0.15, 0.17).lerp(Color(0.08, 0.07, 0.07), f))   # 아래쪽 그늘
+	draw_arc(hc, R - 6.0, PI * 1.05, PI * 1.6, 16, Color(0.75, 0.82, 0.88, 0.5), 5.0)    # 윗쪽 반사광
+	draw_arc(hc, R, 0.0, TAU, 48, Color(C_RIM, 0.8), 3.0)
+	for s2 in [-1.0, 1.0]:                                                        # 위아래 이음매 + 볼트
+		draw_arc(hc, R * 0.82, PI * 0.5 + s2 * PI * 0.5 - 0.9, PI * 0.5 + s2 * PI * 0.5 + 0.9, 16, Color(0.05, 0.06, 0.07), 3.0)
 	for k in 4:
-		var a := k * TAU / 4.0 - t * 0.6
-		draw_line(_ell(pc, rx * 0.5, ry * 0.62, a), _ell(pc, rx * 0.6, ry * 0.74, a), Color(1.0, 0.9, 0.6, 0.6 * flick), 3.0)
-	var w: float = 10.0 + 22.0 * eye_charge + 8.0 * core.flash          # 세로 슬릿 동공 (벌어진다)
-	var h := ry * 0.95
-	var slit := PackedVector2Array()
-	for q in 13:
-		var y := lerpf(-h, h, q / 12.0)
-		slit.append(pc + Vector2(w * (1.0 - pow(y / h, 2.0)), y))
-	for q in range(11, 0, -1):
-		var y := lerpf(-h, h, q / 12.0)
-		slit.append(pc + Vector2(-w * (1.0 - pow(y / h, 2.0)), y))
-	draw_colored_polygon(slit, Color(0.02, 0.0, 0.0))
-	var so := slit.duplicate()
-	so.append(slit[0])
-	draw_polyline(so, Color(1.0, 0.45, 0.1, (0.55 + 0.3 * beat) * flick), 2.5)
-	draw_circle(pc, 5.0 + 3.0 * beat, Color(C_HEART, flick).lerp(Color.WHITE, core.flash * 0.7))   # 동공 깊은 곳의 코어 불씨
-	draw_circle(hc + Vector2(-rx * 0.42, -ry * 0.2), 9.0, Color(1.0, 0.95, 0.85, 0.75 * flick))      # 번들거림
+		draw_circle(hc + Vector2.from_angle(PI * 0.25 + k * PI * 0.5) * R * 0.86, 5.0, Color(C_RIM, 0.8))
+	var look := (eye_look if t - eye_look_t < 0.1 else _ppos) - hc               # 광학부가 플레이어 쪽으로 굴러간다 (광선을 쏠 때는 광선 쪽으로)
+	var oc := hc + look.normalized() * (EYE_LOOK if t - eye_look_t < 0.1 else minf(look.length() * 0.03, EYE_LOOK))
+	var hot := Color(C_HEART).lerp(Color(1.0, 0.62, 0.86), eye_charge).lerp(Color.WHITE, core.flash * 0.5)
+	draw_circle(oc, 98.0, Color(0.04, 0.045, 0.05))                              # 베젤
+	draw_arc(oc, 98.0, 0.0, TAU, 40, Color(C_RIM, 0.6), 3.0)
+	_soft_glow(oc, 120.0, hot, (0.22 + 0.12 * beat) * flick)
+	for k in 8:                                                                   # 조각난 홍채 고리 (조리개 판 여덟)
+		var a := k * TAU / 8.0 + t * 0.3
+		draw_arc(oc, 68.0, a + 0.06, a + TAU / 8.0 - 0.06, 6, Color(hot, (0.75 + 0.25 * beat) * flick), 22.0)
+	draw_circle(oc, 46.0, Color(0.08, 0.02, 0.02))                                # 렌즈
+	draw_circle(oc, (15.0 + 10.0 * eye_charge + 4.0 * beat), Color(1.0, 0.92, 0.8, flick))   # 동공
+	draw_circle(oc + Vector2(-22, -22), 7.0, Color(1, 1, 1, 0.55))                # 렌즈 반짝임
 
 
-## 강철 눈꺼풀: 위는 무겁게 내리깔고(사나운 눈매) 아래는 살짝 올라와 눈을 아몬드 모양으로 가른다.
-## 판 이음매·리벳 + 눈꺼풀 끝에 달아오른 테두리. 동심원을 모을 때는 크게 뜬다
-func _draw_lids(hc: Vector2) -> void:
-	var rx := EYE_RX * 1.16
-	var ry := EYE_RY * 1.16
-	var up_open := 0.5 + 0.42 * eye_charge                        # 가운데에서 위로 열린 정도 (ry 비율)
-	var lo_open := 0.62 + 0.3 * eye_charge
-	for side in [-1.0, 1.0]:                                      # -1 = 위, 1 = 아래
-		var open: float = up_open if side < 0.0 else lo_open
-		var edge := PackedVector2Array()
-		for q in 17:
-			var x := lerpf(-rx, rx, q / 16.0)
-			var u := x / rx
-			var sag := 0.22 * (1.0 - absf(u)) if side < 0.0 else 0.0  # 위 눈꺼풀은 가운데가 살짝 처져 노려본다
-			edge.append(hc + Vector2(x, side * ry * (open * (1.0 - u * u) - sag)))
-		var lid := edge.duplicate()
-		for q in 17:                                              # 눈구멍 테두리를 따라 되돌아간다
-			lid.append(_ell(hc, rx, ry, side * q * PI / 16.0))
-		draw_colored_polygon(lid, C_BODY)
-		for k in [-0.5, 0.0, 0.5]:                                # 판 이음매
-			var e: Vector2 = edge[int(round((k + 1.0) * 8.0))]
-			draw_line(e, Vector2(e.x, hc.y + side * ry * 0.98), C_BODY_DARK, 4.0)
-			draw_circle(e + Vector2(0, side * 16.0), 4.0, Color(C_RIM, 0.7))
-		draw_polyline(edge, C_BODY_DARK, 9.0)
-		draw_polyline(edge, Color(1.0, 0.4, 0.12, 0.65), 3.0)       # 눈꺼풀 끝의 달아오른 테두리
-		var shine := PackedVector2Array()
-		for e in edge:
-			shine.append(e + Vector2(0, side * 9.0))
-		draw_polyline(shine, Color(C_RIM, 0.45), 2.0)
-
-
-## 방어막: 페이즈 1 = 육각 무늬가 흐르는 청록 막 (부딪힌 쪽이 번쩍), 페이즈 2 = 금이 가며 사라진다 (파편은 damage_part 가 뿌린다)
+## 방어막: 페이즈 1 = 천천히 도는 청록 판 여섯 장 (집게에 맞은 쪽부터 떨어져 나간다, 부딪힌 쪽이 번쩍), 페이즈 2 = 금이 가며 사라진다 (파편은 damage_part 가 뿌린다)
 func _draw_shield() -> void:
 	if dead or phase == 3:
 		return
@@ -1156,16 +1126,22 @@ func _draw_shield() -> void:
 		return
 	var c := Color(0.45, 0.95, 1.0)
 	var hc := CORE_POS
-	var sf := shield_frac() if phase == 1 else 0.0           # 닳을수록 옅고 얇아지고 금이 는다 = 뚫고 들어가기 쉽다
-	draw_circle(hc, SHIELD_R, Color(c, (0.04 + 0.16 * sf + 0.12 * shield_flash) * k))
-	draw_arc(hc, SHIELD_R, 0.0, TAU, 64, Color(c, (0.3 + 0.35 * sf + 0.4 * shield_flash) * k), 2.0 + 6.0 * sf)
-	draw_arc(hc, SHIELD_R - 10.0, 0.0, TAU, 64, Color(c, 0.18 * sf * k), 2.0)
-	var nc := int(round((1.0 - sf) * shield_cracks.size()))
-	for j in nc:
-		var pts := PackedVector2Array()
-		for q in shield_cracks[j]:
-			pts.append(hc + q)
-		draw_polyline(pts, Color(1, 1, 1, (0.5 + 0.3 * shield_flash) * k), 2.5)
+	var sf := shield_frac() if phase == 1 else 0.0           # 판이 떨어져 나갈수록 안쪽 막도 옅어진다 = 뚫고 들어가기 쉽다
+	draw_circle(hc, SHIELD_R - 14.0, Color(c, (0.03 + 0.09 * sf + 0.1 * shield_flash) * k))
+	var half := PI / PANELS - 0.07
+	for j in PANELS:                                          # 판 여섯 장이 천천히 돈다 (떨어져 나간 자리는 비어 있다)
+		var a := panel_angle(j)
+		if panel_gone[j]:
+			draw_arc(hc, SHIELD_R - 4.0, a - half, a + half, 10, Color(c, 0.12 * k), 2.0)
+			continue
+		var poly := PackedVector2Array()
+		for q in 9:
+			poly.append(hc + Vector2.from_angle(a - half + 2.0 * half * q / 8.0) * SHIELD_R)
+		for q in 9:
+			poly.append(hc + Vector2.from_angle(a + half - 2.0 * half * q / 8.0) * (SHIELD_R - 20.0))
+		draw_colored_polygon(poly, Color(c, (0.22 + 0.2 * shield_flash) * k))
+		draw_arc(hc, SHIELD_R, a - half, a + half, 10, Color(c, (0.8 + 0.2 * shield_flash) * k), 4.0)
+		draw_arc(hc, SHIELD_R - 20.0, a - half, a + half, 10, Color(c, 0.35 * k), 2.0)
 	if pierce > 0.0 and phase == 1:                           # 방금 뚫은 일격: 방어막이 약할수록 창이 코어 깊이까지 들어간다
 		var from := hc + pierce_n * (SHIELD_R + 30.0)
 		var depth := lerpf(0.25, 1.0, (pierce_k - SHIELD_PASS_MIN) / (1.0 - SHIELD_PASS_MIN))
@@ -1173,9 +1149,6 @@ func _draw_shield() -> void:
 		draw_line(from, to, Color(1.0, 0.85, 0.5, 0.5 * pierce), 10.0 + 22.0 * pierce_k)
 		draw_line(from, to, Color(1, 1, 1, pierce), 3.0 + 6.0 * pierce_k)
 		draw_circle(to, (18.0 + 60.0 * pierce_k) * pierce, Color(1.0, 0.8, 0.45, 0.6 * pierce))
-	for j in 6:                                               # 막 위를 흐르는 호
-		var a0 := t * 0.4 + j * TAU / 6.0
-		draw_arc(hc, SHIELD_R - 4.0, a0, a0 + 0.35, 8, Color(1, 1, 1, 0.35 * k), 3.0)
 	if shield_flash > 0.0:                                    # 부딪힌 쪽 물결
 		var a := shield_hit_n.angle()
 		draw_arc(hc, SHIELD_R + 8.0, a - 0.6, a + 0.6, 16, Color(1, 1, 1, 0.8 * shield_flash * k), 6.0)
