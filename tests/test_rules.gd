@@ -1619,24 +1619,57 @@ func _kraken_shield_test() -> void:
 			bounced = true
 	_check("charge into the shield: blocked, no core damage, bounced out (core %d)" % b.core.armor_hp, b.core.armor_hp == a0 and bounced)
 	main.on_strike(sh, 12, p.position, Vector2.UP, "power", false, false)
-	_check("reverse drive pierces the shield (core %d -> %d)" % [a0, b.core.armor_hp], b.core.armor_hp == a0 - 12)
+	_check("reverse drive pierces a full shield only partly and wears it (core %d -> %d, shield %.1f)" % [a0, b.core.armor_hp, b.shield_hp],
+		b.core.armor_hp == a0 - int(round(12 * b.SHIELD_PASS_MIN)) and absf(b.shield_hp - (b.SHIELD_HP - 12 * b.SHIELD_WEAR)) < 0.01)
+	b.shield_hp = b.SHIELD_HP * 0.2
+	var a1: int = b.core.armor_hp
+	b.damage(sh, 12)
+	_check("a worn shield lets more through (pass %.2f, core %d -> %d)" % [b.shield_pass(), a1, b.core.armor_hp], a1 - b.core.armor_hp > int(round(12 * b.SHIELD_PASS_MIN)) and b.pierce > 0.0)
 	for k in 30:
-		b.damage(sh, 16)
-	_check("shield breaks when the core is worn down to the floor (%d, phase %d)" % [b.core.armor_hp, b.phase], b.core.armor_hp == b.SHIELD_FLOOR and not b.core.broken and b.phase == 2)
+		if b.phase == 1:
+			b.damage(sh, 16)
+	_check("drives alone wear the shield away (core %d, phase %d)" % [b.core.armor_hp, b.phase], b.core.armor_hp >= b.CORE_FLOOR and not b.core.broken and b.phase == 2)
 	main.debug.god = false
 	main.reset_run()
 	b.next_t = 99.0
 	var c1: int = b.core.armor_hp
 	b.damage_part(0, 8)
-	_check("one intercept cuts a tentacle and hurts the core (+bonus) (%d -> %d)" % [c1, b.core.armor_hp], not b.part_alive(0) and b.core.armor_hp == c1 - 8 - b.CUT_BONUS and b.phase == 1)
+	_check("one intercept wounds a tentacle and hurts the core through the shield (%d -> %d)" % [c1, b.core.armor_hp], b.part_alive(0) and b.part_hp[0] == b.PART_HP - 8 and b.core.armor_hp < c1 and b.claws.is_empty())
+	b.damage_part(0, 8)
+	_check("the second intercept cuts it and drops its claw (claws %d)" % b.claws.size(), not b.part_alive(0) and b.claws.size() == 1 and b.phase == 1)
+	b.damage_part(1, 16)
+	_check("a strong intercept cuts at once", not b.part_alive(1) and b.claws.size() == 2)
+	b.claws.pop_back()
+	var y0: float = b.claws[0]["pos"].y
+	for k in 60:
+		b.next_t = 99.0
+		b.step(DT, Vector2(0, -700))
+	var vy: float = b.claws[0]["vel"].y
+	_check("the claw falls slowly (y %.0f -> %.0f, vy %.0f)" % [y0, b.claws[0]["pos"].y, vy], vy > 0.0 and vy <= b.CLAW_FALL + 0.01)
+	var cp: Vector2 = b.claws[0]["pos"]
+	_check("striking the falling claw finds it", b.claw_at(cp + Vector2(60, 0), 20.0) == 0 and b.claw_at(cp + Vector2(400, 0), 20.0) == -1)
+	var s0: float = b.shield_hp
+	b.events.clear()
+	b.launch_claw(0)
+	for k in 90:
+		b.next_t = 99.0
+		b.step(DT, Vector2(0, -700))
+	var hit_ev := false
+	for e in b.events:
+		if e["type"] == b.Ev.CLAW_HIT and not e["kill"]:
+			hit_ev = true
+	_check("a struck claw flies into the eye and breaks off a big piece of the shield (%.0f -> %.0f)" % [s0, b.shield_hp], b.claws.is_empty() and hit_ev and absf(s0 - b.shield_hp - b.CLAW_SHIELD) < 0.01)
+	b.events.clear()
 	for k in int((b.REGROW_DELAY + b.REGROW + 0.3) / DT):
 		b.next_t = 99.0
 		b.step(DT, Vector2(0, -700))
 	_check("a cut tentacle slowly regrows (grown %.2f)" % b.grown[0], b.part_alive(0) and b.tent_ready(0))
-	var n0: int = b.shards.size()
-	for i in 6:
-		b.damage_part(i, 1)
-	_check("all six cut at once -> shield shatters (phase %d, shards +%d)" % [b.phase, b.shards.size() - n0], b.phase == 2 and b.shards.size() - n0 >= 10)
+	b.claws.clear()
+	b.claws.append({"pos": Vector2(300, -900), "vel": Vector2.ZERO, "rot": 0.0, "rotv": 0.0, "fly": false})
+	for k in int(1000.0 / b.CLAW_FALL / DT) + 60:
+		b.step(DT, Vector2(0, -700))
+	_check("an unstruck claw sinks into the lava", b.claws.is_empty())
+	b.events.clear()
 
 	# 첫 타 여유: 단독 내려치기는 판정까지 LEAD_K 배, 연타의 두 번째부터는 원래 박자
 	main.reset_run()
@@ -1754,8 +1787,8 @@ func _v047_test() -> void:
 	for k in 6:
 		main.hitstop = 0
 		main._physics_process(DT)
-	_check("hammer intercept: the tentacle is smashed at once (hp %d -> %d, %d pieces)" % [hp1, b.part_hp[1], b.debris.size()], b.part_hp[1] == 0 and b.atk == null and b.debris.size() == 3)
-	_check("intercept also hurts the shielded core (+cut bonus), with a zap to it (core %d -> %d, zaps %d)" % [core1, b.core.armor_hp, b.zaps.size()], b.core.armor_hp == core1 - 8 - b.CUT_BONUS and b.zaps.size() == 1)
+	_check("hammer intercept: the tentacle is wounded, not yet cut (hp %d -> %d, %d pieces)" % [hp1, b.part_hp[1], b.debris.size()], b.part_hp[1] == hp1 - 8 and b.debris.is_empty())
+	_check("intercept also hurts the shielded core, with a zap to it (core %d -> %d, zaps %d)" % [core1, b.core.armor_hp, b.zaps.size()], b.core.armor_hp == core1 - int(round(8 * b.SHIELD_PASS_MIN)) and b.zaps.size() == 1)
 	_check("intercept gives a quick charge (need %.2f)" % p.charge_need(), p.quick_t > 0.0 and absf(p.charge_need() - p.stats.charge_time * 0.5) < 0.001)
 
 	# 내려치기 판정: 막대가 지나가는 곳은 맞고(근접 = 회피 불가), 막대 끝 밖은 안전
@@ -1929,7 +1962,7 @@ func _v047_test() -> void:
 	p.dash_t = 0.1
 	p.vel = Vector2.LEFT * 3000.0
 	main._clash(hb0, on_ring)
-	_check("constrict intercept: that tentacle is cut at once, ring released (hp %d->%d)" % [hp0, b.part_hp[0]], b.part_hp[0] == 0 and b.atk == null)
+	_check("constrict intercept: that tentacle is wounded, ring released (hp %d->%d)" % [hp0, b.part_hp[0]], b.part_hp[0] == hp0 - 8 and (b.atk == null or not b.atk._harmful()))
 
 	# 방전 그물: 패리 불가, 세로 띠가 좌→우 / 우→좌로 경기장을 훑는다 (아래→위는 없다)
 	for to_right in [true, false]:
@@ -1971,11 +2004,13 @@ func _v047_test() -> void:
 	main.reset_run()
 	b.next_t = 99.0
 	for i in 6:
-		b.damage_part(i, 99)
-	_check("all drive units -> mantle opens", b.phase == 2)
+		b._cut(i)
+	b._wear_shield(b.SHIELD_HP)
+	_check("shield worn away -> mantle opens", b.phase == 2)
 	for k in int((b.REGROW_DELAY + b.REGROW + 0.3) / DT):
 		b.next_t = 99.0
 		b.step(DT, Vector2(0, -700))
+	b.claws.clear()
 	_check("kraken core phase, cut tentacles regrown (phase %d, busy %s)" % [b.phase, str(b.busy)], b.phase == 3 and b.tent_ready(2) and b.tent_ready(3))
 	b.next_t = 99.0
 	b.atk = null
@@ -1999,7 +2034,20 @@ func _v047_test() -> void:
 	_check("vortex finishes with at most 2 tentacles telegraphing at once (max %d)" % most, b.atk == null and most >= 1 and most <= 2)
 	_check("core phase: the core is the target", not b.strike_hit(b.CORE_POS, 10.0).is_empty() and b.strike_hit(b.CORE_POS, 10.0)["kind"] == "core")
 	var ca: int = b.core.armor_hp
-	_check("core phase: intercepting a tentacle cuts it and hurts the core (%d)" % ca, not b.intercept_core(2, 8) and b.core.armor_hp == ca - 8 - b.CUT_BONUS and not b.part_alive(2))
+	_check("core phase: intercepting a tentacle wounds it and hurts the core (%d)" % ca, not b.intercept_core(2, 8) and b.core.armor_hp == ca - 8 and b.part_alive(2))
+	b.intercept_core(2, 8)
+	_check("core phase: the second intercept cuts it and drops a claw", not b.part_alive(2) and b.claws.size() == 1)
+	b.events.clear()
+	b.launch_claw(0)
+	for k in 90:
+		b.step(DT, Vector2(0, -700))
+	var kill := false
+	for e in b.events:
+		if e["type"] == b.Ev.CLAW_HIT and e["kill"]:
+			kill = true
+	_check("core phase: a claw driven into the bare eye destroys it", kill)
+	b.events.clear()
+	b.claws.clear()
 
 	var eye = b.Rings.new(b.CORE_POS)                      # 코어 단계: 눈알 동심원 (패리 불가)
 	eye.count = 3

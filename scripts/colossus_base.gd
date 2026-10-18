@@ -592,6 +592,35 @@ func _soft_glow(c: Vector2, r: float, col: Color, peak: float) -> void:
 		draw_circle(c, r * (1.0 - k * 0.11), Color(col, peak / 8.0))
 
 
+## 껍질이 다 벗겨져 드러난 코어 (한 대면 터진다): 작고 하얗게 달아올라 떨리고, 표면이 갈라지고, 전기가 튀고,
+## 경보처럼 고리가 거듭 퍼진다. 주변 근육·반응로는 콜로서스가 검게 그을려 그린다 (눈이 코어에만 가게)
+func _draw_exposed_core(c: Vector2, r: float, col: Color) -> void:
+	var jit := Vector2(sin(t * 53.0), cos(t * 47.0)) * 3.0
+	var p := c + jit
+	var beat := 0.5 + 0.5 * sin(t * 18.0)
+	_soft_glow(p, r * 2.4, col, 0.45 + 0.2 * beat)
+	for k in 2:                                                      # 경보 고리: 바깥으로 거듭 퍼진다
+		var u := fmod(t * 1.6 + k * 0.5, 1.0)
+		draw_arc(p, r * (1.2 + 2.6 * u), 0.0, TAU, 40, Color(1.0, 0.95, 0.75, 0.7 * (1.0 - u)), 4.0 * (1.0 - u) + 1.0)
+	for k in 6:                                                      # 튀는 전기
+		if int(t * 20.0 + k * 3.0) % 3 == 0:
+			continue
+		var a := k * TAU / 6.0 + sin(t * 3.0 + k) * 0.6
+		var q := p
+		var pts := PackedVector2Array([q])
+		for s in 4:
+			q += Vector2.from_angle(a + sin(t * 41.0 + k * 7.0 + s * 2.3) * 0.9) * r * 0.45
+			pts.append(q)
+		draw_polyline(pts, Color(1.0, 0.9, 0.6, 0.85), 2.5)
+	var rr := r * (0.78 + 0.08 * beat)
+	draw_circle(p, rr * 1.25, Color(col, 0.9))
+	draw_circle(p, rr, Color(1.0, 0.93, 0.8))
+	for k in 5:                                                      # 표면 균열 (안쪽 빛보다 어둡게)
+		var a := k * TAU / 5.0 + 0.4
+		draw_polyline(PackedVector2Array([p + Vector2.from_angle(a) * rr * 0.15, p + Vector2.from_angle(a + 0.35) * rr * 0.55, p + Vector2.from_angle(a + 0.1) * rr * 0.98]), Color(col.darkened(0.3), 0.9), 3.0)
+	draw_circle(p + Vector2(-rr * 0.3, -rr * 0.3), rr * 0.25, Color(1, 1, 1))
+
+
 ## 방어막·결계({kind:"shield"})에 닿은 돌진이 튕겨 나오는가 (피해 없음). 기본(크라켄) = 리버스 드라이브와 완전 동조 차지만 뚫는다
 func blocks_strike(hit: Dictionary, kind: String, _perfect: bool, strong: bool) -> bool:
 	return hit.get("kind", "") == "shield" and kind != "power" and not (kind == "charge" and strong)
@@ -606,6 +635,15 @@ func damage(hit: Dictionary, dmg: int) -> bool:
 
 func damage_core(dmg: int) -> bool:
 	return core.damage(dmg)
+
+
+## 떨어지는 보너스 물체(크라켄의 잘린 집게)를 치는가: 번호 (없으면 -1) / 쳐 낸다
+func claw_at(_p: Vector2, _r: float) -> int:
+	return -1
+
+
+func launch_claw(_k: int) -> void:
+	pass
 
 
 # ── 그리기 (공통 부분) ─────────────────────────────────

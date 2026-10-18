@@ -430,8 +430,9 @@ func _draw_core() -> void:
 		draw_arc(hc, CORE_R + k * 450.0, 0.0, TAU, 48, Color(1, 0.9, 0.7, 1.0 - k), 6.0)
 		return
 	# 심장 근육 (안쪽): 두 겹 + 중격선 + 혈관
-	draw_colored_polygon(shell, Color(0.2, 0.04, 0.06))
-	draw_colored_polygon(core.shell_inner, Color(0.32, 0.06, 0.08).lerp(Color(0.5, 0.1, 0.08), f * 0.6))
+	var burnt := 1.0 if core.broken else 0.0                 # 껍질이 다 벗겨지면 근육이 검게 그을린다 (눈이 코어에만 가게)
+	draw_colored_polygon(shell, Color(0.2, 0.04, 0.06).lerp(Color(0.07, 0.03, 0.03), burnt))
+	draw_colored_polygon(core.shell_inner, Color(0.32, 0.06, 0.08).lerp(Color(0.5, 0.1, 0.08), f * 0.6).lerp(Color(0.11, 0.04, 0.03), burnt))
 	draw_polyline(PackedVector2Array([hc + Vector2(-40, 230), hc + Vector2(-70, 120), hc + Vector2(-60, 10), hc + Vector2(-72, -118)]), Color(0.12, 0.02, 0.03, 0.8), 5.0)
 	draw_polyline(PackedVector2Array([hc + Vector2(30, 200), hc + Vector2(80, 110), hc + Vector2(120, 20), hc + Vector2(150, -60)]), Color(0.55, 0.1, 0.12, 0.7), 3.0)
 	draw_polyline(PackedVector2Array([hc + Vector2(-30, -240), hc + Vector2(-10, -170), hc + Vector2(30, -110)]), Color(0.55, 0.1, 0.12, 0.7), 4.0)
@@ -441,10 +442,13 @@ func _draw_core() -> void:
 		flick = 0.55 + 0.45 * float(int(t * 14.0) % 3 != 0)
 	var pr := CORE_R * (1.0 + 0.06 * beat)
 	var ca := 0.35 + 0.65 * minf(1.0, f * 1.3)
-	draw_circle(hc, pr * 2.0, Color(C_HEART, (0.08 + 0.1 * beat) * ca * flick))
-	draw_circle(hc, pr * 1.3, Color(C_HEART, 0.35 * ca * flick))
-	draw_circle(hc, pr, Color(C_HEART, ca * flick).lerp(Color.WHITE, core.flash * 0.6))
-	draw_circle(hc + Vector2(-pr * 0.3, -pr * 0.3), pr * 0.4, Color(1.0, 0.85, 0.6, ca * flick))
+	if core.broken:                                  # 껍질이 다 벗겨짐: 한 대면 터지는 코어만 드러난다
+		_draw_exposed_core(hc, CORE_R, C_HEART)
+	else:
+		draw_circle(hc, pr * 2.0, Color(C_HEART, (0.08 + 0.1 * beat) * ca * flick))
+		draw_circle(hc, pr * 1.3, Color(C_HEART, 0.35 * ca * flick))
+		draw_circle(hc, pr, Color(C_HEART, ca * flick).lerp(Color.WHITE, core.flash * 0.6))
+		draw_circle(hc + Vector2(-pr * 0.3, -pr * 0.3), pr * 0.4, Color(1.0, 0.85, 0.6, ca * flick))
 	core.draw_plates(self, t, lit, beat)
 	# 연기: 손상이 클수록 많이
 	var smoke := int(f * 6.0)
@@ -452,12 +456,6 @@ func _draw_core() -> void:
 		var life := fmod(t * 0.5 + k * 0.17, 1.0)
 		var sp := hc + Vector2(sin(k * 2.3 + t * 0.8) * 120.0, -140.0 - life * 190.0)
 		draw_circle(sp, 14.0 + life * 30.0, Color(0.3, 0.3, 0.33, 0.35 * (1.0 - life)))
-	if core.broken:                                # 장갑이 사라진 코어: 불안정한 불꽃 + 약점 표시
-		for k in 6:
-			var sa := t * 4.0 + k * 1.1
-			var sd := CORE_R + 14.0 + fmod(t * 120.0 + k * 41.0, 80.0)
-			draw_circle(hc + Vector2.from_angle(sa) * sd, 3.0, Color(1.0, 0.85, 0.5, 0.9))
-		draw_arc(hc, CORE_R + 22.0 + 6.0 * beat, 0.0, TAU, 40, Color(1.0, 0.95, 0.7, 0.55 + 0.4 * beat), 3.0)
 	if focus_glow > 0.0:                           # 방향 지정·차지 중: 노릴 수 있는 표적 강조
 		var in_reach := hc.distance_to(focus_from) <= focus_reach + 200.0
 		draw_arc(hc, 270.0, 0.0, TAU, 48, Color(1.0, 0.85, 0.55, focus_glow * (0.6 if in_reach else 0.25)), 3.0)
