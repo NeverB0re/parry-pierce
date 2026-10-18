@@ -127,9 +127,9 @@ func hit(p: Vector2, r: float) -> Dictionary:
 
 
 ## 강철 판을 그린다 (안쪽 근육·코어 빛은 콜로서스가 먼저 그린다). lit = 공격 중이라 표적이 드러남, beat = 맥동 0~1
-func draw_plates(ci: CanvasItem, t: float, lit: bool, beat: float) -> void:
+func draw_plates(ci: CanvasItem, t: float, lit: bool, beat: float, base := C_STEEL) -> void:
 	var f := frac()
-	var steel := C_STEEL.lerp(Color.WHITE, flash * 0.5)
+	var steel := base.lerp(Color.WHITE, flash * 0.5)
 	if lit:
 		steel = steel.lerp(Color(1.0, 0.85, 0.5), 0.15)
 	for pl in plates:

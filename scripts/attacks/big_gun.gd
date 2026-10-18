@@ -1,14 +1,14 @@
 extends "res://scripts/attacks/attack.gd"
-## 대구경 포 (탄막 요새의 시그니처, 겨누는 사격): 가운데 포방패가 열리고 안에서 큰 포가 밀려 나와 플레이어를 겨눈 뒤,
-## 잔탄 고리(호위탄)에 싸인 대구경 포탄(크고 느린 금색 주탄)을 쏜다. 쏜 뒤에도 포는 밖에 남아 있다 —
+## 코어 포대 (탄막 요새의 시그니처, 겨누는 사격): 가운데 포방패가 열리고 장갑에 싸인 에너지 코어가 드러나 힘을 모은 뒤,
+## 잔탄 고리(호위탄)에 싸인 대구경 포탄(크고 느린 금색 주탄)을 만들어 쏜다. 쏜 뒤에도 코어는 드러나 있다 —
 ## 포탄이 날아가는 동안, 플레이어가 받아 내 조준하는 동안, 그리고 조금 더. 그동안 포대가 표적으로 드러난다(강조).
 ## 드러난 포가 맞으면 휘청이며 멈췄다가(stagger) 들어가고 포방패가 닫힌다. 맞지 않아도 시간이 지나면 들어간다.
 ## boss 에 필요한 것: gun_open(0~1), gun_aim(라디안), gun_recoil, gun_exposed, gun_center(), gun_muzzle(), emit, shots
 
 const Projectiles := preload("res://scripts/projectiles.gd")
-const OPEN := 0.7                    # 포방패가 열리고 포가 나온다
-const AIM := 0.9                     # 겨눈다 (포구가 달아오른다)
-const SHELL_SPEED := 210.0           # 느리게 다가오되 플레이어를 쫓는다 (projectiles SHELL_HOME) — 압도적이고 위협적으로
+const OPEN := 0.7                    # 포방패가 열리고 코어가 드러난다
+const AIM := 1.1                     # 에너지를 모은다 (코어가 달아오르고 빛 알갱이가 빨려 든다)
+const SHELL_SPEED := 250.0           # 느리게 다가오되 플레이어를 쫓는다 (projectiles SHELL_HOME) — 압도적이고 위협적으로
 const SHELL_LIFE := 11.0
 const ESCORT := 20                   # 호위탄 수 (빽빽하게: 고리 사이로 빠져나갈 틈이 없다 — 돌진으로 뚫고 들어가야 한다)
 const ESCORT_R := 120.0              # 호위탄 고리 반지름 (포탄 둘레를 돌며 따라간다)

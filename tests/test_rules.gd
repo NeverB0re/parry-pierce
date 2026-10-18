@@ -1024,6 +1024,12 @@ func _v035_test() -> void:
 	b.gun_exposed = true
 	b.damage_part(b.BIG, 1)
 	_check("small hits (reflected bullets) on the exposed gun only chip it, no stagger", b.part_hp[b.BIG] == b.BIG_HP - 1 and b.gun_shake == 0.0)
+	var seg0: int = b.segs_left()
+	var sh0: int = b.shards.size()
+	for k in 3:
+		b.gun_exposed = true
+		b.damage_part(b.BIG, 16)
+	_check("hits on the core battery knock armour segments off the core (%d -> %d, shards +%d, armour %d)" % [seg0, b.segs_left(), b.shards.size() - sh0, b.core.armor_hp], b.segs_left() < seg0 and b.shards.size() > sh0 and b.core.armor_hp == b.part_hp[b.BIG])
 	b.lingering.clear()
 	b.shots.clear()
 
@@ -1383,7 +1389,7 @@ func _v038_test() -> void:
 	_check("boost ends with the dash", not p.power_boost)
 	p.parry_release()
 	p.aim_phase = false
-	p.reset(Vector2(-700, -1500), false)               # PERFECT 패리 드라이브는 사거리 무제한
+	p.reset(Vector2(-700, -1000), false)               # PERFECT 패리 드라이브는 사거리 무제한
 	main.hitstop = 0.0
 	main.slowmo = 0.0
 	b.shots.clear()
@@ -1406,7 +1412,7 @@ func _v038_test() -> void:
 	p.parry_release()
 	p.aim_phase = false
 	# 돌진하지 않으면 같은 늦은 패리는 보통 판정
-	p.reset(Vector2(-700, -1500), false)
+	p.reset(Vector2(-700, -1000), false)
 	main.hitstop = 0.0
 	main.slowmo = 0.0
 	b.shots.clear()
@@ -1419,7 +1425,7 @@ func _v038_test() -> void:
 	p.parry_release()
 	p.aim_phase = false
 	# 차지 강습·리버스 드라이브 중에는 해당 없음 (일반 돌진만)
-	p.reset(Vector2(-700, -1500), false)
+	p.reset(Vector2(-700, -1000), false)
 	_dash_dir("charge", Vector2.RIGHT)
 	_check("charge assault counts as a dash for dash-parry", p.is_dash_parry())
 	p.dash_kind = "power"
@@ -1428,7 +1434,7 @@ func _v038_test() -> void:
 	p.dash_t = 0.0
 	p.dash_kind = ""
 	# 차지 강습 중 패리: 돌진패리 (늦게 누른 패리는 PERFECT 아님)
-	p.reset(Vector2(-700, -1500), false)
+	p.reset(Vector2(-700, -1000), false)
 	main.hitstop = 0.0
 	main.slowmo = 0.0
 	b.shots.clear()
@@ -1441,14 +1447,14 @@ func _v038_test() -> void:
 	p.parry_release()
 	p.aim_phase = false
 	# 돌진이 끝난 직후 잠깐은 인정, 곧 끝난다. 맞으면 사라진다
-	p.reset(Vector2(-700, -1500), false)
+	p.reset(Vector2(-700, -1000), false)
 	main.hitstop = 0.0
 	_dash_dir("dash", Vector2.RIGHT)
 	_step(int(0.3 / DT))
 	_check("just after the dash: still counts (%.2f)" % p.dash_parry_t, p.dash_t <= 0.0 and p.is_dash_parry())
 	_step(int(0.2 / DT))
 	_check("grace ends shortly after (%.2f)" % p.dash_parry_t, not p.is_dash_parry())
-	p.reset(Vector2(-700, -1500), false)
+	p.reset(Vector2(-700, -1000), false)
 	_dash_dir("dash", Vector2.RIGHT)
 	_step(int(0.3 / DT))
 	p.on_hurt(Vector2.RIGHT)
