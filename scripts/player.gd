@@ -957,6 +957,31 @@ func _assisted(a: Vector2, reach: float, extra_r: float) -> Vector2:
 
 
 # ── 그리기 ─────────────────────────────────────────────
+const C_RETICLE := Color(1.0, 0.3, 0.24)
+
+## 조준점: 표적을 감싼 네 모서리 꺾쇠(천천히 돌며 숨쉬듯 조였다 풀림) + 안쪽을 가리키는 눈금 넷 + 가운데 십자. 붉은 선만으로
+func _reticle(c: Vector2, r: float) -> void:
+	var tm := Time.get_ticks_msec() * 0.001
+	var ap := 0.5 + 0.5 * sin(tm * 9.0)
+	var rr := r + 14.0 + 6.0 * ap
+	var rot := tm * 0.8
+	var arm := maxf(14.0, rr * 0.35)
+	for k in 4:                                    # 모서리 꺾쇠
+		var a := rot + PI * 0.25 + k * PI * 0.5
+		var corner := c + Vector2.from_angle(a) * rr * 1.18
+		var e1 := Vector2.from_angle(a + PI * 0.75) * arm
+		var e2 := Vector2.from_angle(a - PI * 0.75) * arm
+		draw_polyline(PackedVector2Array([corner + e1, corner, corner + e2]), Color(C_RETICLE, 0.3), 7.0)
+		draw_polyline(PackedVector2Array([corner + e1, corner, corner + e2]), C_RETICLE, 3.0)
+	for k in 4:                                    # 안쪽 눈금
+		var d := Vector2.from_angle(rot + k * PI * 0.5)
+		draw_line(c + d * (rr + 10.0), c + d * (rr - 10.0), C_RETICLE, 2.5)
+	draw_arc(c, rr, 0.0, TAU, 40, Color(C_RETICLE, 0.35), 1.5)
+	draw_line(c + Vector2(-9, 0), c + Vector2(9, 0), Color(1.0, 0.75, 0.7, 0.9), 2.0)
+	draw_line(c + Vector2(0, -9), c + Vector2(0, 9), Color(1.0, 0.75, 0.7, 0.9), 2.0)
+
+
+
 ## 레이저 같은 실선 사거리 표시 (끝으로 갈수록 옅어짐)
 func _laser(dir: Vector2, reach: float, c: Color) -> void:
 	var n := 14
@@ -1194,13 +1219,9 @@ func _draw() -> void:
 			draw_circle(Vector2.ZERO, 19.0, Color(1.0, 0.85, 0.6, 0.12 + 0.12 * pulse))
 			_laser(aim, charge_reach(), C_SYNC if buffed and buff_strong else C_ATTACK)
 
-	# 에임 어시스트: 붙은 표적을 고리로 표시
+	# 에임 어시스트: 붙은 표적에 붉은 조준점 (표적은 평소 윤곽선 없이, 겨눌 때만 드러난다)
 	if assist_lock and (aim_phase or is_charged()):
-		var lp := assist_pos - position
-		var ap := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.02)
-		var lc := Color(0.75, 0.92, 1.0) if aim_phase else C_ATTACK
-		draw_arc(lp, assist_r + 8.0 + 3.0 * ap, 0.0, TAU, 36, Color(lc, 0.85), 3.0)
-		draw_arc(lp, assist_r + 20.0, 0.0, TAU, 36, Color(lc, 0.3), 2.0)
+		_reticle(assist_pos - position, assist_r)
 
 	# 돌진 쿨다운: 플레이어 주변 얇은 링이 차오른다 (다 차면 다시 돌진)
 	if dash_cd > 0.0 and dash_t <= 0.0:

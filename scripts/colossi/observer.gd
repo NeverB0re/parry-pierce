@@ -160,20 +160,6 @@ func part_pos(i: int) -> Vector2:
 	return cannon_base(i).lerp(MUZZLES[i], 0.55)
 
 
-## 표적 테두리: 어깨포 그림의 윤곽 그대로 (포좌 상자 + 포신 + 제퇴기, _draw_cannon 과 같은 치수)
-func part_outline(i: int) -> PackedVector2Array:
-	var b := cannon_base(i)
-	var mz: Vector2 = MUZZLES[i]
-	var d := (mz - b).normalized()
-	var n := d.orthogonal()
-	var L := (mz - b).length()
-	var out := PackedVector2Array()
-	for q in [[-64.0, 58.0], [30.0, 58.0], [30.0, 24.0], [L - 22.0, 24.0], [L - 22.0, 36.0], [L + 20.0, 36.0],
-			[L + 20.0, -36.0], [L - 22.0, -36.0], [L - 22.0, -24.0], [30.0, -24.0], [30.0, -58.0], [-64.0, -58.0]]:
-		out.append(b + d * float(q[0]) + n * float(q[1]))
-	return out
-
-
 ## 코어는 처음부터 드러나 있다: 부위를 다 부숴도 개방 연출은 없다
 func _should_open() -> bool:
 	return false
@@ -216,14 +202,10 @@ func assist_targets(from := Vector2.ZERO) -> Array[Dictionary]:
 	return out
 
 
-## 표적 테두리는 어깨포 그림에 박혀 있다 (_draw_cannon 의 외곽선이 붉게 빛난다, v0.110). 여기서는 손상 단계만. 잠든 동안은 표적이 아니다
+## 잠든 동안은 어깨포 표적 테두리를 그리지 않는다 (처음엔 심장만 노리게)
 func _draw_part_marks() -> void:
-	if not awake or dead:
-		return
-	var pulse := 0.5 + 0.5 * sin(t * 5.0)
-	for i in part_count():
-		if part_alive(i):
-			_draw_part_damage(i, part_pos(i), part_radius(i), pulse)
+	if awake:
+		super()
 
 
 ## 체력 게이지: 코어 장갑만 (청록 보호 몫 없음)
@@ -617,13 +599,9 @@ func _draw_core() -> void:
 		var life := fmod(t * 0.5 + k * 0.17, 1.0)
 		var sp := hc + Vector2(sin(k * 2.3 + t * 0.8) * 120.0, -140.0 - life * 190.0)
 		draw_circle(sp, 14.0 + life * 30.0, Color(0.3, 0.3, 0.33, 0.35 * (1.0 - life)))
-	var breathe := 0.5 + 0.5 * sin(t * 2.2)                            # 표적 테두리: 테 둘레 (붉게, 숨쉬듯)
-	var mark := _closed(_heart(1.36))
-	draw_polyline(mark, Color(C_TARGET, 0.12 + 0.08 * breathe), 16.0)
-	draw_polyline(mark, Color(C_TARGET, 0.5 + 0.25 * breathe).lerp(Color.WHITE, core.flash * 0.5), 4.0)
-	if focus_glow > 0.0:                           # 방향 지정·차지 중: 노릴 수 있는 표적 강조
+	if focus_glow > 0.0:                           # 방향 지정·차지 중: 노릴 수 있는 심장이 빛난다 (윤곽선 없이)
 		var in_reach := hc.distance_to(focus_from) <= focus_reach + 200.0
-		draw_polyline(_closed(_heart(1.55)), Color(C_TARGET, focus_glow * (0.6 if in_reach else 0.25)), 4.0)
+		_soft_glow(hc, 330.0, C_HEART, focus_glow * (0.35 if in_reach else 0.12))
 
 
 ## 하트 컷 외곽선 (직선 10각, HEART_POS 기준 k 배, off 만큼 옮김)
@@ -795,25 +773,20 @@ func _draw_cannon(a: int) -> void:
 	var d := (mz - b).normalized()
 	var n := d.orthogonal()
 	var box := PackedVector2Array([b - d * 64.0 + n * 58.0, b + d * 30.0 + n * 58.0, b + d * 30.0 - n * 58.0, b - d * 64.0 - n * 58.0])
-	var target := part_alive(a) and awake and not dead           # 깨어 있는 동안 어깨포 = 표적: 외곽선이 붉게 빛난다 (부서지거나 잠든 동안은 강철색)
 	draw_colored_polygon(box, C_BODY_DARK)
+	draw_polyline(_closed(box), Color(C_RIM, 0.6), 4.0)
 	if part_alive(a):
 		var bar := PackedVector2Array([b + d * 30.0 + n * 24.0, mz - d * 18.0 + n * 24.0, mz - d * 18.0 - n * 24.0, b + d * 30.0 - n * 24.0])
 		draw_colored_polygon(bar, C_BODY)
 		draw_line(b + d * 30.0 + n * 18.0, mz - d * 18.0 + n * 18.0, Color(C_RIM, 0.5), 3.0)
 		var brake := PackedVector2Array([mz - d * 22.0 + n * 36.0, mz + d * 20.0 + n * 36.0, mz + d * 20.0 - n * 36.0, mz - d * 22.0 - n * 36.0])
 		draw_colored_polygon(brake, C_BODY_DARK)
-		if target:
-			rim_poly(part_outline(a), rim_color(a), 5.0)              # 포좌 + 포신 + 제퇴기를 한 줄로 두른 외곽선
-		else:
-			draw_polyline(_closed(box), Color(C_RIM, 0.6), 4.0)
-			draw_polyline(_closed(brake), Color(C_RIM, 0.7), 3.0)
+		draw_polyline(_closed(brake), Color(C_RIM, 0.7), 3.0)
 		var g := cannon_glow[a]
 		var on := 0.1 + 0.9 * wake_k                                   # 잠든 동안은 포구 불이 꺼져 있다
 		draw_circle(mz + d * 20.0, 18.0 + 22.0 * g, Color(C_EYE, (0.12 + 0.5 * g) * on))
 		draw_circle(mz + d * 20.0, 8.0 + 6.0 * g, Color(C_EYE, (0.55 + 0.45 * g) * on))
 	else:
-		draw_polyline(_closed(box), Color(C_RIM, 0.6), 4.0)
 		_draw_stump(b + d * 40.0, d, 30.0)
 
 

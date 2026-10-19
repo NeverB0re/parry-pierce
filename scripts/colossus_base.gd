@@ -11,7 +11,6 @@ const Ev := preload("res://scripts/ev.gd")
 const Projectiles := preload("res://scripts/projectiles.gd")
 
 const C_HEART := Color(1.0, 0.42, 0.22)          # 약점(외부 시스템·코어)의 빛
-const C_TARGET := Color(1.0, 0.3, 0.24)          # 표적 테두리 (붉게: 금빛은 패리할 수 있는 것에만 쓴다)
 const C_PLATE_EDGE := Color(0.62, 0.3, 0.14)     # 상시 표적 → 달궈진 가장자리
 const C_CAVITY := Color(0.10, 0.03, 0.04)
 
@@ -708,7 +707,7 @@ func _draw_shards() -> void:
 	draw_set_transform(Vector2.ZERO, 0.0)
 
 
-## 페이즈 1 표적: 평소엔 테두리 없이 가운데 약점 점 + 손상 단계(체력바 대신)만.
+## 페이즈 1 표적: 평소엔 아무 표시 없이 손상 단계(체력바 대신)만 — 표적 윤곽선은 그리지 않는다 (v0.111 사용자 결정).
 ## 차지 중·패리 후 조준 중(focus_glow)에만 노릴 수 있는 표적을 빛과 테두리로 강조한다 (사거리 안이면 더 밝게). v0.48: 모든 콜로서스
 func _draw_part_marks() -> void:
 	if phase != 1 or dead:
@@ -719,87 +718,12 @@ func _draw_part_marks() -> void:
 			continue
 		var p := part_pos(i)
 		var r := part_radius(i)
-		if _rim_part(i):                           # 표적 테두리가 그림에 박힌 부위: 손상 단계만 (덧씌우는 원 없음)
-			_draw_part_damage(i, p, r, pulse)
-			continue
 		if focus_glow > 0.0:
 			var in_reach := p.distance_to(focus_from) <= focus_reach
-			draw_circle(p, r * 1.7, Color(C_HEART, focus_glow * (0.3 if in_reach else 0.12) * (0.6 + 0.4 * pulse)))
-			draw_arc(p, r + 6.0, 0.0, TAU, 32, Color(1.0, 0.85, 0.5, focus_glow * (0.9 if in_reach else 0.35)), 3.0)
-			if in_reach:
-				draw_arc(p, r * 1.7, 0.0, TAU, 32, Color(1.0, 0.85, 0.55, focus_glow * 0.8), 3.0)
+			_soft_glow(p, r * 1.5, C_HEART, focus_glow * (0.22 if in_reach else 0.07) * (0.7 + 0.3 * pulse))   # 노릴 수 있는 표적이 옅게 빛난다 (윤곽선 없이, 겨눈 표적엔 플레이어가 붉은 조준점)
 			if _part_highlight(i):              # 요격으로 멈춘 팔 등: 크게 빛난다
 				draw_circle(p, r * 1.3 + 8.0 * pulse, Color(1.0, 0.75, 0.4, 0.35 * focus_glow))
-		var flick := 1.0
-		if part_stage[i] >= 3:                  # 거의 부서짐: 약점 빛이 깜빡인다
-			flick = 0.4 + 0.6 * float(int(t * 9.0 + i) % 3 != 0)
-		_draw_part_outline(i, p, r, flick)
 		_draw_part_damage(i, p, r, pulse)
-
-
-## 표적 테두리: 칠 수 있는 부위의 가장자리가 붉게(C_TARGET) 천천히 숨쉬듯 빛난다 (평소에도 어딜 칠지 보이게, 얇고 은은하게).
-## 겨눈 쪽(조준 방향·거리 안)이면 조금 더 밝고 굵게. 손상 2단계부터 테두리가 끊기고, 3단계는 깜빡인다
-func _draw_part_outline(i: int, p: Vector2, r: float, flick: float) -> void:
-	var breathe := 0.5 + 0.5 * sin(t * 2.2 + i * 1.3)
-	var to := p - aim_from
-	var aimed := to.length() < 1600.0 and to.normalized().dot(aim_dir) > cos(0.22)
-	var emph := part_emphasis(i)
-	var a := (0.55 + 0.25 * breathe + (0.2 if aimed else 0.0)) * flick * minf(1.0, emph)
-	var col := Color(C_TARGET, minf(1.0, a)).lerp(Color.WHITE, part_flash[i])
-	var w := (4.0 + (2.0 if aimed else 0.0)) * (1.0 + maxf(0.0, emph - 1.0) * 0.8)
-	if emph > 1.0:                                   # 드러난 약점: 크게 맥동하는 고리가 바깥으로 퍼진다 (가장 먼저 노릴 곳)
-		var u := fmod(t * 1.5, 1.0)
-		draw_arc(p, r * (1.1 + 0.5 * u), 0.0, TAU, 40, Color(C_TARGET, 0.7 * (1.0 - u)), 5.0)
-		draw_circle(p, r * 1.2, Color(C_TARGET, 0.1 + 0.08 * breathe))
-	var pts := part_outline(i)
-	var glow_c := Color(C_TARGET, (0.12 + 0.1 * breathe + (0.12 if aimed else 0.0)) * flick)   # 바깥 번짐 (어두운 몸에서 잘 보이게)
-	if pts.is_empty():
-		draw_arc(p, r + 6.0, 0.0, TAU, 40, glow_c, w * 4.0)
-	else:
-		var gl := pts.duplicate()
-		gl.append(pts[0])
-		draw_polyline(gl, glow_c, w * 4.0)
-	if pts.is_empty():
-		var rr := r + 6.0
-		if part_stage[i] >= 2:
-			for k in 8:
-				var a0 := k * TAU / 8.0 + i
-				draw_arc(p, rr, a0, a0 + TAU / 8.0 * 0.62, 6, col, w)
-		else:
-			draw_arc(p, rr, 0.0, TAU, 40, col, w)
-		return
-	var closed := pts.duplicate()
-	closed.append(pts[0])
-	if part_stage[i] >= 2:                         # 끊긴 테두리: 변마다 가운데 일부만
-		for k in pts.size():
-			var a1: Vector2 = pts[k]
-			var b1: Vector2 = pts[(k + 1) % pts.size()]
-			draw_line(a1.lerp(b1, 0.12), a1.lerp(b1, 0.7), col, w)
-	else:
-		draw_polyline(closed, col, w)
-
-
-## 그림에 박힌 표적 테두리 (v0.110): 따로 덧씌우는 원 대신, 부위 그림의 외곽선 자체를 이 색으로 그린다.
-## 붉게 숨쉬듯 빛나고, 겨누면(조준 방향·차지·패리 조준 중 사거리 안) 더 밝고, 맞으면 하얗게 번쩍. 거의 부서지면 깜빡인다
-func rim_color(i: int) -> Color:
-	var breathe := 0.5 + 0.5 * sin(t * 2.2 + i * 1.3)
-	var p := part_pos(i)
-	var to := p - aim_from
-	var aimed := to.length() < 1600.0 and to.normalized().dot(aim_dir) > cos(0.22)
-	var reach := 1.0 if p.distance_to(focus_from) <= focus_reach else 0.35
-	var a := 0.6 + 0.25 * breathe + (0.15 if aimed else 0.0) + 0.35 * focus_glow * reach
-	if i < part_stage.size() and part_stage[i] >= 3 and int(t * 9.0 + i) % 3 == 0:
-		a *= 0.4
-	var fl: float = part_flash[i] if i < part_flash.size() else 0.0
-	return Color(C_TARGET, minf(1.0, a)).lerp(Color.WHITE, fl)
-
-
-## 표적 외곽선 한 줄 (닫힌 다각형): 바깥 번짐 + 선. w = 선 굵기
-func rim_poly(pts: PackedVector2Array, col: Color, w: float) -> void:
-	var ol := pts.duplicate()
-	ol.append(pts[0])
-	draw_polyline(ol, Color(col, col.a * 0.22), w * 3.5)
-	draw_polyline(ol, col, w)
 
 
 ## 외부 시스템 손상: 1 긁힘 → 2 빛나는 균열 + 불꽃 → 3 떨어져 나간 자리 + 연기
@@ -846,11 +770,6 @@ func part_pos(_i: int) -> Vector2:
 	return Vector2.ZERO
 
 
-## 표적 테두리 모양 (월드 좌표 꼭짓점). 비우면 part_radius 원
-func part_outline(_i: int) -> PackedVector2Array:
-	return PackedVector2Array()
-
-
 ## 표적 강조 정도: 1 = 보통, 1 보다 작으면 흐리게 (지금은 잘 안 들어가는 곳), 1 보다 크면 드러난 약점 (크게 맥동)
 func part_emphasis(_i: int) -> float:
 	return 1.0
@@ -863,11 +782,6 @@ func part_radius(_i: int) -> float:
 ## 부위가 부서지는 순간 (떨어져 나가는 잔해 등)
 func _on_part_broken(_i: int) -> void:
 	pass
-
-
-## 표적 테두리를 부위 그림의 외곽선으로 직접 그리는 부위인가 (rim_color). true 면 _draw_part_marks 는 원을 씌우지 않는다
-func _rim_part(_i: int) -> bool:
-	return false
 
 
 ## 약점 표시를 크게 빛낼 부위인가 (예: 요격으로 멈춘 팔의 관절)

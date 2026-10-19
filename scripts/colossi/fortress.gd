@@ -282,37 +282,7 @@ func part_emphasis(i: int) -> float:
 	return 2.2 if gun_exposed else 0.35
 
 
-## 표적 테두리: 사일로 = 사일로 상자 (보조 포탑은 원, 코어 포대는 _draw_part_outline)
-func part_outline(i: int) -> PackedVector2Array:
-	var out := PackedVector2Array()
-	if i < 2:
-		return out                                     # 작은 포탑: 원 테두리
-	var p: Vector2 = SILOS[i - 2]
-	return PackedVector2Array([p + Vector2(-58, -68), p + Vector2(58, -68), p + Vector2(58, 68), p + Vector2(-58, 68)])
-
-
 ## 코어 포대 표적: 코어 둘레의 붉은 원 하나 (다른 표적 테두리와 같은 굵기). 드러나면 굵고 밝게 맥동한다
-## 보조 포탑·사일로는 그림의 외곽선이 표적 테두리다 (v0.110). 코어 포대는 따로 코어 둘레 고리
-func _rim_part(i: int) -> bool:
-	return i != BIG
-
-
-func _draw_part_outline(i: int, p: Vector2, r: float, flick: float) -> void:
-	if i != BIG:
-		super(i, p, r, flick)
-		return
-	var breathe := 0.5 + 0.5 * sin(t * 2.2)
-	var col := Color(C_TARGET, (0.5 + 0.25 * breathe) * flick).lerp(Color.WHITE, part_flash[i])
-	var w := 4.0
-	if gun_exposed:
-		col.a = 1.0
-		w = 7.0
-		var u := fmod(t * 1.5, 1.0)
-		draw_arc(p, (r + 16.0) * (1.0 + 0.25 * u), 0.0, TAU, 48, Color(C_TARGET, 0.6 * (1.0 - u)), 4.0)
-	draw_arc(p, r + 16.0, 0.0, TAU, 64, Color(C_TARGET, 0.15 * flick), w * 4.0)   # 바깥 번짐
-	draw_arc(p, r + 16.0, 0.0, TAU, 64, col, w)
-
-
 ## 부서진 포대는 포신이, 사일로는 해치가 떨어져 나간다
 func _on_part_broken(i: int) -> void:
 	var s := 1.0 if i % 2 == 1 else -1.0
@@ -998,11 +968,7 @@ func _draw_batteries() -> void:
 		var tip: Vector2 = battery_tip(i)
 		var d := (tip - b).normalized()
 		var n := d.orthogonal()
-		var rim := rim_color(i)
 		if part_alive(i):
-			for k in [-1.0, 1.0]:                                     # 표적: 포신 둘레가 붉게 빛난다
-				_cap(b + n * 14.0 * k, tip + n * 14.0 * k, 30.0, Color(rim, rim.a * 0.22))
-				_cap(b + n * 14.0 * k, tip + n * 14.0 * k, 24.0, rim)
 			for k in [-1.0, 1.0]:
 				_cap(b + n * 14.0 * k, tip + n * 14.0 * k, 18.0, C_HULL_DARK)
 			var g := glow[i]
@@ -1011,11 +977,7 @@ func _draw_batteries() -> void:
 			_cap(b, b + d * 40.0, 26.0, C_HULL_DARK)
 			draw_circle(b + d * 40.0, 10.0, Color(C_HEART, 0.25 + 0.15 * sin(t * 4.0)))
 		draw_circle(b, 48.0, C_TOP)
-		if part_alive(i):                                             # 표적: 포탑 둘레가 붉게 빛난다
-			draw_arc(b, 50.0, 0.0, TAU, 40, Color(rim, rim.a * 0.22), 16.0)
-			draw_arc(b, 50.0, 0.0, TAU, 40, rim, 4.5)
-		else:
-			draw_arc(b, 48.0, PI, TAU, 20, C_RIM, 4.0)
+		draw_arc(b, 48.0, PI, TAU, 20, C_RIM, 4.0)
 		draw_rect(Rect2(b.x - 56.0, b.y + 20.0, 112.0, 28.0), C_HULL_DARK)
 
 
@@ -1025,10 +987,7 @@ func _draw_silos() -> void:
 		var p: Vector2 = SILOS[k]
 		var rc := Rect2(p.x - 52.0, p.y - 62.0, 104.0, 124.0)
 		draw_rect(rc, C_HULL_DARK)
-		if part_alive(2 + k):                                         # 표적: 상자 외곽선이 붉게 빛난다
-			rim_poly(PackedVector2Array([rc.position, Vector2(rc.end.x, rc.position.y), rc.end, Vector2(rc.position.x, rc.end.y)]), rim_color(2 + k), 4.5)
-		else:
-			draw_rect(rc, Color(C_RIM, 0.6), false, 3.0)
+		draw_rect(rc, Color(C_RIM, 0.6), false, 3.0)
 		draw_line(Vector2(rc.position.x, p.y + 10.0), Vector2(rc.end.x, p.y + 10.0), Color(C_RIM, 0.25), 3.0)
 		var hatch := p + Vector2(0, -36)
 		if part_alive(2 + k):
@@ -1061,7 +1020,7 @@ func _draw_reactor() -> void:
 		draw_circle(v, 14.0 + 12.0 * g, Color(C_GLOW, 0.3 + 0.6 * g))
 	if focus_glow > 0.0:
 		var in_reach := hc.distance_to(focus_from) <= focus_reach + 200.0
-		draw_arc(hc, 290.0, 0.0, TAU, 48, Color(C_TARGET, focus_glow * (0.6 if in_reach else 0.25)), 4.0)
+		_soft_glow(hc, 300.0, C_HEART, focus_glow * (0.35 if in_reach else 0.12))       # 노릴 수 있는 코어가 빛난다 (윤곽선 없이)
 
 
 func _draw_debris() -> void:
