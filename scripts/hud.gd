@@ -20,7 +20,7 @@ func _ready() -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	font = UiFont.make(PackedStringArray(["Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans CJK KR", "sans-serif"]))
+	font = UiFont.make()
 
 
 func banner(title: String, sub := "") -> void:
@@ -134,7 +134,7 @@ func _draw() -> void:
 
 	# 조작
 	if main.touch_ui == null:
-		_text(Vector2(28, s.y - 24), Loc.t("마우스: 방향(위=활공)   좌클릭: 돌진 / 꾹: 차지 강습 (근접 공격이 멈춰 있거나 휘두를 때 부딪히면 요격)   우클릭 꾹: 패리 → 슬로우 조준 → 리버스 드라이브   R: 재시작   Esc: 메뉴"), 15, Color(0.75, 0.77, 0.82, 0.55))
+		_text(Vector2(28, s.y - 24), Loc.t("마우스: 방향(위=활공)   좌클릭: 돌진 / 꾹: 차지 강습 (근접 공격이 멈춰 있거나 휘두를 때 부딪히면 요격)   우클릭 꾹: 패리 → 슬로우 조준 → 리버스 드라이브   R: 재시작   Esc: 메뉴"), 12, Color(0.75, 0.77, 0.82, 0.6))
 
 	if warp_t > 0.0:                          # 퍼펙트 회피: 청록 틴트 + 가장자리에서 모여드는 선
 		var wk := clampf(warp_t / warp_max, 0.0, 1.0)

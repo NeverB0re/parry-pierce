@@ -4,6 +4,7 @@ extends CanvasLayer
 ## ESC 메뉴에서 왔을 때(이어하기)만 멈춘 판이 어둡게 비친다. 입력은 막힌다 (main.gd 가 title.visible 을 본다).
 ## 새 게임은 저장된 진행이 있으면 한 번 더 눌러야 시작한다 (확인).
 const UiFont := preload("res://scripts/ui_font.gd")
+const UiStyle := preload("res://scripts/ui_style.gd")
 
 const Loc := preload("res://scripts/loc.gd")
 
@@ -26,7 +27,7 @@ func _ready() -> void:
 	layer = 55
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	visible = false
-	font = UiFont.make(PackedStringArray(["Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans CJK KR", "Segoe UI", "sans-serif"]))
+	font = UiFont.make()
 	root = Control.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(root)
@@ -78,7 +79,9 @@ func _build() -> void:
 
 	if _help and tutorial != null:                    # 조작법 목록: 제목 대신 목록만 (화면에 다 들어오게 촘촘히)
 		box.add_theme_constant_override("separation", int(8 * ui_scale))
-		box.add_child(_label(Loc.t("조작법"), 34, Color(0.9, 0.95, 1.0)))
+		var ht := _label(Loc.t("조작법"), 36, UiStyle.C_TITLE)
+		UiStyle.title(ht, int(36 * ui_scale))
+		box.add_child(ht)
 		for id in tutorial.ORDER:
 			var sid: String = id
 			var hb := _button(box, tutorial.page_title(sid), func() -> void: tutorial.replay(sid))
@@ -88,13 +91,14 @@ func _build() -> void:
 			_build())
 		back.custom_minimum_size = Vector2(560, 46) * ui_scale
 	else:
-		var t1 := _label("PARRY PIERCE", 104, Color(1.0, 0.93, 0.8))
+		var t1 := _label("PARRY PIERCE", 96, Color(1.0, 0.93, 0.8))
+		t1.add_theme_font_override("font", UiFont.bold())
 		t1.add_theme_color_override("font_outline_color", Color(0.85, 0.45, 0.12, 0.9))
 		t1.add_theme_constant_override("outline_size", 14)
 		box.add_child(t1)
 		box.add_child(_label(Loc.t("막고, 되돌리고, 꿰뚫어라"), 24, Color(1.0, 0.82, 0.55)))
 		var ver := str(ProjectSettings.get_setting("application/config/version", ""))
-		box.add_child(_label("v" + ver, 16, Color(0.7, 0.75, 0.85, 0.8)))
+		box.add_child(_label("v" + ver, 12, Color(0.7, 0.75, 0.85, 0.8)))
 		var gap := Control.new()
 		gap.custom_minimum_size = Vector2(0, 26 * ui_scale)
 		box.add_child(gap)
@@ -135,7 +139,7 @@ func _build() -> void:
 	root.add_child(hint)
 
 	# 아래 가운데: 도트 그림 출처 (CC-BY 3.0 표기)
-	var credit := _label("Art: Ravenmore \"Space Rage\" (CC-BY 3.0)", 13, Color(0.7, 0.75, 0.85, 0.55))
+	var credit := _label("Art: Ravenmore \"Space Rage\" (CC-BY 3.0) · Font: Galmuri (OFL 1.1)", 12, Color(0.7, 0.75, 0.85, 0.55))
 	credit.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	credit.offset_top = -34.0 * ui_scale
 	credit.offset_bottom = -10.0 * ui_scale
@@ -192,9 +196,8 @@ func _label(text: String, size: int, col: Color) -> Label:
 func _button(parent: Control, text: String, cb: Callable) -> Button:
 	var b := Button.new()
 	b.text = text
-	b.custom_minimum_size = Vector2(430, 56) * ui_scale
-	b.add_theme_font_override("font", font)
-	b.add_theme_font_size_override("font_size", int(23 * ui_scale))
+	b.custom_minimum_size = Vector2(432, 56) * ui_scale
+	UiStyle.button(b, font, int(24 * ui_scale))
 	b.pressed.connect(cb)
 	parent.add_child(b)
 	return b

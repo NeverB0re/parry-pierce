@@ -1,6 +1,7 @@
 extends CanvasLayer
 ## ESC 메뉴. 플레이 중에는 마우스가 창 밖으로 못 나가고, 메뉴를 열어야 풀린다. 열 때마다(그리고 언어를 바꿀 때) 글자를 새로 만든다.
 const UiFont := preload("res://scripts/ui_font.gd")
+const UiStyle := preload("res://scripts/ui_style.gd")
 
 const Loc := preload("res://scripts/loc.gd")
 
@@ -13,15 +14,15 @@ var ui_scale := 1.0                  # 터치 기기에서는 키운다
 var tutorial                         # main.gd 가 연결: 조작법 다시 보기
 var title                            # main.gd 가 연결: 타이틀이 열려 있으면 ESC 는 무시한다
 var center: CenterContainer
-var main_box: VBoxContainer
-var help_box: VBoxContainer
+var main_box: Control
+var help_box: Control
 
 
 func _ready() -> void:
 	layer = 50
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	visible = false
-	font = UiFont.make(PackedStringArray(["Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans CJK KR", "Segoe UI", "sans-serif"]))
+	font = UiFont.make()
 
 	var dim := ColorRect.new()
 	dim.color = Color(0, 0, 0, 0.65)
@@ -44,15 +45,13 @@ func _build() -> void:
 		center.remove_child(c)
 		c.queue_free()
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 14)
-	center.add_child(box)
-	main_box = box
+	box.add_theme_constant_override("separation", 12)
+	main_box = _panel(box)
 
 	var tl := Label.new()
 	tl.text = Loc.t("일시정지")
 	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	tl.add_theme_font_override("font", font)
-	tl.add_theme_font_size_override("font_size", int(44 * ui_scale))
+	UiStyle.title(tl, int(36 * ui_scale))
 	box.add_child(tl)
 
 	_button(box, Loc.t("계속하기"), resume)
@@ -70,29 +69,36 @@ func _build() -> void:
 	if not OS.has_feature("web"):                              # 브라우저에서는 창을 닫을 수 없다
 		_button(box, Loc.t("종료"), func() -> void: get_tree().quit())
 
-	help_box = VBoxContainer.new()
-	help_box.add_theme_constant_override("separation", 14)
+	var hbox := VBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 8)
+	help_box = _panel(hbox)
 	help_box.visible = false
-	center.add_child(help_box)
 	var ht := Label.new()
 	ht.text = Loc.t("조작법")
 	ht.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ht.add_theme_font_override("font", font)
-	ht.add_theme_font_size_override("font_size", int(36 * ui_scale))
-	help_box.add_child(ht)
+	UiStyle.title(ht, int(36 * ui_scale))
+	hbox.add_child(ht)
 	if tutorial != null:
 		for id in tutorial.ORDER:
 			var sid: String = id
-			_button(help_box, tutorial.page_title(sid), func() -> void: tutorial.replay(sid))
-	_button(help_box, Loc.t("뒤로"), func() -> void: _show_help(false))
+			_button(hbox, tutorial.page_title(sid), func() -> void: tutorial.replay(sid))
+	_button(hbox, Loc.t("뒤로"), func() -> void: _show_help(false))
+
+
+## 가운데 판 (UiStyle.panel) 안에 content 를 넣고 판을 돌려준다
+func _panel(content: Control) -> PanelContainer:
+	var pc := PanelContainer.new()
+	pc.add_theme_stylebox_override("panel", UiStyle.panel(int(24 * ui_scale)))
+	pc.add_child(content)
+	center.add_child(pc)
+	return pc
 
 
 func _button(parent: Control, text: String, cb: Callable) -> void:
 	var b := Button.new()
 	b.text = text
-	b.custom_minimum_size = Vector2(260, 54) * ui_scale
-	b.add_theme_font_override("font", font)
-	b.add_theme_font_size_override("font_size", int(24 * ui_scale))
+	b.custom_minimum_size = Vector2(432, 48) * ui_scale
+	UiStyle.button(b, font, int(24 * ui_scale))
 	b.pressed.connect(cb)
 	parent.add_child(b)
 

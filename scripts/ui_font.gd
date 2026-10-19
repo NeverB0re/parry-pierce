@@ -1,13 +1,21 @@
-## 화면 글꼴: 데스크톱은 시스템 글꼴, 웹은 시스템 글꼴이 없어 함께 넣은 Noto Sans KR (SIL OFL, assets/fonts)
-const BUNDLED := "res://assets/fonts/NotoSansKR-VF.ttf"
+## 화면 글꼴: 도트 게임에 맞는 갈무리11 (Galmuri11, SIL OFL 1.1, assets/fonts). 데스크톱·웹 모두 같은 글꼴을 함께 넣어 쓴다.
+## 도트가 번지지 않게 안티에일리어싱·힌팅을 끈다. 크기는 12 의 배수(12·24·36…)일 때 가장 또렷하다
+const PIXEL := "res://assets/fonts/Galmuri11.ttf"
+const PIXEL_BOLD := "res://assets/fonts/Galmuri11-Bold.ttf"
 
 
-static func make(names: PackedStringArray) -> Font:
-	if OS.has_feature("web"):
-		var v := FontVariation.new()
-		v.base_font = load(BUNDLED)
-		v.variation_opentype = {TextServerManager.get_primary_interface().name_to_tag("weight"): 500}
-		return v
-	var f := SystemFont.new()
-	f.font_names = names
+static func make() -> Font:
+	return _crisp(PIXEL)
+
+
+## 제목·큰 글씨용 굵은 도트 글꼴
+static func bold() -> Font:
+	return _crisp(PIXEL_BOLD)
+
+
+static func _crisp(path: String) -> Font:
+	var f: FontFile = load(path)
+	f.antialiasing = TextServer.FONT_ANTIALIASING_NONE
+	f.hinting = TextServer.HINTING_NONE
+	f.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
 	return f

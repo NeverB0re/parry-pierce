@@ -3,6 +3,7 @@ extends CanvasLayer
 ## 깬 은하는 다시 골라 재전투할 수 있다. 안 깬 곳(다음 하나만 고를 수 있음)·아직 만들지 않은 곳은 회색.
 ## 아래에는 얻은 동력 코어를 보여 주고, 눌러서(또는 숫자 키) 장착·교체한다 (장착 칸 수만큼만 작동). FTL 도약 → 고른 스테이지.
 const UiFont := preload("res://scripts/ui_font.gd")
+const UiStyle := preload("res://scripts/ui_style.gd")
 
 const Loc := preload("res://scripts/loc.gd")
 signal jump_requested
@@ -32,7 +33,7 @@ func _ready() -> void:
 	layer = 60
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	visible = false
-	font = UiFont.make(PackedStringArray(["Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans CJK KR", "sans-serif"]))
+	font = UiFont.make()
 
 	var dim := ColorRect.new()
 	dim.color = Color(0.02, 0.03, 0.05, 0.96)
@@ -47,7 +48,8 @@ func _ready() -> void:
 	root.add_theme_constant_override("separation", int(10 * ui_scale))
 	margin.add_child(root)
 
-	title_l = _label(Loc.t("항로도 — 퇴각 항로"), 32, Color(1.0, 0.95, 0.88))
+	title_l = _label(Loc.t("항로도 — 퇴각 항로"), 36, UiStyle.C_TITLE)
+	UiStyle.title(title_l, int(36 * ui_scale))
 	root.add_child(title_l)
 	sub = _label("", 18, Color(0.75, 0.8, 0.88))
 	root.add_child(sub)
@@ -76,15 +78,13 @@ func _ready() -> void:
 	back_button = Button.new()
 	back_button.text = Loc.t("뒤로")
 	back_button.custom_minimum_size = Vector2(160, 60) * ui_scale
-	back_button.add_theme_font_override("font", font)
-	back_button.add_theme_font_size_override("font_size", int(18 * ui_scale))
+	UiStyle.button(back_button, font, int(24 * ui_scale))
 	back_button.pressed.connect(back)
 	bottom.add_child(back_button)
 	jump_button = Button.new()
 	jump_button.text = Loc.t("FTL 도약 ▶")
 	jump_button.custom_minimum_size = Vector2(300, 60) * ui_scale
-	jump_button.add_theme_font_override("font", font)
-	jump_button.add_theme_font_size_override("font_size", int(18 * ui_scale))
+	UiStyle.button(jump_button, font, int(24 * ui_scale))
 	jump_button.pressed.connect(jump)
 	bottom.add_child(jump_button)
 

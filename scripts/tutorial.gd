@@ -3,6 +3,7 @@ extends CanvasLayer
 ## 애니메이션은 코드로 그린 짧은 루프(움짤)다. 한 번 본 장은 다시 자동으로 뜨지 않고(user://tutorial.cfg),
 ## ESC 메뉴의 '조작법'에서 언제든 다시 볼 수 있다.
 const UiFont := preload("res://scripts/ui_font.gd")
+const UiStyle := preload("res://scripts/ui_style.gd")
 
 const Loc := preload("res://scripts/loc.gd")
 const Sprites := preload("res://scripts/sprites.gd")
@@ -32,7 +33,7 @@ func _ready() -> void:
 	layer = 60
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	visible = false
-	font = UiFont.make(PackedStringArray(["Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans CJK KR", "sans-serif"]))
+	font = UiFont.make()
 	_load_seen()
 	_build_ui()
 
@@ -274,13 +275,7 @@ func _build_ui() -> void:
 	add_child(center)
 
 	var panel := PanelContainer.new()
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.07, 0.08, 0.11, 0.98)
-	sb.border_color = Color(0.55, 0.62, 0.75)
-	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(6)
-	sb.set_content_margin_all(18)
-	panel.add_theme_stylebox_override("panel", sb)
+	panel.add_theme_stylebox_override("panel", UiStyle.panel(18))
 	center.add_child(panel)
 
 	var box := VBoxContainer.new()
@@ -288,9 +283,7 @@ func _build_ui() -> void:
 	panel.add_child(box)
 
 	title_l = Label.new()
-	title_l.add_theme_font_override("font", font)
-	title_l.add_theme_font_size_override("font_size", 28)
-	title_l.add_theme_color_override("font_color", Color(1.0, 0.92, 0.7))
+	UiStyle.title(title_l, 24)
 	box.add_child(title_l)
 
 	stage = Stage.new()
@@ -321,9 +314,8 @@ func _build_ui() -> void:
 	page_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	foot.add_child(page_l)
 	btn = Button.new()
-	btn.add_theme_font_override("font", font)
-	btn.add_theme_font_size_override("font_size", 20)
-	btn.custom_minimum_size = Vector2(190, 44)
+	UiStyle.button(btn, font, 24)
+	btn.custom_minimum_size = Vector2(204, 44)
 	btn.pressed.connect(func() -> void: _open_next(false))
 	foot.add_child(btn)
 

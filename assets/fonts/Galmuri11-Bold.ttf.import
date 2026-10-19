@@ -2,13 +2,13 @@
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://cnm501yptppjo"
-path="res://.godot/imported/NotoSansKR-VF.ttf-4f7fc1ace034007b61b1012dacf92f7c.fontdata"
+uid="uid://cw1me8vpxawb4"
+path="res://.godot/imported/Galmuri11-Bold.ttf-3a23d149e7b99ee54cc37134f38f9040.fontdata"
 
 [deps]
 
-source_file="res://assets/fonts/NotoSansKR-VF.ttf"
-dest_files=["res://.godot/imported/NotoSansKR-VF.ttf-4f7fc1ace034007b61b1012dacf92f7c.fontdata"]
+source_file="res://assets/fonts/Galmuri11-Bold.ttf"
+dest_files=["res://.godot/imported/Galmuri11-Bold.ttf-3a23d149e7b99ee54cc37134f38f9040.fontdata"]
 
 [params]
 

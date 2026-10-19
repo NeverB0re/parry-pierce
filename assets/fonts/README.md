@@ -1,5 +1,5 @@
 # 글꼴
 
-- `NotoSansKR-VF.ttf` — Noto Sans KR (가변 글꼴). © 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'.
-  SIL Open Font License 1.1 (https://openfontlicense.org). 저작권·라이선스 문구는 글꼴 파일의 name 표에 들어 있다.
-- 웹판에서만 쓴다 (`scripts/ui_font.gd`). 데스크톱은 시스템 글꼴(맑은 고딕 등).
+- `Galmuri11.ttf`, `Galmuri11-Bold.ttf` — 갈무리11 (Galmuri11) v2.40.4, © 2019–2025 Lee Minseo (quiple@quiple.dev).
+  SIL Open Font License 1.1 — 전문은 `Galmuri-OFL.txt`. 출처: https://github.com/quiple/galmuri
+- 화면 글꼴 전부 (`scripts/ui_font.gd`): 도트 게임에 맞춘 픽셀 글꼴. 데스크톱·웹 모두 이 글꼴을 쓴다.

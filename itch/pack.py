@@ -40,6 +40,7 @@ Note:     the exe is not code-signed, so Windows SmartScreen may warn ("More inf
 Credits
 -------
 Sprite art: "Space Rage" by Ravenmore (http://dycha.net/) - CC-BY 3.0
+Font: Galmuri11 by Lee Minseo (https://github.com/quiple/galmuri) - SIL Open Font License 1.1
 Built with Godot Engine 4 (MIT).
 """
 
