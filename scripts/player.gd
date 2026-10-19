@@ -134,7 +134,8 @@ var aim_phase := false           # 패리 성공 → 슬로우 → 방향 지정
 var aim_left := 0.0
 var aim_perfect := false
 var aim_boost := false           # 돌진패리 성공 → 이어지는 리버스 드라이브가 청록 조준선·꼬리로 보인다 (연출만)
-var power_boost := false         # 지금 리버스 드라이브가 돌진패리에서 나왔다 (연출만)
+var power_boost := false         # 지금 리버스 드라이브가 돌진패리에서 나왔다 (피해 DASH_PARRY_MULT 배)
+const DASH_PARRY_MULT := 1.2      # 돌진패리 보상: 리버스 드라이브 피해 20% 더
 var invuln := 0.0                # 피격 후 무적
 var bouncing := false            # 직격 후 튕겨나는 중
 var bounce_from := Vector2.ZERO  # 튕겨나기 시작한 자리 (BOUNCE_FREE 만큼 멀어질 때까지는 브레이크·표적 쪽 조종이 걸리지 않는다)
@@ -767,8 +768,9 @@ func _end_dash() -> void:
 ## 이번 돌진의 피해량과 버프 소모
 func _strike_damage() -> int:
 	match dash_kind:
-		"power":
-			return stats.power_damage_perfect if perfect_dash else stats.power_damage
+		"power":                                    # 돌진패리에서 나온 리버스 드라이브는 DASH_PARRY_MULT 배
+			var d: int = stats.power_damage_perfect if perfect_dash else stats.power_damage
+			return int(round(d * DASH_PARRY_MULT)) if power_boost else d
 		"charge":
 			return stats.charge_damage * _buff_mult()
 	return DASH_DAMAGE

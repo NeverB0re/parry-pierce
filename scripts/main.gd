@@ -323,15 +323,7 @@ func _on_jump() -> void:
 func _on_arrived() -> void:
 	if touch_ui == null:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if OS.has_feature("web") else Input.MOUSE_MODE_CONFINED
-	var ids := ["dodge", "charge"]                         # 꼭 알아야 할 것만 스테이지별로: ① 돌진 → 차지 (패리·패리 불가·요격은 관측자가 그 공격을 처음 쓸 때) ② 주탄·잔탄 (돌진패리는 주포 탄이 나올 때) ③ 연속 요격 (본 장은 다시 안 뜬다)
-	if stage_idx >= 1:
-		ids.append("parry")                                # (관측자에서 못 본 장이 있으면 여기서라도)
-		ids.append("intercept")
-		ids.append("barrage")
-	if stage_idx >= 2:
-		ids.append("tentacle")
-	if stage_idx >= 3:
-		ids.append("barrier")
+	var ids: Array = [["dodge", "charge"], ["barrage"], ["tentacle"], ["barrier"]][mini(stage_idx, 3)]   # 그 스테이지에서 처음 배우는 장만 (나머지는 그 공격이 처음 닥칠 때: 관측자 패리·패리 불가·요격, 요새 돌진패리)
 	tutorial.request(ids)
 
 

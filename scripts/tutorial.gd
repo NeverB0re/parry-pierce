@@ -59,8 +59,8 @@ func _pages() -> Dictionary:
 		"dashparry": {
 			"title": Loc.t("돌진패리 — 돌진하며 패리"),
 			"lines": [
-				Loc.t("탄막을 향해 돌진하면서 패리하면 '돌진패리'입니다. 리버스 드라이브 뒤 돌진·차지 쿨다운이 바로 돌아옵니다."),
-				Loc.t("탄이 닿기 직전에 막으면 PERFECT — 리버스 드라이브가 끝까지 날아가 크게 들어가고 착지 후 잠깐 무적입니다. 일반 패리는 짧고 약합니다."),
+				Loc.t("탄을 향해 돌진하면서 패리하면 돌진패리 — 이어지는 리버스 드라이브가 더 강한 피해를 줍니다."),
+				Loc.t("돌진 중엔 무적이라 주탄을 둘러싼 잔탄 고리도 뚫고 들어갈 수 있습니다."),
 			],
 		},
 		"charge": {
@@ -77,10 +77,10 @@ func _pages() -> Dictionary:
 			],
 		},
 		"barrage": {
-			"title": Loc.t("탄막 — 주탄과 잔탄"),
+			"title": Loc.t("잔탄 — 작은 주황 별"),
 			"lines": [
-				Loc.t("작은 주황 별(잔탄)에 맞으면 기체가 달아오르고, 세 번 맞으면 실드 셀이 깨집니다. 잔탄은 패리하면 흡수됩니다."),
-				Loc.t("크고 둥근 금색 탄과 유도탄은 패리하면 리버스 드라이브로 되돌려 줄 수 있습니다."),
+				Loc.t("잔탄은 패리하면 흡수만 됩니다. 리버스 드라이브는 나가지 않습니다."),
+				Loc.t("잔탄에 맞으면 과열이 한 칸 쌓이고, 세 칸이 차면 실드 셀 하나가 깨집니다. 리버스 드라이브나 동조 드라이브로 적을 맞히면 과열이 한 칸 내려갑니다."),
 			],
 		},
 		"tentacle": {
@@ -322,6 +322,16 @@ class Stage extends Control:
 		draw_colored_polygon(PackedVector2Array([b + side * 5.0, b - side * 5.0, b + back * len]), Color(0.95, 0.15, 0.05))
 		draw_colored_polygon(PackedVector2Array([b + side * 2.5, b - side * 2.5, b + back * len * 0.6]), Color(1.0, 0.8, 0.3))
 
+	## 패리할 주탄: 탄막 요새 주포 탄처럼 큰 금색 주탄 + 둘레를 도는 잔탄 고리 (게임과 같은 모양)
+	func _shell(p: Vector2, v := Vector2.LEFT, escorts := true) -> void:
+		draw_line(p, p - v.normalized() * 44.0, Color(GOLD, 0.35), 14.0)
+		draw_circle(p, 20.0, Color(GOLD, 0.25))
+		draw_circle(p, 14.0, GOLD)
+		draw_circle(p, 7.0, Color(1, 1, 0.9))
+		if escorts:
+			for j in 10:
+				_small(p + Vector2.from_angle(t * 1.3 + j * TAU / 10.0) * 46.0, Vector2.from_angle(t * 1.3 + j * TAU / 10.0 + PI * 0.5))
+
 	func _bolt(p: Vector2, v := Vector2.LEFT) -> void:
 		draw_line(p, p - v.normalized() * 34.0, Color(GOLD, 0.35), 8.0)
 		draw_circle(p, 12.0, Color(GOLD, 0.25))
@@ -472,7 +482,7 @@ class Stage extends Control:
 			_flame(ship_pos, heading, 14.0)
 		if not parried:
 			var bp := Vector2(680, 150).lerp(sp + Vector2(18, -4), bolt_k)
-			_bolt(bp, Vector2(-1, 0.2))
+			_shell(bp, Vector2(-1, 0.2))
 		if holding:
 			var pr := 40.0 + (4.0 if int(t * 10.0) % 2 == 0 else 0.0)
 			_ring(sp, pr, Color(1.0, 0.95, 0.75, 0.9), 2.5)
@@ -494,7 +504,7 @@ class Stage extends Control:
 		if tt >= 4.0 and tt < 4.3:
 			_txt(Loc.t("뗀다"), Vector2(size.x - 60.0, 100.0), 15, Color(0.8, 0.9, 1.0))
 
-	## 돌진패리: 탄막을 향해 돌진하며 패리하면 리버스 드라이브 뒤 돌진·차지 쿨다운이 바로 돌아온다
+	## 돌진패리: 주탄(+호위탄 고리)을 향해 돌진하며 패리하면 이어지는 리버스 드라이브가 더 강하다
 	func _dashparry() -> void:
 		var T := 6.0
 		var tt := fmod(t, T)
@@ -509,9 +519,9 @@ class Stage extends Control:
 		if tt < d0:
 			_caption(Loc.t("① 다가오는 탄막을 보고 스스로 돌진하며 패리를 누른다"), MINT)
 		else:
-			_caption(Loc.t("② 돌진하는 동안의 패리 = 쿨다운 즉시 회복"), GOLD)
+			_caption(Loc.t("② 돌진하며 패리 → 더 강한 리버스 드라이브"), GOLD)
 		if not parried:
-			_bolt(Vector2(394.0 + 180.0 * (tm - tt), y), Vector2.LEFT)
+			_shell(Vector2(394.0 + 180.0 * (tm - tt), y), Vector2.LEFT)
 		if dashing:
 			for k in 3:
 				_ship(Vector2(sx - 26.0 * (k + 1), y), 0.0, 0.18, "b")
@@ -529,7 +539,7 @@ class Stage extends Control:
 			_spark(Vector2(sx + 30.0, y), _smooth(tm, tm + 0.5, tt), Color(1, 1, 1), 12, 56.0)
 			_txt(Loc.t("돌진패리!"), Vector2(sx - 70.0, y - 62.0), 20, GOLD)
 			if tt >= tm + 0.5:
-				_txt(Loc.t("더 강하게"), Vector2(sx - 100.0, y + 64.0), 16, MINT)
+				_txt(Loc.t("더 강한 피해"), Vector2(sx - 100.0, y + 64.0), 16, MINT)
 
 	func _charge(intercept := false) -> void:   # 앞 3.6초 = 차지 강습, 뒤 4.4초 = 요격 (따로 반복)
 		var tt := 3.6 + fmod(t, 4.4) if intercept else fmod(t, 3.6)
@@ -763,60 +773,53 @@ class Stage extends Control:
 		draw_circle(p, 2.5, Color(1.0, 0.93, 0.6))
 
 	func _barrage() -> void:
-		var T := 7.6
+		var T := 8.4
 		var tt := fmod(t, T)
 		var sp := Vector2(170, 165)
-		if tt < 3.4:
-			_caption(Loc.t("① 작은 주황 별(잔탄): 패리하면 흡수만 된다"), Color(1.0, 0.75, 0.45))
-			var holding := tt >= 0.6 and tt < 3.0
+		if tt < 3.0:
+			_caption(Loc.t("① 잔탄은 패리하면 흡수만 — 리버스 드라이브는 없다"), Color(1.0, 0.75, 0.45))
+			var holding := tt >= 0.6 and tt < 2.7
 			_ship(sp, 0.0)
 			_flame(sp, 0.0, 14.0)
-			for k in 6:
+			for k in 5:
 				var bx := 700.0 - (tt - 0.2 - k * 0.32) * 420.0
 				if bx > sp.x + 42.0 and bx < 700.0:
 					_small(Vector2(bx, sp.y + sin(k * 1.7) * 14.0))
 				elif bx <= sp.x + 42.0 and bx > sp.x - 10.0:
 					_spark(sp + Vector2(40, 0), (sp.x + 42.0 - bx) / 52.0, SMALL_C, 6, 22.0)
-					_txt(Loc.t("흡수 (쿨다운 없음)"), Vector2(sp.x - 10.0, sp.y - 46.0), 16, Color(1.0, 0.75, 0.45))
+					_txt(Loc.t("흡수"), Vector2(sp.x - 10.0, sp.y - 46.0), 16, Color(1.0, 0.75, 0.45))
 			if holding:
 				_ring(sp, 40.0 + (4.0 if int(t * 10.0) % 2 == 0 else 0.0), Color(1.0, 0.95, 0.75, 0.9), 2.5)
 			_mouse(Vector2(size.x - 40.0, 60.0), false, holding)
+		elif tt < 5.4:
+			var u := tt - 3.0
+			_caption(Loc.t("② 맞으면 과열 — 세 번이면 실드 셀이 깨진다"), Color(1.0, 0.55, 0.35))
+			var hot := _smooth(0.9, 1.1, u)
+			if hot > 0.0:
+				draw_circle(sp, 40.0, Color(1.0, 0.35, 0.1, 0.35 * hot))
+			_ship(sp, 0.0)
+			var bx := lerpf(700.0, sp.x, _smooth(0.0, 1.0, u))
+			if u < 1.0:
+				_small(Vector2(bx, sp.y))
+			if u >= 1.0:
+				_spark(sp, _smooth(1.0, 1.5, u), Color(1.0, 0.4, 0.1), 10, 40.0)
+				_txt(Loc.t("과열 +1"), Vector2(sp.x - 30.0, sp.y - 56.0), 18, Color(1.0, 0.5, 0.3))
 		else:
-			var u := tt - 3.4
-			_caption(Loc.t("② 큰 탄·유도탄(주탄): 패리하면 리버스 드라이브"), GOLD)
-			var tgt := Vector2(560, 80)
-			var parried := u >= 1.6
-			var holding := u >= 1.2 and u < 2.8
-			var heading := 0.0
-			var ship_pos := sp
-			if parried and u < 2.8:
-				draw_rect(Rect2(Vector2.ZERO, size), Color(0.3, 0.5, 0.95, 0.1))
-				heading = lerp_angle(0.0, (tgt - sp).angle(), _smooth(1.8, 2.5, u))
-				var aim := Vector2.from_angle(heading)
-				draw_line(sp + aim * 30.0, sp + aim * 330.0, Color(0.75, 0.92, 1.0, 0.8), 2.0)
-			elif u >= 2.8:
-				heading = (tgt - sp).angle()
-				ship_pos = sp.lerp(tgt - Vector2(30, -14), _smooth(2.8, 3.05, u))
-			_target(tgt, _smooth(3.05, 3.3, u) * (1.0 - _smooth(3.3, 3.7, u)), 3 if u >= 3.05 else 0)
-			_ship(ship_pos, heading, 1.0, "r" if u >= 2.8 and u < 3.05 else "b")
-			if not parried:                              # 유도탄: 휘어 들어온다 + 도는 고리
-				var k := _smooth(0.0, 1.6, u)
-				var a := Vector2(660, 40)
-				var c := Vector2(560, 260)
-				var b := sp + Vector2(22, 0)
-				var hp := a.lerp(c, k).lerp(c.lerp(b, k), k)
-				draw_circle(hp, 22.0, Color(1.0, 0.25, 0.1, 0.3))
-				draw_circle(hp, 17.0, Color(1.0, 0.45, 0.1, 0.4))
-				draw_circle(hp, 12.0, Color(1.0, 0.7, 0.15))
-				draw_circle(hp, 6.0, Color(1, 1, 0.9))
-				for j in 4:
-					var a0 := t * 9.0 + j * TAU / 4.0
-					draw_arc(hp, 26.0, a0, a0 + 1.0, 8, Color(1.0, 0.45, 0.2, 0.95), 4.0)
-			if holding:
-				_ring(sp, 40.0, Color(1.0, 0.95, 0.75, 0.9), 2.5)
-			if parried and u < 2.0:
-				_spark(sp + Vector2(20, 0), (u - 1.6) / 0.4, Color(1, 1, 1), 12, 56.0)
-				_txt(Loc.t("막았다!"), Vector2(sp.x - 24.0, sp.y - 62.0), 18, GOLD)
-			if u >= 3.05 and u < 4.0:
-				_txt(Loc.t("적중!"), Vector2(tgt.x - 30.0, tgt.y - 50.0), 20, GOLD)
-			_mouse(Vector2(size.x - 40.0, 60.0), false, holding)
+			var u := tt - 5.4
+			_caption(Loc.t("③ 리버스 드라이브·동조 드라이브로 적을 맞히면 과열 -1"), GOLD)
+			var tgt := Vector2(560, 90)
+			var go := _smooth(0.4, 0.7, u)
+			var heading := (tgt - sp).angle()
+			var pos := sp.lerp(tgt - Vector2(34, -12), go)
+			var cool := 1.0 - _smooth(0.7, 1.2, u)
+			if cool > 0.0:
+				draw_circle(pos, 40.0, Color(1.0, 0.35, 0.1, 0.35 * cool))
+			_target(tgt, _smooth(0.7, 0.9, u) * (1.0 - _smooth(0.9, 1.4, u)), 3 if u >= 0.7 else 0)
+			if u >= 0.4 and u < 0.7:
+				for k in 3:
+					_ship(pos - Vector2.from_angle(heading) * 24.0 * (k + 1), heading, 0.2, "r")
+			_ship(pos, heading, 1.0, "r" if u >= 0.4 and u < 0.7 else "b")
+			if u >= 0.7:
+				_spark(tgt, _smooth(0.7, 1.2, u), Color(1.0, 0.85, 0.5), 12, 60.0)
+				_txt(Loc.t("과열 -1"), Vector2(pos.x - 30.0, pos.y + 50.0), 18, Color(0.75, 0.95, 1.0))
+

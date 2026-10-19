@@ -109,7 +109,7 @@ func _run() -> void:
 	main.touch_ui = FakeStick.new()
 
 	_check("numbers (cd %.2f, dmg %d/%d/%d/%d, part %d, core %d)" % [p.stats.dash_cooldown, p.DASH_DAMAGE, p.stats.charge_damage, p.stats.power_damage, p.stats.clash_damage, b.PART_HP, b.core.CORE_HP],
-		absf(p.stats.dash_cooldown - 0.9) < 0.001 and p.DASH_DAMAGE == 1 and p.stats.charge_damage == 3 and p.stats.power_damage == 8 and p.stats.power_damage_perfect == 16 and p.stats.clash_damage == 8 and b.PART_HP == 30 and b.ARMOR_HP == 208 and b.core.CORE_HP == 1)
+		absf(p.stats.dash_cooldown - 0.9) < 0.001 and p.DASH_DAMAGE == 1 and p.stats.charge_damage == 3 and p.stats.power_damage == 8 and p.stats.power_damage_perfect == 16 and p.stats.clash_damage == 8 and b.PART_HP == 30 and b.ARMOR_HP == 229 and b.core.CORE_HP == 1)
 
 	# ── 돌진: 짧게 = 돌진, 쿨다운 ──
 	_air(Vector2(-900, -1500))
@@ -1034,7 +1034,7 @@ func _v035_test() -> void:
 		b.gun_exposed = true
 		b.damage_part(b.BIG, 16)
 		more += 1
-	_check("the big gun has hit points: about fourteen PERFECT drives break it and open the core (%d, phase %d, other parts alive %d)" % [more, b.phase, b.parts_left()], more >= 13 and more <= 15 and b.phase == 2 and b.parts_left() == 4)
+	_check("the big gun has hit points: about fifteen PERFECT drives break it and open the core (%d, phase %d, other parts alive %d)" % [more, b.phase, b.parts_left()], more >= 14 and more <= 16 and b.phase == 2 and b.parts_left() == 4)
 	main.start_stage(1)
 	b = main.boss
 	b.gun_exposed = true
@@ -1397,6 +1397,17 @@ func _v037_test() -> void:
 		sh.step(DT, Vector2(-400, -1500), Vector2.ZERO)
 	var bent_back: float = sh.vel[0].angle()
 	sh.clear()
+	# 돌진패리 리버스 드라이브 = 피해 20% 더
+	var pdp = main.player
+	pdp.dash_kind = "power"
+	pdp.perfect_dash = true
+	pdp.power_boost = false
+	var d_plain: int = pdp._strike_damage()
+	pdp.power_boost = true
+	var d_boost: int = pdp._strike_damage()
+	pdp.power_boost = false
+	pdp.dash_kind = ""
+	_check("dash-parry reverse drive deals 20%% more (%d -> %d)" % [d_plain, d_boost], d_boost == int(round(d_plain * 1.2)) and d_boost > d_plain)
 	_check("observer missile chases a target ahead but does not turn back for one behind (ahead %.2f rad, behind %.2f)" % [bent_front, bent_back], bent_front > 0.3 and absf(bent_back) < 0.01)
 	var pr_open = main.Profile.new()
 	pr_open.persist = false
