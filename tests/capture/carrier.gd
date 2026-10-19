@@ -1,5 +1,5 @@
 extends SceneTree
-# 모함 캡처 (창 모드, 자동 종료): 포위 고리 → 탄막 편대 → 돌격 편대 예고 → 결계 편대 → 함포 포격 → 탐조 광선 → 부서진 드론이 모함으로 → 최후의 발악.
+# 모함 캡처 (창 모드, 자동 종료): 포위망 → 편대 패턴 아홉(편대마다 셋) → 대형 포탄 → 주포 → 부서진 드론이 모함으로 → 최후의 발악.
 # 인자: -- --notutorial --out=<dir>. 진행 저장·플레이 기록은 끈다
 var main
 var n := 0
@@ -7,12 +7,20 @@ var out := ""
 # [이름, 장면, 찍을 프레임]
 var plan := [
 	["ring", "idle", 150],
-	["gun", "gun", 140],
-	["rush_warn", "rush", 70],
-	["veil", "veil", 150],
-	["shells", "shells", 55],
-	["search", "search", 110],
-	["fling", "fling", 30],
+	["gun_fan", "gun:fan", 70],
+	["gun_stream", "gun:stream", 90],
+	["gun_missiles", "gun:missiles", 110],
+	["rush_line", "rush:line", 55],
+	["rush_chain", "rush:chain", 75],
+	["rush_lance", "rush:lance", 55],
+	["veil_net_form", "veil:net", 55],
+	["veil_net", "veil:net", 160],
+	["veil_cross", "veil:cross", 75],
+	["veil_pulse", "veil:pulse", 110],
+	["shell", "shell", 100],
+	["cannon_aim", "cannon", 80],
+	["cannon_fire", "cannon", 150],
+	["fling", "fling", 50],
 	["final", "final", 280],
 ]
 var idx := 0
@@ -54,17 +62,22 @@ func _process(_d: float) -> bool:
 		p.reset(PPOS, false)
 		for k in 120:                                  # 드론이 격납고에서 나와 고리를 잡을 시간
 			b.step(1.0 / 60.0, PPOS)
-		match pl[1]:
-			"gun":
-				b.start_attack(b.SquadGun.new(0))
-			"rush":
-				b.start_attack(b.SquadRush.new(1))
-			"veil":
-				b.start_attack(b.SquadVeil.new(2))
-			"shells":
-				b.start_attack(b.CarrierShells.new())
-			"search":
-				b.start_attack(b.RadialBurst.new(b._search_origin(), b.SEARCH_BEAMS))
+		var sc: String = pl[1]
+		if sc.contains(":"):
+			var kd: String = sc.get_slice(":", 0)
+			var md: String = sc.get_slice(":", 1)
+			match kd:
+				"gun":
+					b.start_attack(b.SquadGun.new(0, md))
+				"rush":
+					b.start_attack(b.SquadRush.new(1, md))
+				"veil":
+					b.start_attack(b.SquadVeil.new(2, md))
+		match sc:
+			"shell":
+				b.start_attack(b.CarrierShell.new())
+			"cannon":
+				b.start_attack(b.CarrierCannon.new())
 			"fling":
 				b.damage_part(4, 999)
 				b.damage_part(0, 999)

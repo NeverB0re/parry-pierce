@@ -7,7 +7,7 @@
 | `build/windows/` | **업로드할 게임 폴더** — `ParryPierce.exe` + `README.txt` (butler 로 올릴 때 이 폴더를 통째로) |
 | `ParryPierce-v0.102-windows.zip` | 같은 내용의 **zip** (웹 대시보드에서 직접 올릴 때) |
 | `build/web/`, `ParryPierce-v0.102-web.zip` | **브라우저 실행판** (HTML5) — `index.html` 이 zip 맨 위에 있다 |
-| `cover.png` | 표지 이미지 (1260×1000, itch 권장 630×500 의 2배. 5:4 비율이라 그대로 올리면 된다) |
+| `cover.png` | 표지 이미지 (게임 커버 그림, 1408×1117 — itch 권장 630×500 과 같은 비율이라 그대로 올리면 된다) |
 | `screenshots/01~08_*.png` | 스크린샷 8장 (1280×720, 영어 화면: 메인 화면, 보스 넷, 항로도, 동력 코어) |
 | `DEVLOG_v0.102.md` | 개발 로그 글 (영어 + 한국어, 이미지 넣을 자리 표시) |
 | `STORE_PAGE.md` | 페이지에 붙여 넣을 소개문 (영어 + 한국어), 태그, 설정 값 |

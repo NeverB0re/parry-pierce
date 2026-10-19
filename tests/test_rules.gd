@@ -2780,19 +2780,30 @@ func _carrier_test() -> void:
 	var chip: int = hp0 - b.part_hp[1]
 	b.damage({"kind": "part", "idx": 1}, 8)
 	_check("carrier: a dash or charge only chips a drone, a reverse drive bites (chip %d, drive %d)" % [chip, hp0 - chip - b.part_hp[1]], chip == b.CHIP and hp0 - chip - b.part_hp[1] == 8)
-	# 차례: 편대 ↔ 모함 번갈아, 같은 편대가 연달아 오지 않는다
+	# 포위망은 늘 플레이어를 가운데 둔다: 플레이어가 멀리 옮겨도 따라와 다시 둘러싼다
+	var pp2 := pp + Vector2(-700, -500)
+	for k in int(4.0 / DT):
+		b.step(DT, pp2)
+	var around := 0
+	for i in 9:
+		if b.part_alive(i) and absf(b.part_pos(i).distance_to(pp2) - b.RING_R) < 260.0:
+			around += 1
+	_check("carrier: the encirclement stays centred on the player after it moves (%d of 8 around)" % around, around >= 6)
+	# 차례: 편대 ↔ 모함 번갈아, 같은 편대가 연달아 오지 않는다, 편대마다 패턴 셋 (편대장 패턴 포함)
 	b.reset()
 	var turns: Array[String] = []
 	var squads: Array[int] = []
+	var modes := {}
 	var prev := ""
 	seed(5)
-	for k in int(120.0 / DT):
+	for k in int(240.0 / DT):
 		b.step(DT, pp)
 		var kd: String = b.attack_kind()
 		if kd != "" and kd != prev:
 			turns.append(kd)
 			if kd.begins_with("squad_"):
 				squads.append(b.active)
+				modes[b.atk.mode] = true
 		prev = kd
 	var repeat := false
 	for k in range(1, squads.size()):
@@ -2800,38 +2811,101 @@ func _carrier_test() -> void:
 	var alt := true
 	for k in range(1, turns.size()):
 		alt = alt and (turns[k].begins_with("squad_") != turns[k - 1].begins_with("squad_"))
-	_check("carrier: squad turns alternate with carrier turns, never the same squad twice in a row (%s)" % str(turns.slice(0, 10)),
-		turns.has("squad_gun") and turns.has("squad_rush") and turns.has("squad_veil") and turns.has("shells") and turns.has("burst") and not repeat and alt)
-	# 돌격 편대: 겨누고 멈춘 순간 요격 → 그 드론에 피해, 튕겨 나가 다음 기로
+	_check("carrier: squad turns alternate with carrier turns (shell / main cannon), never the same squad twice in a row (%s)" % str(turns.slice(0, 8)),
+		turns.has("squad_gun") and turns.has("squad_rush") and turns.has("squad_veil") and turns.has("big_shell") and turns.has("cannon") and not repeat and alt)
+	_check("carrier: each squad has three patterns incl. a leader pattern (%s)" % str(modes.keys()), modes.size() == 9)
+	# 탄막 편대는 플레이어를 노린다: 부채의 가운데 탄이 플레이어 쪽으로
 	b.reset()
 	b.next_t = 99.0
 	b.shots.clear()
-	var rs = b.SquadRush.new(1)
-	b.start_attack(rs)
+	b.start_attack(b.SquadGun.new(0, "fan"))
 	var guard := 0
-	while rs.phase != "warn" and guard < 400:
+	while b.shots.size() == 0 and guard < 400:
 		b.step(DT, pp)
 		guard += 1
-	var hb: Dictionary = b.clash_box(pp)
-	var first: int = rs._drone()
-	var hp1: int = b.part_hp[first]
-	main._clash(hb, pp)
-	_check("carrier rush: a locked-on drone can be intercepted; it takes the hit and is knocked away (drone %d hp %d -> %d, phase %s)" % [first, hp1, b.part_hp[first], rs.phase],
-		not hb.is_empty() and int(hb.get("part", -1)) == first and b.part_hp[first] < hp1 and rs.phase == "knocked" and b.melee_warning() == false)
-	# 결계 편대: 보라 선은 가는 심줄만 맞는다, 퍼펙트 회피한 선은 사라진다
+	var aimed := 0
+	for k in b.shots.size():
+		if b.shots.kind[k] == b.shots.Kind.BOLT and b.shots.vel[k].normalized().dot((pp - b.shots.pos[k]).normalized()) > 0.97:
+			aimed += 1
+	_check("carrier gun squad: the fan's gold shots fly straight at the player (%d aimed)" % aimed, aimed >= 2)
 	b.reset()
 	b.next_t = 99.0
-	var vl = b.SquadVeil.new(2)
+	b.shots.clear()
+	b.start_attack(b.SquadGun.new(0, "missiles"))
+	for k in int(1.2 / DT):
+		b.step(DT, pp)
+	var homing := 0
+	for k in b.shots.size():
+		homing += 1 if b.shots.kind[k] == b.shots.Kind.HOMING else 0
+	_check("carrier gun leader: fires homing missiles (%d)" % homing, homing >= 2)
+	# 돌격 편대: 나란히 돌진 — 멈춰 겨눈 기체를 요격하면 그 기체만 피해 + 튕겨 나가고 나머지는 계속
+	b.reset()
+	b.next_t = 99.0
+	b.shots.clear()
+	var rs = b.SquadRush.new(1, "line")
+	b.start_attack(rs)
+	guard = 0
+	var warn_seen := false
+	while guard < 400:
+		b.step(DT, pp)
+		guard += 1
+		if rs.runs.size() == 3 and rs.runs[0]["phase"] == "warn":
+			warn_seen = b.melee_warning()
+			break
+	var hb: Dictionary = b.clash_box(pp)
+	var first: int = int(hb.get("part", -1))
+	var hp1: int = b.part_hp[first] if first >= 0 else 0
+	main._clash(hb, pp)
+	var others := 0
+	for r in rs.runs:
+		others += 1 if r["phase"] == "warn" else 0
+	_check("carrier rush line: three abreast lock on together; intercepting one knocks only that drone (drone %d hp %d -> %d, still locked %d)" % [first, hp1, b.part_hp[first] if first >= 0 else -1, others],
+		warn_seen and first >= 0 and b.part_hp[first] < hp1 and others == 2)
+	b.reset()
+	b.next_t = 99.0
+	var rc = b.SquadRush.new(1, "chain")
+	b.start_attack(rc)
+	var overlap := false
+	for k in int(4.0 / DT):
+		b.step(DT, pp)
+		var striking := 0
+		var aiming := 0
+		for r in rc.runs:
+			striking += 1 if r["phase"] == "strike" else 0
+			aiming += 1 if r["phase"] == "aim" else 0
+		overlap = overlap or (striking >= 1 and aiming >= 1)
+	_check("carrier rush chain: the next drone takes aim while the previous one rams", overlap)
+	# 결계 편대: 밖에서 그물을 엮고(무해) 플레이어를 따라가며 조인다. 선만 맞고, 퍼펙트 회피한 선은 사라진다
+	b.reset()
+	b.next_t = 99.0
+	var vl = b.SquadVeil.new(2, "net")
 	b.start_attack(vl)
+	b.step(DT, pp)
+	var harmless: bool = b.beam_hit((vl._edges()[0][0] + vl._edges()[0][1]) * 0.5, 12.0) == Vector2.ZERO
 	guard = 0
 	while vl.phase != "fire" and guard < 400:
 		b.step(DT, pp)
 		guard += 1
+	var c0: Vector2 = vl.c
+	for k in int(0.6 / DT):
+		b.step(DT, pp + Vector2(300, 0))
 	var es: Array = vl._edges()
 	var on_edge: Vector2 = (es[0][0] + es[0][1]) * 0.5
-	_check("carrier veil: three drones string unparryable lines between them; only the line hurts", es.size() == 3 and b.beam_hit(on_edge, 12.0) != Vector2.ZERO and b.beam_hit(vl.c, 12.0) == Vector2.ZERO)
+	_check("carrier veil net: woven outside first (harmless), then tightens while following the player (centre moved %.0f)" % vl.c.distance_to(c0), harmless and vl.c.distance_to(c0) > 100.0)
+	_check("carrier veil net: only the thin line hurts", es.size() == 3 and b.beam_hit(on_edge, 12.0) != Vector2.ZERO and b.beam_hit(vl.c, 12.0) == Vector2.ZERO)
 	b.mark_beam_dodged(on_edge, 12.0)
-	_check("carrier veil: a perfect-evaded line vanishes", vl.beam_hit(on_edge, 12.0) == Vector2.ZERO and vl.dodged_edges.size() == 1)
+	_check("carrier veil net: a perfect-evaded line vanishes", vl.beam_hit(on_edge, 12.0) == Vector2.ZERO and vl.dodged_edges.size() == 1)
+	# 주포: 플레이어를 따라오다 멈추고 아주 굵은 광선 한 줄기
+	b.reset()
+	b.next_t = 99.0
+	var cn = b.CarrierCannon.new()
+	b.start_attack(cn)
+	guard = 0
+	while cn.phase != "fire" and guard < 400:
+		b.step(DT, pp)
+		guard += 1
+	var side: Vector2 = pp + cn.dir.orthogonal() * (cn.HALF - 20.0)
+	_check("carrier main cannon: tracks the player then fires one very thick beam (hits %.0f px off-centre)" % (cn.HALF - 20.0), b.beam_hit(pp, 12.0) != Vector2.ZERO and b.beam_hit(side, 12.0) != Vector2.ZERO and cn.HALF >= 100.0)
 	# 부서진 드론은 모함으로 날아가 꽂힌다
 	b.reset()
 	b.next_t = 99.0

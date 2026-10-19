@@ -1,169 +1,227 @@
 extends "res://scripts/attacks/attack.gd"
-## 돌격 편대 (모함, 진홍 = 근접): 한 기씩 차례로 플레이어 곁으로 날아와 겨누고(진홍 예고 띠) 멈췄다가, 그 줄을 따라 몸통째 들이받는다.
-## 근접이라 일반 돌진으로 피할 수 없다 — 겨누고 멈춘 순간(warn)이나 들이받는 중에 차지 강습으로 요격하면 그 드론에 피해 + 튕겨 나가 순서가 넘어간다.
-## 순서: 편대원 → 편대장 (마지막이 가장 단단하다). 예고는 지금 차례 한 기만 또렷하게 (다음 기는 순번 표시만).
-## boss 에 필요한 것: squad_alive(s), want_drone(i, pos), hold_drone(i, pos), drone_pos(i), is_leader(i), DRONE_R
+## 돌격 편대 (모함, 진홍 = 근접): 몸통째 들이받는다. 일반 돌진으로는 못 피한다 — 멈춰 겨눈 순간(warn)이나 들이받는 중에 차지 강습으로 요격하면
+## 그 드론에 피해 + 튕겨 나간다 (나머지는 계속).
+## 모드 — 편대 패턴 둘 + 편대장 패턴 하나
+##   line  : 셋이 나란히 한 줄로 늘어서서 플레이어를 겨누고, 다 함께 돌진한다 (줄 끝 밖으로 빠지거나 하나를 요격해 틈을 연다)
+##   chain : 셋이 차례로 연달아 돌진한다 (앞 기체가 들이받기 시작하면 다음 기체가 겨눈다. 예고는 겨누는 기체만, 기다리는 기체는 순번만)
+##   lance : 편대장이 멀리서 굵은 몸통으로 두 번 돌격한다 (두 번째는 다시 겨눈다)
+## 겨누는 동안(aim)은 플레이어를 따라간다. 멈춘 뒤(warn)엔 그 줄로.
+## boss 에 필요한 것: squad_alive(s), squad_center(s), leader_of(s), want_drone, hold_drone, drone_pos, aim_drone, seg_closest, emit
 
 const MeleeWarn := preload("res://scripts/melee_warn.gd")
-const AIM := 0.75                    # 플레이어 곁 자리로 날아오며 겨눈다 (앞쪽은 플레이어를 따라감)
-const AIM_TRACK := 0.55
-const WARN := 0.5                    # 멈춰 겨눈다 (요격 기회)
-const STRIKE := 0.26                 # 들이받기 (판정)
-const RECOVER := 0.35
-const STAND := 470.0                 # 겨누는 자리 = 플레이어에서 이만큼
-const REACH := 980.0                 # 들이받는 거리 (플레이어를 지나 반대쪽까지)
-const HALF := 40.0                   # 몸통 판정 반폭
-const KNOCK := 300.0                 # 요격당하면 튕겨 나가는 거리
+const AIM := 0.7
+const WARN := 0.45
+const STRIKE := 0.3
+const RECOVER := 0.3
+const STAND := 520.0                 # 겨누는 자리 = 플레이어에서 이만큼
+const REACH := 1100.0                # 들이받는 거리 (플레이어를 지나 반대쪽까지)
+const LINE_GAP := 190.0              # 나란히 설 때 간격
+const HALF := 46.0                   # 몸통 판정 반폭
+const LANCE_STAND := 760.0
+const LANCE_REACH := 1500.0
+const LANCE_HALF := 80.0             # 편대장 몸통 판정 (굵다)
+const KNOCK := 320.0
 const KNOCK_TIME := 0.4
 
 var squad := 0
-var order: Array = []                # 들이받을 차례 (드론 번호)
-var cur := 0                         # order 안의 지금 차례
-var from := Vector2.ZERO             # 겨눈 자리 (들이받기 시작점)
-var to := Vector2.ZERO               # 들이받기 끝점
-var prev := Vector2.ZERO             # 지난 프레임 드론 위치 (판정 = 그 사이를 쓴 몸통)
-var knock_from := Vector2.ZERO
-var knock_dir := Vector2.ZERO
+var mode := "chain"
+var runs: Array = []                 # 돌진 하나 = {i, phase, t, half, stand, reach, from, to, prev, side}
 
 
-func _init(s: int) -> void:
+func _init(s: int, m := "chain") -> void:
 	kind = "squad_rush"
-	phase = "aim"
 	squad = s
+	mode = m
 
 
-func _drone() -> int:
-	return int(order[cur]) if cur < order.size() else -1
+func _setup() -> void:
+	if mode == "lance":
+		var l: int = boss.leader_of(squad)
+		if boss.part_alive(l):
+			for k in 2:
+				runs.append({"i": l, "phase": "wait", "t": 0.0, "half": LANCE_HALF, "stand": LANCE_STAND, "reach": LANCE_REACH})
+	else:
+		var order: Array = boss.squad_alive(squad).duplicate()
+		order.reverse()                                   # 편대원 먼저, 편대장 마지막
+		for i in order:
+			runs.append({"i": i, "phase": "wait", "t": 0.0, "half": HALF, "stand": STAND, "reach": REACH})
+	if mode == "line":
+		for r in runs:
+			r["phase"] = "aim"
+	elif not runs.is_empty():
+		runs[0]["phase"] = "aim"
 
 
-func step(_dt: float, ppos: Vector2) -> void:
-	if order.is_empty():
-		var ids: Array = boss.squad_alive(squad)
-		for i in ids:                                  # 편대원 먼저, 편대장이 마지막
-			if not boss.is_leader(i):
-				order.append(i)
-		for i in ids:
-			if boss.is_leader(i):
-				order.append(i)
-		if order.is_empty():
+func step(dt: float, ppos: Vector2) -> void:
+	if runs.is_empty():
+		_setup()
+		if runs.is_empty():
 			boss.finish_attack()
 			return
-	while cur < order.size() and not boss.part_alive(_drone()):   # 이미 부서진 드론은 건너뛴다
-		_next()
-	if cur >= order.size():
+	var live := 0
+	for k in runs.size():
+		var r: Dictionary = runs[k]
+		if not boss.part_alive(int(r["i"])):
+			r["phase"] = "done"
+		if r["phase"] == "done":
+			continue
+		live += 1
+		r["t"] = float(r["t"]) + dt
+		_run(r, k, ppos)
+	if mode != "line":                                   # chain: 앞 기체가 들이받기 시작하면 다음 기체가 겨누기 시작
+		for k in range(1, runs.size()):
+			var ready: bool = _started(runs[k - 1]) if mode == "chain" else runs[k - 1]["phase"] == "done"   # lance: 같은 기체라 앞 돌격이 끝난 뒤
+			if runs[k]["phase"] == "wait" and ready:
+				_go(runs[k], "aim")
+	if live == 0:
 		boss.finish_attack()
-		return
-	var i := _drone()
-	for k in range(cur + 1, order.size()):              # 기다리는 기체는 플레이어 둘레에서 순서를 기다린다
-		var j: int = order[k]
-		if boss.part_alive(j):
-			var a: float = (boss.drone_pos(j) - ppos).angle()
-			boss.want_drone(j, ppos + Vector2.from_angle(a) * 760.0)
-	match phase:
+
+
+func _started(r: Dictionary) -> bool:
+	return r["phase"] == "strike" or r["phase"] == "recover" or r["phase"] == "done" or r["phase"] == "knocked"
+
+
+func _go(r: Dictionary, ph: String) -> void:
+	r["phase"] = ph
+	r["t"] = 0.0
+
+
+## 돌진 하나 진행
+func _run(r: Dictionary, k: int, ppos: Vector2) -> void:
+	var i: int = r["i"]
+	var tt: float = r["t"]
+	match r["phase"]:
+		"wait":                                          # 차례를 기다리며 플레이어 둘레에서 노려본다 (lance 의 두 번째는 같은 기체라 그대로 둔다)
+			if mode == "lance":
+				return
+			var a: float = (boss.drone_pos(i) - ppos).angle()
+			boss.want_drone(i, ppos + Vector2.from_angle(a) * 720.0)
+			boss.aim_drone(i, a + PI)
 		"aim":
-			if t < AIM_TRACK or from == Vector2.ZERO:
-				var side: Vector2 = (boss.drone_pos(i) - ppos).normalized()
-				if side.length() < 0.1:
-					side = Vector2.UP
-				from = ppos + side * STAND
-				to = from + (ppos - from).normalized() * REACH
-			boss.want_drone(i, from)
-			if t >= AIM:
-				boss.hold_drone(i, from)
-				set_phase("warn")
+			_place(r, k, ppos)
+			boss.want_drone(i, r["from"])
+			boss.aim_drone(i, (Vector2(r["to"]) - Vector2(r["from"])).angle())
+			if tt >= AIM:
+				boss.hold_drone(i, r["from"])
+				_go(r, "warn")
 		"warn":
-			boss.hold_drone(i, from)
-			if t >= WARN:
-				prev = from
-				dodged = false                         # 차례마다 새 공격 (앞 기체를 무적으로 지났다고 이번 것까지 통과하지 않게)
-				set_phase("strike")
-				boss.emit(Ev.SWING, from)
+			boss.hold_drone(i, r["from"])
+			if tt >= WARN:
+				r["prev"] = r["from"]
+				dodged = false                             # 기체마다 새 공격
+				_go(r, "strike")
+				boss.emit(Ev.SWING, r["from"])
 		"strike":
-			prev = boss.drone_pos(i)
-			var k := minf(1.0, t / STRIKE)
-			boss.hold_drone(i, from.lerp(to, k * k))
-			if k >= 1.0:
-				set_phase("recover")
+			r["prev"] = boss.drone_pos(i)
+			var u := minf(1.0, tt / STRIKE)
+			boss.hold_drone(i, Vector2(r["from"]).lerp(r["to"], u * u))
+			if u >= 1.0:
+				_go(r, "recover")
 		"recover":
-			boss.want_drone(i, to)
-			if t >= RECOVER:
-				_next()
+			boss.want_drone(i, r["to"])
+			if tt >= RECOVER:
+				_go(r, "done")
 		"knocked":
-			var k := minf(1.0, t / KNOCK_TIME)
-			boss.hold_drone(i, knock_from + knock_dir * KNOCK * (1.0 - (1.0 - k) * (1.0 - k)))
-			if k >= 1.0:
-				_next()
+			var u := minf(1.0, tt / KNOCK_TIME)
+			boss.hold_drone(i, Vector2(r["knock_from"]) + Vector2(r["knock_dir"]) * KNOCK * (1.0 - (1.0 - u) * (1.0 - u)))
+			if u >= 1.0:
+				_go(r, "done")
 
 
-func _next() -> void:
-	cur += 1
-	from = Vector2.ZERO
-	set_phase("aim")
+## 겨누는 자리 (겨누기 앞쪽 80% 동안 플레이어를 따라간다). line 은 셋이 같은 쪽에서 나란히
+func _place(r: Dictionary, k: int, ppos: Vector2) -> void:
+	if float(r["t"]) > AIM * 0.8 and r.has("from"):
+		return
+	var stand: float = r["stand"]
+	var reach: float = r["reach"]
+	if mode == "line":
+		var side: Vector2 = (boss.squad_center(squad) - ppos).normalized()
+		if side.length() < 0.1:
+			side = Vector2.UP
+		var off := (k - (runs.size() - 1) * 0.5) * LINE_GAP
+		r["from"] = ppos + side * stand + side.orthogonal() * off
+		r["to"] = Vector2(r["from"]) - side * reach
+		return
+	var dir: Vector2 = (boss.drone_pos(int(r["i"])) - ppos).normalized()
+	if dir.length() < 0.1:
+		dir = Vector2.UP
+	r["from"] = ppos + dir * stand
+	r["to"] = Vector2(r["from"]) - dir * reach
 
 
-func _box(ppos: Vector2) -> Dictionary:
-	var i := _drone()
+func _box(r: Dictionary, ppos: Vector2) -> Dictionary:
+	var i: int = r["i"]
 	var p: Vector2 = boss.drone_pos(i)
-	var a := prev if phase == "strike" else p
+	var a: Vector2 = r["prev"] if r["phase"] == "strike" and r.has("prev") else p
 	var q: Vector2 = boss.seg_closest(ppos, a, p)
-	return {"id": "rush", "segs": [[a, p, HALF]], "pos": q, "src": self, "drone": i}
+	return {"id": "rush", "segs": [[a, p, float(r["half"])]], "pos": q, "src": self, "drone": i, "run": r}
 
 
 func hitboxes(ppos: Vector2, out: Array[Dictionary]) -> void:
-	if phase != "strike" or _drone() < 0:
-		return
-	var hb := _box(ppos)
-	var nrm := (to - from).normalized().orthogonal()
-	hb["push"] = nrm if nrm.dot(ppos - from) >= 0.0 else -nrm      # 줄 바깥으로 밀려난다
-	hb["melee"] = true
-	out.append(hb)
+	for r in runs:
+		if r["phase"] != "strike":
+			continue
+		var hb := _box(r, ppos)
+		var nrm := (Vector2(r["to"]) - Vector2(r["from"])).normalized().orthogonal()
+		hb["push"] = nrm if nrm.dot(ppos - Vector2(r["from"])) >= 0.0 else -nrm   # 줄 바깥으로 밀려난다
+		hb["melee"] = true
+		out.append(hb)
 
 
+## 요격: 겨누고 멈춘(warn)·들이받는 기체 중 플레이어에 가장 가까운 것
 func clash_box(ppos: Vector2) -> Dictionary:
-	if (phase != "warn" and phase != "strike") or _drone() < 0:
-		return {}
-	var hb := _box(ppos)
-	hb["part"] = _drone()                              # 요격 = 그 드론에 피해 (main._clash 가 damage_part)
-	return hb
+	var best := {}
+	var bd := INF
+	for r in runs:
+		if r["phase"] != "warn" and r["phase"] != "strike":
+			continue
+		var hb := _box(r, ppos)
+		var d: float = Vector2(hb["pos"]).distance_to(ppos)
+		if d < bd:
+			bd = d
+			best = hb
+	if not best.is_empty():
+		best["part"] = best["drone"]                     # 요격 = 그 드론에 피해 (main._clash 가 damage_part)
+	return best
 
 
 func assist_targets(_from: Vector2, out: Array[Dictionary]) -> void:
-	if (phase == "warn" or phase == "strike") and _drone() >= 0:
-		out.append({"pos": boss.drone_pos(_drone()), "r": 50.0, "intercept": true})
+	for r in runs:
+		if r["phase"] == "warn" or r["phase"] == "strike":
+			out.append({"pos": boss.drone_pos(int(r["i"])), "r": 56.0, "intercept": true})
 
 
-## 요격당함: 그 드론이 부딪힌 방향으로 튕겨 나가고, 다음 차례로 넘어간다
+## 요격당함: 그 기체만 부딪힌 방향으로 튕겨 나간다 (나머지는 계속)
 func on_parried(hb: Dictionary) -> void:
-	if phase != "warn" and phase != "strike":
+	var r: Dictionary = hb.get("run", {})
+	if r.is_empty() or (r["phase"] != "warn" and r["phase"] != "strike"):
 		return
-	knock_from = boss.drone_pos(_drone())
-	knock_dir = hb.get("dir", Vector2.UP)
-	if knock_dir.length() < 0.1:
-		knock_dir = Vector2.UP
-	knock_dir = knock_dir.normalized()
-	set_phase("knocked")
+	r["knock_from"] = boss.drone_pos(int(r["i"]))
+	var d: Vector2 = hb.get("dir", Vector2.UP)
+	r["knock_dir"] = d.normalized() if d.length() > 0.1 else Vector2.UP
+	_go(r, "knocked")
 
 
 func melee_warning() -> bool:
-	return phase == "aim" or phase == "warn"
+	for r in runs:
+		if r["phase"] == "aim" or r["phase"] == "warn":
+			return true
+	return false
 
 
-## 예고: 지금 차례의 들이받을 줄 (진홍 띠) + 순번 표시. 기다리는 기체는 순번만
+## 예고: 겨누는 기체의 돌진 줄 (진홍 띠). chain 은 기다리는 기체에 순번만
 func draw() -> void:
-	var i := _drone()
-	if i < 0:
-		return
 	var c: CanvasItem = boss
-	for k in range(cur, order.size()):
-		var j: int = order[k]
-		if boss.part_alive(j):
-			MeleeWarn.tag(c, boss.drone_pos(j) + Vector2(0, -78), 2 if k == cur and phase == "warn" else (1 if k == cur else 0), boss.t, k - cur)
-	if phase != "aim" and phase != "warn":
-		return
-	if from == Vector2.ZERO:
-		return
-	var level := 1 if phase == "aim" else 2
-	var d := (to - from).normalized()
-	var n := d.orthogonal() * HALF
-	var area := PackedVector2Array([from + n, to + n, to - n, from - n])
-	MeleeWarn.zone(c, area, level, boss.t)
+	for k in runs.size():
+		var r: Dictionary = runs[k]
+		var ph: String = r["phase"]
+		if ph == "wait" and mode == "chain":
+			MeleeWarn.tag(c, boss.drone_pos(int(r["i"])) + Vector2(0, -90), 0, boss.t, k)
+		if (ph != "aim" and ph != "warn") or not r.has("from"):
+			continue
+		var level := 1 if ph == "aim" else 2
+		var from: Vector2 = r["from"]
+		var to: Vector2 = r["to"]
+		var n := (to - from).normalized().orthogonal() * float(r["half"])
+		MeleeWarn.zone(c, PackedVector2Array([from + n, to + n, to - n, from - n]), level, boss.t)
+		MeleeWarn.tag(c, boss.drone_pos(int(r["i"])) + Vector2(0, -90), level, boss.t, k if mode == "chain" else -1)

@@ -1,16 +1,14 @@
 extends SceneTree
-# itch.io 페이지용 이미지 캡처 (창 모드, 자동 종료): 스크린샷(1280x720) + 표지(1260x1000, 630x500 의 2배).
+# itch.io 페이지용 스크린샷 캡처 (창 모드, 자동 종료, 1280x720). 표지(itch/cover.png)는 따로 그린 그림을 쓴다 (v0.105).
 # 인자: -- --notutorial --out=<dir>.  영어 화면. 진행·언어 저장은 끈다.
 # v0.101: 보스 네 마리의 리메이크된 모습(실제 공격 그대로) + 도트 글꼴로 바뀐 항로도·동력 코어 장착 화면.
 const Loc := preload("res://scripts/loc.gd")
-const UiFont := preload("res://scripts/ui_font.gd")
 var main
 var n := 0
 var out := ""
 var idx := 0
 var f := 0                           # 장면 안의 프레임
 var ppos := Vector2.ZERO             # 플레이어를 고정할 자리
-var cover_layer: CanvasLayer = null
 var warn_seen := -1
 # [파일 이름, 장면, 찍을 프레임, 플레이어 자리, 카메라 위치, 줌]
 var plan := [
@@ -22,7 +20,6 @@ var plan := [
 	["06_satellite_barrier_open", "sat_open", 90, Vector2(300, -1100), Vector2(0, -1500), 0.42],
 	["07_route_map", "map", 40, Vector2.ZERO, Vector2.ZERO, 1.0],
 	["08_power_cores", "cores", 40, Vector2.ZERO, Vector2.ZERO, 1.0],
-	["cover", "obs_sword", 115, Vector2(380, -1450), Vector2(0, -1650), 0.34],
 ]
 
 
@@ -108,8 +105,6 @@ func _process(_d: float) -> bool:
 	var pl: Array = plan[idx]
 	var scene: String = pl[1]
 	if f == 0:
-		if pl[0] == "cover":
-			DisplayServer.window_set_size(Vector2i(1260, 1000))
 		_setup(scene, pl)
 	f += 1
 	if scene != "title" and scene != "map" and scene != "cores":
@@ -119,20 +114,6 @@ func _process(_d: float) -> bool:
 		main.cam.position = pl[4]
 		main.cam.zoom = Vector2(pl[5], pl[5])
 		main.hud.clear_banner()
-	if pl[0] == "cover":                                    # 표지: HUD 를 숨기고 제목을 얹는다 (게임과 같은 도트 글꼴)
-		main.hud.visible = false
-		if cover_layer == null:
-			cover_layer = CanvasLayer.new()
-			cover_layer.layer = 90
-			root.add_child(cover_layer)
-			var t1 := _label("PARRY PIERCE", 96, UiFont.bold(), 14, Color(1.0, 0.93, 0.8), Color(0.85, 0.45, 0.12, 0.9))
-			t1.offset_top = -230.0
-			t1.offset_bottom = -110.0
-			cover_layer.add_child(t1)
-			var t2 := _label("Parry the barrage. Pierce the colossus.", 36, UiFont.make(), 8, Color(0.9, 0.95, 1.0), Color(0, 0, 0, 0.85))
-			t2.offset_top = -100.0
-			t2.offset_bottom = -40.0
-			cover_layer.add_child(t2)
 	var shoot := f == int(pl[2])
 	if scene == "obs_sword":                                # 대검은 물리 틱으로 진행하므로 프레임 대신 경고 자세를 기다린다
 		var a = main.boss.atk
@@ -147,15 +128,3 @@ func _process(_d: float) -> bool:
 		warn_seen = -1
 	return false
 
-
-func _label(text: String, size: int, font: Font, outline: int, col: Color, ocol: Color) -> Label:
-	var l := Label.new()
-	l.text = text
-	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	l.add_theme_font_override("font", font)
-	l.add_theme_font_size_override("font_size", size)
-	l.add_theme_color_override("font_color", col)
-	l.add_theme_color_override("font_outline_color", ocol)
-	l.add_theme_constant_override("outline_size", outline)
-	return l
