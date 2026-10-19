@@ -2398,6 +2398,17 @@ func _title_test() -> void:
 func _zone_test() -> void:
 	main.start_stage(2)
 	var k = main.boss
+	var firsts := {}
+	for r in 12:                                                     # 첫 근접은 언제나 연속 내려치기 (연속 요격 튜토리얼)
+		k.reset()
+		k.shots.clear()
+		k.lingering.clear()
+		k.rot_k = k.ROTATION - 1
+		k.since_special = 0
+		k._choose(Vector2(200, -1300))
+		firsts[k.attack_kind() if k.attack_kind() != "" else k.want] = true
+	_check("kraken: the first melee is always the triple pound (%s)" % str(firsts.keys()), firsts.keys() == ["pound"])
+	k.reset()
 	_check("kraken: floor sweep is likely when low, rare when high (%.2f vs %.2f)" % [k._zone_w("sweep", Vector2(0, -300)), k._zone_w("sweep", Vector2(0, -2300))],
 		k._zone_w("sweep", Vector2(0, -300)) > 1.0 and k._zone_w("sweep", Vector2(0, -2300)) < 0.1)
 	_check("kraken: siphon barrages are rare when the player is above the body", k._zone_w("ink", Vector2(0, -2400)) < 0.3 and k._zone_w("ink", Vector2(0, -600)) >= 1.0)

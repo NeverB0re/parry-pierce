@@ -84,9 +84,10 @@ func _pages() -> Dictionary:
 			],
 		},
 		"tentacle": {
-			"title": Loc.t("연속 요격 — 요격하고 바로 다음 타로"),
+			"title": Loc.t("연속 요격 — 이어지는 근접공격을 차례로"),
 			"lines": [
-				Loc.t("요격에 성공하면 차지를 바로 다시 모을 수 있습니다. 연달아 오는 공격은 하나씩 이어서 요격하세요."),
+				Loc.t("근접공격이 여러 번 이어지면 한 타씩 차례로 요격하세요. 요격에 성공하면 차지가 바로 다시 모여 다음 타도 요격할 수 있습니다."),
+				Loc.t("끝까지 모두 요격하면 마지막 일격에 촉수가 끊어지고 방어막이 약해집니다."),
 			],
 		},
 		"barrier": {
@@ -657,64 +658,63 @@ class Stage extends Control:
 
 	## 촉수 요격: 겨누고 멈춘 촉수에 차지 강습 → 움츠러들고 전류가 방어막 속 외눈으로 → 끊어진 촉수는 떨어져 나간다
 	func _tentacle() -> void:
-		var T := 7.0
+		var T := 7.4
 		var tt := fmod(t, T)
-		var root := Vector2(330, -20)
-		var x := 330.0
-		var top := 70.0
-		var whip_end := top + 70.0
-		var limp := tt >= 5.0
-		var recoil := _smooth(3.0, 3.5, tt) * (1.0 - _smooth(4.2, 5.0, tt))
-		var rise := _smooth(0.0, 1.0, tt)
-		var tip := Vector2(x, lerpf(240.0, whip_end, rise)) + Vector2(0, -60.0) * recoil
-		if limp:
-			tip = Vector2(380, 230)
-		var mid := root.lerp(tip, 0.45) + Vector2(70.0 if not limp else 30.0, 0)
-		var col := Color(0.2, 0.26, 0.28) if not limp else Color(0.12, 0.13, 0.14)
+		var root := Vector2(560, -20)
+		var sp := Vector2(330, 195)                     # 기체 (아래)
+		var hit_y := 105.0                              # 촉수 끝이 내려와 멈추는 높이 (요격 지점)
+		var n := 3
+		var t0 := 0.5
+		var gap := 1.7
+		var cut := tt >= t0 + 2.0 * gap + 1.0           # 세 번째를 받아친 뒤 끊어진다
+		var idx := clampi(int((tt - t0) / gap), 0, n - 1)
+		var u := tt - (t0 + idx * gap)                   # 이번 타 안의 시각: 0~0.5 들어 올림, 0.5~1.0 멈춰 점멸, 1.0 요격, 이후 튕겨 오름
+		var tip := Vector2(sp.x, hit_y)
+		if tt < t0:
+			tip = Vector2(sp.x + 40.0, 40.0)
+		elif u < 0.5:
+			tip = Vector2(sp.x, lerpf(40.0, hit_y, _smooth(0.0, 0.5, u)))
+		elif u >= 1.0:
+			tip = Vector2(sp.x, hit_y - 90.0 * _smooth(1.0, 1.3, u) * (1.0 - _smooth(1.3, gap, u)))
+		if cut:
+			tip = Vector2(sp.x + 80.0, 215.0) - Vector2(0, 30.0 * (1.0 - _smooth(t0 + 2.0 * gap + 1.0, t0 + 2.0 * gap + 1.5, tt)))
+		var mid := root.lerp(tip, 0.45) + Vector2(60.0, 0)
 		var pts := PackedVector2Array()
 		for q in 13:
 			pts.append(root.bezier_interpolate(mid + Vector2(0, -60), mid + Vector2(0, 30), tip, q / 12.0))
-		if not limp:
+		var col := Color(0.2, 0.26, 0.28)
+		if cut:                                          # 끊어진 촉수: 끝 토막이 떨어지고 뿌리 쪽만 남는다
+			for q in 6:
+				draw_line(pts[q], pts[q + 1], Color(0.12, 0.13, 0.14), lerpf(26.0, 17.0, q / 5.0))
+			draw_line(tip + Vector2(-50, -60), tip, Color(0.12, 0.13, 0.14), 12.0)
+		else:
 			for q in 12:
 				draw_line(pts[q], pts[q + 1], col, lerpf(26.0, 10.0, q / 11.0))
-		var drv := pts[4]
-		var flash := _smooth(3.0, 3.1, tt) * (1.0 - _smooth(3.1, 3.6, tt))
-		var eye := Vector2(150, 40)                    # 방어막 속 외눈: 요격하면 전류가 흘러 번쩍이고 금이 간다
-		draw_circle(eye, 34.0, Color(0.45, 0.95, 1.0, 0.1))
-		_ring(eye, 34.0, Color(0.45, 0.95, 1.0, 0.7), 2.0)
-		draw_rect(Rect2(eye.x - 16.0, eye.y - 5.0, 32.0, 10.0), Color(1.0, 0.42, 0.22).lerp(Color.WHITE, flash))
-		if tt >= 3.0:
-			draw_line(eye + Vector2(-6, -5), eye + Vector2(-14, -16), Color(1.0, 0.55, 0.22), 2.0)
-		if flash > 0.0:
-			draw_line(drv, eye, Color(1.0, 0.9, 0.6, flash), 3.0)
-		if limp:                                       # 떨어져 나간 자리
-			draw_circle(root + Vector2(0, 30), 14.0, Color(1.0, 0.42, 0.22, 0.35))
-		if tt >= 1.0 and tt < 2.9:                     # 겨누고 멈춤: 내리꽂힐 띠
+		var aiming := not cut and tt >= t0 and u >= 0.5 and u < 1.0
+		if aiming:                                       # 멈춰 붉게 점멸 (요격할 때)
 			var blink := 0.5 + 0.5 * sin(t * 24.0)
-			draw_rect(Rect2(x - 18.0, top, 36.0, 200.0), Color(1.0, 0.16, 0.12, 0.08 + 0.15 * blink))
-			draw_rect(Rect2(x - 18.0, top, 36.0, 200.0), Color(1.0, 0.5, 0.4, 0.4 + 0.3 * blink), false, 2.0)
-		var sp := Vector2(560, 215)
+			draw_rect(Rect2(sp.x - 18.0, hit_y, 36.0, sp.y - hit_y + 24.0), Color(1.0, 0.16, 0.12, 0.08 + 0.15 * blink))
 		var pos := sp
-		if tt >= 1.4 and tt < 2.6:
+		var charging := not cut and tt >= t0 and u >= 0.55 and u < 0.85
+		if charging:
 			pos += Vector2(randf_range(-1, 1), randf_range(-1, 1)) * 2.0
-		elif tt >= 2.6 and tt < 3.0:
-			pos = sp.lerp(tip + Vector2(14, 10), _smooth(2.6, 3.0, tt) * 0.999)
-		elif tt >= 3.0:
-			pos = tip + Vector2(14, 10) + Vector2(80.0, 40.0) * _smooth(3.0, 3.8, tt)
-		if limp:
-			pos = sp
-		_ship(pos, (tip - sp).angle() if tt < 3.0 else -PI * 0.5, 1.0, "r" if tt >= 1.4 and tt < 3.4 else "b")
-		if tt < 1.0:
-			_caption(Loc.t("촉수가 들려 올라간다 — 아직 요격 불가"), Color(0.75, 0.78, 0.85))
-		elif tt < 3.0:
-			_caption(Loc.t("멈춰 붉게 점멸 = 차지 강습으로 요격!"), Color(1.0, 0.8, 0.6))
-		elif tt < 5.0:
-			_caption(Loc.t("요격! 외눈에 피해 + 다음 차지가 빨라진다"), GOLD)
-			_spark(tip, _smooth(3.0, 3.6, tt), Color(1.0, 0.85, 0.5), 14, 50.0)
-			_spark(drv, _smooth(3.0, 3.6, tt), Color(1.0, 0.6, 0.3), 8, 34.0)
+		elif not cut and tt >= t0 and u >= 0.85 and u < 1.0:
+			pos = sp.lerp(tip + Vector2(0, 26), _smooth(0.85, 1.0, u))
+		elif not cut and tt >= t0 and u >= 1.0 and u < 1.4:
+			pos = (tip + Vector2(0, 26)).lerp(sp, _smooth(1.0, 1.4, u))
+		_ship(pos, -PI * 0.5, 1.0, "r" if charging or (u >= 0.85 and u < 1.0) else "b")
+		var done := mini(n, int((tt - t0 - 1.0) / gap) + 1) if tt >= t0 + 1.0 else 0
+		for q in n:                                      # 이번 연속 공격의 타 (요격한 타는 금빛)
+			var c := Vector2(40.0 + q * 30.0, 195.0)
+			draw_circle(c, 9.0, GOLD if q < done else Color(0.3, 0.32, 0.38))
+		if not cut and tt >= t0 and u >= 1.0 and u < 1.5:
+			_spark(tip + Vector2(0, 10), _smooth(1.0, 1.4, u), Color(1.0, 0.85, 0.5), 12, 46.0)
+			_txt(Loc.t("요격! 차지 즉시 회복"), Vector2(sp.x + 34.0, sp.y - 40.0), 16, GOLD)
+		if cut:
+			_caption(Loc.t("② 끝까지 요격 → 촉수가 끊어지고 방어막이 약해진다"), GOLD)
 		else:
-			_caption(Loc.t("요격한 촉수는 끊어졌다가 다시 자란다"), Color(0.85, 0.9, 1.0))
-		if tt >= 1.4 and tt < 2.6:
+			_caption(Loc.t("① 이어지는 내려치기를 한 타씩 차지 강습으로 요격"), Color(1.0, 0.8, 0.6))
+		if charging:
 			_mouse(Vector2(size.x - 40.0, 60.0), true, false)
 
 	func _unparry() -> void:

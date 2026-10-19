@@ -116,6 +116,7 @@ var pierce := 0.0                            # 방금 방어막을 뚫은 일격
 var pierce_k := 0.0                          # 그 일격이 뚫고 들어간 비율 (얼마나 깊이 들어갔나)
 var pierce_n := Vector2.DOWN
 var rot_k := 0                               # 탄막·근접 순서
+var first_melee := true                      # 첫 근접은 연속 내려치기 (연속 요격 튜토리얼이 이때 뜬다)
 var eye_look := Vector2.ZERO                 # 광선을 쏘는 동안 광학부가 바라보는 곳 (eye_look_t 가 최근일 때만)
 var eye_look_t := -99.0
 
@@ -155,6 +156,7 @@ func reset() -> void:
 		busy[i] = null
 		grown[i] = 1.0
 	super()
+	first_melee = true
 	for i in TENTS:
 		spines[i] = _idle_spine(i)
 	hit_dir_t = -99.0
@@ -595,6 +597,8 @@ func _choose(ppos: Vector2) -> void:
 		var melee_turn := rot_k % ROTATION == ROTATION - 1
 		if melee_turn and not melee.is_empty():
 			pool = melee
+			if first_melee and melee.has("pound"):          # 첫 근접은 연속 내려치기 (연속 요격을 처음 배우는 장면)
+				pool = ["pound"]
 		if not (melee_turn and melee.is_empty()):           # 근접 차례인데 쓸 촉수가 없으면 다음에도 근접 차례
 			rot_k += 1
 		var w := {}                                          # 같은 패턴이 여러 번 들어 있으면 그만큼 자주 + 구역 가중치
@@ -649,6 +653,7 @@ func _start(kind: String, ready: Array[int], ppos: Vector2, hard: bool) -> void:
 		"eye_beam":                                          # 패리 불가: 외눈 광선이 한 바퀴 돌며 동심원 하나
 			_pick("eye_beam", EyeSweep.new(CORE_POS))
 		"pound":
+			first_melee = false
 			_pick("pound", _pound(ready, ppos))
 		"chase":
 			_grab_start("chase", Chase.new(_nearest(ready, ppos.x)))

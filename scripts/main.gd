@@ -323,7 +323,7 @@ func _on_jump() -> void:
 func _on_arrived() -> void:
 	if touch_ui == null:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if OS.has_feature("web") else Input.MOUSE_MODE_CONFINED
-	var ids: Array = [["dodge", "charge"], ["barrage"], ["tentacle"], ["barrier"]][mini(stage_idx, 3)]   # 그 스테이지에서 처음 배우는 장만 (나머지는 그 공격이 처음 닥칠 때: 관측자 패리·패리 불가·요격, 요새 돌진패리)
+	var ids: Array = [["dodge", "charge"], ["barrage"], [], ["barrier"]][mini(stage_idx, 3)]   # 그 스테이지에서 처음 배우는 장만 (나머지는 그 공격이 처음 닥칠 때: 관측자 패리·패리 불가·요격, 요새 돌진패리, 크라켄 연속 요격)
 	tutorial.request(ids)
 
 
@@ -344,6 +344,9 @@ func _observer_tutor(delta: float) -> void:
 		tut_scale = lerpf(1.0, TUT_SLOW, tut_grace / tut_grace_len)
 	if stage_idx == 1 and state == State.PLAY and not boss.dead and not player.aim_phase:   # 탄막 요새: 주포 탄이 나오면 돌진패리
 		_tut_moment("dashparry", _shell_out(), TUT_GRACE)
+		return
+	if stage_idx == 2 and state == State.PLAY and not boss.dead and not player.aim_phase:   # 크라켄: 첫 연속 내려치기가 요격할 수 있게 되면 연속 요격
+		_tut_moment("tentacle", boss.attack_kind() == "pound" and not boss.clash_box(player.position).is_empty(), TUT_GRACE)
 		return
 	if stage_idx != 0 or state != State.PLAY or boss.dead or not boss.awake or player.aim_phase:
 		return
