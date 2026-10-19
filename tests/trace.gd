@@ -27,6 +27,7 @@ func _process(_d: float) -> bool:
 		main.set_physics_process(false)          # 엔진의 실시간 물리 틱이 끼어들지 않게 (프레임마다 직접 한 번만 돈다)
 		main.touch_ui = FakeStick.new()
 		main.reset_run()
+		main.boss.t = 0.0                        # 보스 시계는 재시작해도 그대로라, 시작 전 실시간으로 흐른 만큼(실행마다 다름)을 지운다 (헤일로 렌즈 각도 등)
 		seed(7)
 		main.player.reset(Vector2(200, -1500), false)
 	if n < 2:

@@ -1065,17 +1065,27 @@ func _v035_test() -> void:
 	b.damage_part(b.BIG, 1)
 	_check("small hits (reflected bullets) on the exposed gun only chip it, no stagger", b.part_hp[b.BIG] == b.BIG_HP - 1 and b.gun_shake == 0.0)
 	# 주포 탄을 막거나 되돌리면 호위탄 고리는 사라진다
-	for how in ["parry", "return"]:
+	for how in ["parry", "return", "parry_escort", "return_escort"]:
 		b.shots.clear()
 		var g: int = b.shots.new_group()
 		b.shots.spawn(Vector2(0, -1200), Vector2(0, 200), 5.0, 0.0, 0.0, b.shots.Kind.SHELL, g)
 		for k in 6:
 			b.shots.spawn(Vector2(0, -1200) + Vector2.from_angle(k) * 120.0, Vector2(0, 200), 5.0, 0.0, 0.0, b.shots.Kind.SMALL, g, k, 120.0)
-		if how == "parry":
-			b.on_parried({"id": "bolt", "idx": 0})
-		else:
-			b.shots.reflect_one(0, Vector2(0, -1600))
-		_check("%s of the heavy shell clears its escort ring (%d left)" % [how, b.shots.size()], b.shots.size() == (0 if how == "parry" else 1))
+		match how:
+			"parry":
+				b.on_parried({"id": "bolt", "idx": 0})
+			"return":
+				b.shots.reflect_one(0, Vector2(0, -1600))
+			"parry_escort":
+				b.on_parried({"id": "bolt", "idx": 2})
+			"return_escort":
+				b.shots.reflect_one(2, Vector2(0, -1600))
+		var want: int = {"parry": 0, "return": 1, "parry_escort": 6, "return_escort": 7}[how]
+		var shell_left := false
+		for k in b.shots.size():
+			shell_left = shell_left or (b.shots.kind[k] == b.shots.Kind.SHELL and b.shots.mine[k] == 0)
+		_check("%s: the shell clears its escort ring only when the shell itself is hit (%d left, shell %s)" % [how, b.shots.size(), shell_left],
+			b.shots.size() == want and shell_left == how.ends_with("escort"))
 	b.shots.clear()
 	# 주포 탄은 바닥·벽에 닿아도 사라지지 않고 튕긴다 (수명 16초로만 사라진다), 동조 코어로도 지워지지 않는다
 	var gf: int = b.shots.new_group()
@@ -2284,6 +2294,24 @@ func _v047_test() -> void:
 	main._core_destroyed(b.core.center)
 	_check("kraken clear gives the assault core", mp.cores.has("assault") and mp.cleared.has("kraken"))
 	main.profile = old
+
+	# 보조 시스템을 다 부수면 코어 포대가 늘 열려 있다 (주포 차례가 끝나도 닫히지 않는다)
+	main.start_stage(1)
+	b = main.boss
+	b.next_t = 99.0
+	_step(int(1.0 / DT))
+	var shut_before: bool = not b.gun_exposed
+	for i in b.part_count():
+		if i != b.BIG:
+			b.damage_part(i, 9999)
+	_step(int(1.0 / DT))
+	var open_aux: bool = b.gun_exposed and b.gun_open >= 1.0 and b.phase == 1
+	var bg2 = b.BigGun.new()
+	b._pick("big_gun", bg2)
+	bg2._close()
+	_step(int(1.0 / DT))
+	_check("all aux systems broken: the core battery stays open (before %s, after %s, after a gun turn %s)" % [shut_before, open_aux, b.gun_exposed],
+		shut_before and open_aux and b.gun_exposed and b.core_damageable())
 
 	# 코어가 열리는 중(페이즈 2)에도 돌진이 맞고, 아래에서 맞혀도 코어 안으로 솟구치지 않는다
 	main.start_stage(1)

@@ -355,10 +355,18 @@ func _step_phase(dt: float) -> void:
 	gun_shake = move_toward(gun_shake, 0.0, dt * 1.2)
 	if not part_alive(BIG):
 		gun_open = 0.0
+	elif aux_gone():                                    # 보조 시스템이 다 부서졌다: 포방패가 열린 채로 (주포 차례를 기다리지 않고 바로 때린다)
+		gun_open = move_toward(gun_open, 1.0, dt / 0.7)
+		gun_exposed = gun_open >= 1.0
 	elif not is_lingering("big_gun") and (atk == null or atk.kind != "big_gun"):   # 포가 들어가며 포방패가 닫힌다
 		gun_open = move_toward(gun_open, 0.0, dt / 0.6)
 	if phase >= 2 and not core.broken:                 # 디버그 건너뛰기 등
 		_bare_core()
+
+
+## 보조 시스템(포탑·사일로)이 다 부서지고 코어 포대만 남았다 → 포대가 늘 열려 있다
+func aux_gone() -> bool:
+	return part_alive(BIG) and parts_left() == 1
 
 
 ## 코어 포대가 부서지면 장갑 없이 드러난 코어만 남는다 (한 대면 터진다)

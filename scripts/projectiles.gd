@@ -231,7 +231,7 @@ func reflect_near(p: Vector2, reach: float, target: Vector2) -> int:
 
 ## 탄 하나를 플레이어 것으로 바꿔 target 쪽으로 빠르게 되돌린다 (반사 코어·반격 코어)
 func reflect_one(i: int, target: Vector2) -> void:
-	var g := grp[i]                              # 묶음의 우두머리(주포 탄)를 되돌리면 호위탄은 사라진다
+	var g := lead_group(i)                       # 묶음의 우두머리(주포 탄)를 되돌리면 호위탄은 사라진다 (호위탄 하나면 그것만 되돌린다)
 	grp[i] = 0
 	mine[i] = 1
 	vel[i] = (target - pos[i]).normalized() * REFLECT_SPEED
@@ -239,6 +239,11 @@ func reflect_one(i: int, target: Vector2) -> void:
 	age[i] = WARMUP
 	life[i] = 4.0
 	remove_group(g)
+
+
+## 탄 i 가 묶음의 우두머리(주포 탄)면 그 묶음 번호, 호위탄이거나 묶음이 없으면 0
+func lead_group(i: int) -> int:
+	return grp[i] if orb_r[i] <= 0.0 else 0
 
 
 ## 묶음 g 의 탄을 모두 지운다 (주탄이 패리되면 호위탄 고리는 사라진다). g = 0 이면 아무것도 안 한다

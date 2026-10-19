@@ -519,7 +519,7 @@ func mark_hb_dodged(hb: Dictionary) -> void:
 ## 패리 / 요격당함: 탄은 사라지고, 공격 판정은 그 모듈(src, 없으면 지금 공격)이 처리한다 (팔은 밀려난다)
 func on_parried(hb: Dictionary) -> void:
 	if hb["id"] == "bolt":
-		var g: int = shots.grp[int(hb["idx"])]          # 주포 탄을 막으면 호위탄 고리도 사라진다
+		var g: int = shots.lead_group(int(hb["idx"]))   # 주포 탄을 막으면 호위탄 고리도 사라진다 (호위탄 하나를 막으면 그것만)
 		shots.remove(int(hb["idx"]))
 		shots.remove_group(g)
 		return
