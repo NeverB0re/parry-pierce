@@ -1023,7 +1023,7 @@ func _v035_test() -> void:
 	_check("v0.77: the core also sprays loose small bullets everywhere but toward the player (%d)" % loose_n, loose_n >= bg.SCATTER)
 	_check("the exposed gun is the brightest target", b.part_emphasis(b.BIG) > 1.5 and b.part_emphasis(0) == 1.0)
 	b.damage_part(b.BIG, 8)
-	_check("a hit on the exposed gun takes its full damage and staggers it (hp %d, phase %s)" % [b.part_hp[b.BIG], bg.phase], b.part_hp[b.BIG] == b.BIG_HP - 8 and bg.phase == "stagger")
+	_check("a hit on the exposed gun takes half its damage and staggers it (hp %d, phase %s)" % [b.part_hp[b.BIG], bg.phase], b.part_hp[b.BIG] == b.BIG_HP - 4 and bg.phase == "stagger")
 	for k in int(3.0 / DT):
 		b.step(DT, Vector2(300, -1300))
 	var hp_c: int = b.part_hp[b.BIG]
@@ -1034,12 +1034,23 @@ func _v035_test() -> void:
 		b.gun_exposed = true
 		b.damage_part(b.BIG, 16)
 		more += 1
-	_check("the big gun has hit points: about seven PERFECT drives break it and open the core (%d, phase %d, other parts alive %d)" % [more, b.phase, b.parts_left()], more >= 6 and more <= 8 and b.phase == 2 and b.parts_left() == 4)
+	_check("the big gun has hit points: about fourteen PERFECT drives break it and open the core (%d, phase %d, other parts alive %d)" % [more, b.phase, b.parts_left()], more >= 13 and more <= 15 and b.phase == 2 and b.parts_left() == 4)
 	main.start_stage(1)
 	b = main.boss
 	b.gun_exposed = true
 	b.damage_part(b.BIG, 1)
 	_check("small hits (reflected bullets) on the exposed gun only chip it, no stagger", b.part_hp[b.BIG] == b.BIG_HP - 1 and b.gun_shake == 0.0)
+	# 반격 코어로 되돌린 주포 탄: 열린 코어에 크게 (닫혀 있으면 보통 규칙)
+	var hp_s: int = b.part_hp[b.BIG]
+	var sh_hit: Dictionary = b.strike_hit(b.gun_center(), 40.0)
+	sh_hit["shell"] = true
+	b.gun_exposed = true
+	b.damage(sh_hit, 3)
+	_check("a returned heavy shell hits the open core for SHELL_RETURN_DMG (%d -> %d)" % [hp_s, b.part_hp[b.BIG]], b.part_hp[b.BIG] == hp_s - b.SHELL_RETURN_DMG)
+	b.gun_exposed = false
+	hp_s = b.part_hp[b.BIG]
+	b.damage(sh_hit, 3)
+	_check("a returned shell on the closed shield only follows the normal rule (%d -> %d)" % [hp_s, b.part_hp[b.BIG]], hp_s - b.part_hp[b.BIG] <= 1)
 	var seg0: int = b.segs_left()
 	var sh0: int = b.shards.size()
 	for k in 3:

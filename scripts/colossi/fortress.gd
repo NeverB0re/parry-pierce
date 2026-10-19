@@ -48,6 +48,8 @@ const PART_R := [46.0, 46.0, 50.0, 50.0, 190.0]
 const BIG := 4                       # 대구경 포대 (외부 시스템 4): 체력제. 포방패가 닫힌 동안은 피해가 크게 줄고, 드러났을 때는 그대로 들어간다
 const BIG_HP := 110                  # 주 공략 대상이라 튼튼하게 (리버스 드라이브 8 / PERFECT 16, 반사탄은 0.5~3)
 const BIG_CLOSED_K := 0.15           # 포방패 너머로 들어가는 피해 비율
+const BIG_OPEN_K := 0.5              # 열려 있어도 보통 일격은 절반만 (다른 탄으로 리버스 드라이브를 우겨넣어 금방 깨지지 않게)
+const SHELL_RETURN_DMG := 35         # 반격 코어(관측자 보상)로 되돌린 주포 탄이 열린 코어에 꽂히면 — 특수 기믹
 const BIG_EVERY := 5                 # 공격 이만큼마다 대구경 포 (단독 패턴, 너무 자주 열리면 금방 끝난다)
 const GUN_HOLD := 1.5                # 대구경 포 차례에 필드가 비길 기다리는 최대 시간 (남은 탄·자리를 내준 공격)
 const SHELL_OUT := 200.0             # 포탄이 만들어지는 자리 (코어 앞, 플레이어 쪽으로)
@@ -159,13 +161,27 @@ func damage_part(i: int, dmg: int) -> bool:
 		return false
 	if gun_exposed:
 		if dmg >= 4:                                    # 큰 일격(리버스 드라이브 등)이면 휘청이며 들어간다. 반사탄 같은 작은 피해는 피해만
-			gun_shake = 1.0
-			for m in active_attacks():
-				if m.kind == "big_gun":
-					m.hit()
-		return _hit_core_armor(dmg)
+			_stagger_gun()
+		return _hit_core_armor(maxi(1, int(round(dmg * BIG_OPEN_K))) if dmg > 0 else 0)
 	part_flash[i] = 0.4
 	return _hit_core_armor(int(floor(dmg * BIG_CLOSED_K)))
+
+
+func _stagger_gun() -> void:
+	gun_shake = 1.0
+	for m in active_attacks():
+		if m.kind == "big_gun":
+			m.hit()
+
+
+## 반격 코어로 되돌린 주포 탄이 열린 코어에 꽂혔다: 피해 SHELL_RETURN_DMG (특수 기믹). 그 밖은 보통 규칙
+func damage(hit: Dictionary, dmg: int) -> bool:
+	if hit.get("shell", false) and hit.get("kind", "") == "part" and int(hit.get("idx", -1)) == BIG and gun_exposed and part_alive(BIG):
+		_stagger_gun()
+		emit(Ev.STOMP, gun_center())
+		_hit_core_armor(SHELL_RETURN_DMG)
+		return false
+	return super(hit, dmg)
 
 
 ## 코어 포대 체력 = 코어 장갑: 깎인 만큼 장갑 조각(SEGS 장)이 하나씩 떨어져 나간다 (조각이 튀고 흔들림)

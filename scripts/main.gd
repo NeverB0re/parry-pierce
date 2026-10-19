@@ -323,10 +323,11 @@ func _on_jump() -> void:
 func _on_arrived() -> void:
 	if touch_ui == null:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if OS.has_feature("web") else Input.MOUSE_MODE_CONFINED
-	var ids := ["dodge", "charge"]                         # 꼭 알아야 할 것만 스테이지별로: ① 돌진 → 차지 (패리·패리 불가·요격은 관측자가 그 공격을 처음 쓸 때) ② 요격 ③ 연속 요격 (본 장은 다시 안 뜬다)
+	var ids := ["dodge", "charge"]                         # 꼭 알아야 할 것만 스테이지별로: ① 돌진 → 차지 (패리·패리 불가·요격은 관측자가 그 공격을 처음 쓸 때) ② 주탄·잔탄 (돌진패리는 주포 탄이 나올 때) ③ 연속 요격 (본 장은 다시 안 뜬다)
 	if stage_idx >= 1:
-		ids.append("parry")
+		ids.append("parry")                                # (관측자에서 못 본 장이 있으면 여기서라도)
 		ids.append("intercept")
+		ids.append("barrage")
 	if stage_idx >= 2:
 		ids.append("tentacle")
 	if stage_idx >= 3:
@@ -349,6 +350,9 @@ func _observer_tutor(delta: float) -> void:
 	if tut_grace > 0.0:
 		tut_grace = maxf(0.0, tut_grace - delta)
 		tut_scale = lerpf(1.0, TUT_SLOW, tut_grace / tut_grace_len)
+	if stage_idx == 1 and state == State.PLAY and not boss.dead and not player.aim_phase:   # 탄막 요새: 주포 탄이 나오면 돌진패리
+		_tut_moment("dashparry", _shell_out(), TUT_GRACE)
+		return
 	if stage_idx != 0 or state != State.PLAY or boss.dead or not boss.awake or player.aim_phase:
 		return
 	_tut_moment("parry", _bolt_coming(400.0), RESUME_GRACE)
@@ -371,6 +375,15 @@ func _tut_moment(id: String, trigger: bool, grace: float) -> void:
 	tut_live[id] = true
 	tutorial.request([id])
 	pending_grace = maxf(pending_grace, grace)
+
+
+## 탄막 요새의 대구경 포탄이 날고 있는가 (적 것, 화면 안)
+func _shell_out() -> bool:
+	var sh = boss.shots
+	for i in sh.size():
+		if sh.mine[i] == 0 and sh.kind[i] == sh.Kind.SHELL and _ring_on_screen(sh.pos[i], 0.0):
+			return true
+	return false
 
 
 ## 원(동심원 고리)이 지금 화면 안에 걸쳐 있는가

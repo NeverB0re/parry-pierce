@@ -235,6 +235,8 @@ func take_hits(boss) -> Array[Dictionary]:
 		if mine[i] == 1:
 			var hit: Dictionary = boss.strike_hit(pos[i], RADII[kind[i]])
 			if not hit.is_empty():
+				if kind[i] == Kind.SHELL:                  # 되돌린 대구경 포탄 (탄막 요새: 반격 코어로 돌려보낸 주포 탄은 크게 들어간다)
+					hit["shell"] = true
 				out.append({"pos": pos[i], "hit": hit, "dmg": REFLECT_DMG[kind[i]]})
 				remove(i)
 		i -= 1

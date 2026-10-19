@@ -7,7 +7,7 @@ const UiFont := preload("res://scripts/ui_font.gd")
 const Loc := preload("res://scripts/loc.gd")
 const Sprites := preload("res://scripts/sprites.gd")
 
-const ORDER := ["dodge", "charge", "parry", "intercept", "tentacle", "barrier", "dashparry", "unparry", "barrage"]   # 자동으로 뜨는 건 앞의 다섯 장 (main.gd _on_arrived), 나머지는 성공 보상 위주라 조작법 목록에서만
+const ORDER := ["dodge", "charge", "parry", "unparry", "intercept", "barrage", "dashparry", "tentacle", "barrier"]   # 처음 보여 주는 순서 (조작법 목록도 이 순서): ① 도착 시 돌진·차지, 관측자의 유도탄·동심원·대검에서 패리·패리 불가·요격 ② 도착 시 주탄·잔탄, 주포 탄에서 돌진패리 ③ 연속 요격 ④ 결계
 const SAVE_PATH := "user://tutorial.cfg"
 
 var enabled := true                  # false: 자동 팝업·저장 없음 (테스트·헤드리스)
