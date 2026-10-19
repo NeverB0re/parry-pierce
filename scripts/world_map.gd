@@ -141,6 +141,15 @@ func select(i: int) -> bool:
 	return true
 
 
+## 숨은 개발자 명령 (안내 없음, 모든 빌드): Ctrl+Shift+O = 모든 스테이지를 고를 수 있게 (main.gd 와 같다 — 월드 맵은 일시정지 중이라 여기서도 받는다)
+func _input(e: InputEvent) -> void:
+	if visible and e is InputEventKey and e.pressed and not e.echo and e.ctrl_pressed and e.shift_pressed and e.keycode == KEY_O and profile != null:
+		profile.open_all = true
+		profile.save()
+		refresh()
+		get_viewport().set_input_as_handled()
+
+
 func _unhandled_input(e: InputEvent) -> void:
 	if not visible or not (e is InputEventKey) or not e.pressed or e.echo:
 		return
