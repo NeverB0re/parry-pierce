@@ -323,7 +323,7 @@ func _on_jump() -> void:
 func _on_arrived() -> void:
 	if touch_ui == null:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if OS.has_feature("web") else Input.MOUSE_MODE_CONFINED
-	var ids: Array = [["dodge", "charge"], ["barrage"], [], ["barrier"]][mini(stage_idx, 3)]   # 그 스테이지에서 처음 배우는 장만 (나머지는 그 공격이 처음 닥칠 때: 관측자 패리·패리 불가·요격, 요새 돌진패리, 크라켄 연속 요격)
+	var ids: Array = [["dodge", "charge"], ["barrage"], [], []][mini(stage_idx, 3)]   # 그 스테이지에서 처음 배우는 장만 (나머지는 그 공격이 처음 닥칠 때: 관측자 패리·패리 불가·요격, 요새 돌진패리, 크라켄 연속 요격)
 	tutorial.request(ids)
 
 

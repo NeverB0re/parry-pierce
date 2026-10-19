@@ -2271,20 +2271,20 @@ func _v047_test() -> void:
 	b.next_t = 99.0
 	p.reset(Vector2(300, -1500), false)
 	_step(2)
-	_check("heat ring hidden at first", p.heat_vis <= 0.0 and p.heat_cells == 3)
+	_check("heat ring hidden at first", p.heat_vis <= 0.0 and p.heat_cells == 0)
 	p.invuln = 0.0
 	p.small_guard = 0.0
 	b.shots.spawn(p.position, Vector2.ZERO, 5.0, 1.0, 0.0, b.shots.Kind.SMALL)
 	main.hitstop = 0
 	main._physics_process(DT)
 	main._physics_process(DT)
-	_check("one small hit: ring shows 2 of 3 (heat %d, cells %d)" % [main.heat, p.heat_cells], main.heat == 1 and p.heat_cells == 2 and p.heat_vis > 0.0)
+	_check("one small hit: ring fills 1 of 3 (heat %d, cells %d)" % [main.heat, p.heat_cells], main.heat == 1 and p.heat_cells == 1 and p.heat_vis > 0.0)
 	for k in int((main.HEAT_COOL + 0.2) / DT):
 		p.position = Vector2(300, -1500)
 		p.vel = Vector2.ZERO
 		main.hitstop = 0
 		main._physics_process(DT)
-	_check("cooled after 5 s: ring back to 3 and still shown", main.heat == 0 and p.heat_cells == 3 and p.heat_vis > 0.0)
+	_check("cooled after 5 s: ring empty again and still shown", main.heat == 0 and p.heat_cells == 0 and p.heat_vis > 0.0)
 	for k in int((p.HEAT_RING_HOLD + p.HEAT_RING_FADE + 0.2) / DT):
 		p.position = Vector2(300, -1500)
 		p.vel = Vector2.ZERO

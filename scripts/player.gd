@@ -122,7 +122,7 @@ var quick_t := 0.0               # 빠른 차지 남은 시간 (요격 성공으
 var chain := 0                   # 강습 코어: 연쇄 요격 횟수 (요격 피해 +2 씩, 최대 +6). 시간이 지나거나 맞으면 끊긴다
 var chain_t := 0.0
 var heat_vis := 0.0              # 잔탄 체력 링이 보이는 남은 시간 (과열 중엔 계속 가득)
-var heat_cells := 3              # 링에 그리는 남은 칸 (바뀌는 순간을 알아 번쩍임을 준다)
+var heat_cells := 0              # 링에 차오른 칸 = 쌓인 과열 (바뀌는 순간을 알아 번쩍임을 준다)
 var heat_flash := 0.0            # 칸이 깎이거나 돌아온 순간의 번쩍임
 var heat_flash_k := 0            # 번쩍이는 칸
 var heat_break := 0.0            # 셀이 깨진 직후: 빈 링이 붉게 깜빡인다
@@ -185,7 +185,7 @@ func reset(pos: Vector2, platform := false) -> void:
 	chain = 0
 	chain_t = 0.0
 	heat_vis = 0.0
-	heat_cells = 3
+	heat_cells = 0
 	heat_flash = 0.0
 	heat_break = 0.0
 	small_guard = 0.0
@@ -821,14 +821,14 @@ func clash_damage() -> int:
 	return dmg
 
 
-## 잔탄 체력 링: 과열(main.heat)이 있으면 보이고, 다 식으면 잠시 뒤 사라진다. 칸이 바뀌면 그 칸이 번쩍인다
+## 과열 링: 잔탄에 맞을 때마다 한 칸씩 차오르고(main.heat), 가득 차면 실드 셀이 깨진다. 식거나 드라이브로 적을 맞히면 한 칸 빠진다.
+## 과열이 있으면 보이고, 다 식으면 잠시 뒤 사라진다. 칸이 바뀌면 그 칸이 번쩍인다
 func _step_heat_ring(dt: float) -> void:
-	var hmax: int = main.HEAT_MAX
-	var cells: int = hmax - int(main.heat)
+	var cells: int = int(main.heat)
 	heat_flash = maxf(0.0, heat_flash - dt * 3.0)
 	heat_break = maxf(0.0, heat_break - dt)
 	if cells != heat_cells:
-		heat_flash_k = mini(cells, heat_cells)          # 깎이면 사라진 칸, 돌아오면 새로 찬 칸
+		heat_flash_k = maxi(cells, heat_cells) - 1      # 새로 찬 칸, 또는 방금 빠진 칸
 		heat_flash = 1.0
 		heat_cells = cells
 	if int(main.heat) > 0 or heat_break > 0.0:
@@ -1072,10 +1072,10 @@ func _draw_heat_ring() -> void:
 	for k in hmax:
 		var a0 := -PI * 0.5 + k * seg + 0.14
 		var a1 := -PI * 0.5 + (k + 1) * seg - 0.14
-		if k < heat_cells:
+		if k < heat_cells:                     # 차오른 과열 칸
 			var c := full.lerp(Color.WHITE, heat_flash if k == heat_flash_k else 0.0)
 			draw_arc(Vector2.ZERO, HEAT_RING_R, a0, a1, 12, Color(c, 0.9 * a), 5.0)
-		else:                                  # 깎인 칸: 어두운 자리만 (방금 깎였으면 하얗게 사라진다)
+		else:                                  # 빈 칸: 어두운 자리만 (방금 빠졌으면 하얗게 사라진다)
 			draw_arc(Vector2.ZERO, HEAT_RING_R, a0, a1, 12, Color(0.3, 0.16, 0.1, 0.55 * a), 3.0)
 			if k == heat_flash_k and heat_flash > 0.0:
 				draw_arc(Vector2.ZERO, HEAT_RING_R + 6.0 * (1.0 - heat_flash), a0, a1, 12, Color(1, 1, 1, heat_flash * a), 5.0)

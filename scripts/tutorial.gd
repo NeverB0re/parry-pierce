@@ -7,7 +7,7 @@ const UiFont := preload("res://scripts/ui_font.gd")
 const Loc := preload("res://scripts/loc.gd")
 const Sprites := preload("res://scripts/sprites.gd")
 
-const ORDER := ["dodge", "charge", "parry", "unparry", "intercept", "barrage", "dashparry", "tentacle", "barrier"]   # 처음 보여 주는 순서 (조작법 목록도 이 순서): ① 도착 시 돌진·차지, 관측자의 유도탄·동심원·대검에서 패리·패리 불가·요격 ② 도착 시 주탄·잔탄, 주포 탄에서 돌진패리 ③ 연속 요격 ④ 결계
+const ORDER := ["dodge", "charge", "parry", "unparry", "intercept", "barrage", "dashparry", "tentacle"]   # 처음 보여 주는 순서 (조작법 목록도 이 순서): ① 도착 시 돌진·차지, 관측자의 유도탄·동심원·대검에서 패리·패리 불가·요격 ② 도착 시 잔탄, 주포 탄에서 돌진패리 ③ 첫 연속 내려치기에서 연속 요격 (결계 위성은 스스로 알아낸다)
 const SAVE_PATH := "user://tutorial.cfg"
 
 var enabled := true                  # false: 자동 팝업·저장 없음 (테스트·헤드리스)
@@ -88,13 +88,6 @@ func _pages() -> Dictionary:
 			"lines": [
 				Loc.t("근접공격이 여러 번 이어지면 한 타씩 차례로 요격하세요. 요격에 성공하면 차지가 바로 다시 모여 다음 타도 요격할 수 있습니다."),
 				Loc.t("끝까지 모두 요격하면 마지막 일격에 촉수가 끊어지고 방어막이 약해집니다."),
-			],
-		},
-		"barrier": {
-			"title": Loc.t("결계 — 피해서 열고, 패리해서 부순다"),
-			"lines": [
-				Loc.t("보라 공격을 돌진 직후에 스치면 완전 동조. 그 상태로 차지 강습을 결계에 꽂으면 결계가 열립니다. PERFECT 리버스 드라이브도 결계를 엽니다."),
-				Loc.t("열리면 쏟아지는 금색 탄을 연달아 패리해 코어를 노리세요. 잠시 뒤 결계는 다시 닫힙니다."),
 			],
 		},
 		"unparry": {
@@ -389,7 +382,7 @@ class Stage extends Control:
 				_charge()
 			"intercept":
 				_charge(true)
-			"unparry", "barrier":
+			"unparry":
 				_unparry()
 			"barrage":
 				_barrage()
@@ -421,35 +414,32 @@ class Stage extends Control:
 				_txt(Loc.t("좌클릭!"), Vector2(sx - 30.0, y + 52.0), 16, GOLD)
 				_mouse(Vector2(sx + 40.0, y + 60.0), tt >= d0, false)
 		else:
-			_caption(Loc.t("② 돌진 직후에 스치면 PERFECT"), MINT)
+			_caption(Loc.t("② 돌진으로 표적에 부딪히면 피해 + 튕겨 오른다"), GOLD)
 			var u := tt - 3.0
-			var y := 150.0
-			var bx := lerpf(680.0, 20.0, _smooth(0.0, 2.4, u))
-			var x0 := 200.0                              # ①과 같은 방향(오른쪽)으로 돌진한다
-			var d0 := (680.0 - (x0 + 58.0)) / 660.0 * 2.4   # 탄이 바로 코앞까지 왔을 때 돌진을 시작
-			var dashing := u >= d0 and u < d0 + 0.28
-			var sx := x0
-			if u >= d0:
-				sx = x0 + 190.0 * _smooth(d0, d0 + 0.28, u)
+			var sp := Vector2(200, 170)
+			var tgt := Vector2(470, 150)
+			var d0 := 0.6
+			var hit := d0 + 0.25
+			var pos := sp
+			if u >= d0 and u < hit:
+				pos = sp.lerp(tgt - Vector2(40, -8), _smooth(d0, hit, u))
+			elif u >= hit:
+				var k := _smooth(hit, hit + 0.8, u)
+				pos = tgt - Vector2(40, -8) + Vector2(-60.0 * k, -110.0 * sin(k * PI * 0.5))
+			var dashing := u >= d0 and u < hit
 			if dashing:
 				for k in 3:
-					_ship(Vector2(sx - 26.0 * (k + 1), y), 0.0, 0.18, "b")
-			_ship(Vector2(sx, y), 0.0)
-			if dashing:
-				HexShield.draw(self, Vector2(sx, y), 34.0, 1.0, t)
+					_ship(pos - Vector2(26.0 * (k + 1), -2.0 * (k + 1)), (tgt - sp).angle(), 0.18, "b")
+			_target(tgt, _smooth(hit, hit + 0.1, u) * (1.0 - _smooth(hit + 0.1, hit + 0.5, u)), 1 if u >= hit else 0)
+			_ship(pos, (tgt - sp).angle() if u < hit else -PI * 0.5)
 			if u < d0:
-				_flame(Vector2(sx, y), 0.0)
-			_bolt(Vector2(bx, y), Vector2.LEFT)
+				_flame(pos, (tgt - sp).angle())
 			if u >= d0 - 0.4 and u < d0 + 0.05:
-				_txt(Loc.t("좌클릭!"), Vector2(x0 - 30.0, y + 52.0), 16, GOLD)
-				_mouse(Vector2(x0 + 40.0, y + 60.0), u >= d0, false)
-			if u >= d0 + 0.05:
-				var k := _smooth(d0 + 0.05, d0 + 0.55, u)
-				_ring(Vector2(sx, y), 60.0 - 40.0 * k, Color(MINT, 1.0 - k * 0.5), 2.0)
-				_txt("PERFECT", Vector2(sx - 40.0, y - 50.0 - 8.0 * k), 20, MINT)
-			if u >= d0 + 0.5:
-				_ring(Vector2(sx, y), 34.0, Color(0.8, 0.97, 1.0, 0.8), 2.5)
-				_txt(Loc.t("다음 차지 강화"), Vector2(sx - 52.0, y + 56.0), 16, Color(0.85, 1.0, 1.0))
+				_txt(Loc.t("좌클릭!"), Vector2(sp.x - 30.0, sp.y + 52.0), 16, GOLD)
+				_mouse(Vector2(sp.x + 40.0, sp.y + 60.0), u >= d0, false)
+			if u >= hit and u < hit + 0.9:
+				_spark(tgt, _smooth(hit, hit + 0.5, u), Color(0.85, 0.93, 1.0), 8, 34.0)
+				_txt(Loc.t("적중!"), Vector2(tgt.x - 30.0, tgt.y - 50.0), 18, GOLD)
 
 	func _parry() -> void:
 		var T := 6.4
@@ -617,9 +607,7 @@ class Stage extends Control:
 					band.append(piv + Vector2.from_angle(lerpf(0.45, 1.65, q / 12.0)) * 30.0)
 				draw_colored_polygon(band, Color(1.0, 0.16, 0.12, 0.08 + 0.2 * blink))
 			_draw_blade(piv, ang, (0.4 + 0.6 * blink) if phase == "set" else 0.0)
-			if phase == "rise":
-				_txt(Loc.t("떠오르는 중 — 아직 요격 불가"), Vector2(250, 250), 16, Color(0.75, 0.78, 0.85))
-			elif phase == "set":
+			if phase == "set":
 				_txt(Loc.t("자세 고정 · 붉게 점멸 = 지금!"), Vector2(250, 250), 16, Color(1.0, 0.6, 0.5))
 			var mid := Vector2(250, 30) + Vector2.from_angle(0.45) * 120.0
 			var spx := Vector2(250, 30) + Vector2.from_angle(1.05) * 175.0   # 기체는 대검이 쓸고 지나갈 띠 한가운데 (검이 기체를 노린다)
@@ -771,54 +759,91 @@ class Stage extends Control:
 		draw_colored_polygon(pts, SMALL_C if int(t * 14.0) % 2 == 0 else Color(SMALL_C, 0.75))
 		draw_circle(p, 2.5, Color(1.0, 0.93, 0.6))
 
+	## 게임의 과열 링 (player._draw_heat_ring 과 같은 모양): 기체 둘레 세 칸, 맞을 때마다 한 칸씩 차오른다. brk = 셀이 깨진 순간 붉게 깜빡임
+	func _heat_ring(p: Vector2, filled: int, flash_k := -1, flash := 0.0, brk := 0.0) -> void:
+		var seg := TAU / 3.0
+		for k in 3:
+			var a0 := -PI * 0.5 + k * seg + 0.14
+			var a1 := -PI * 0.5 + (k + 1) * seg - 0.14
+			if brk > 0.0:
+				draw_arc(p, 46.0, a0, a1, 12, Color(1.0, 0.2, 0.12, 0.9 if fmod(brk * 8.0, 1.0) > 0.4 else 0.3), 4.0)
+			elif k < filled:
+				draw_arc(p, 46.0, a0, a1, 12, Color(1.0, 0.62, 0.18).lerp(Color.WHITE, flash if k == flash_k else 0.0), 4.0)
+			else:
+				draw_arc(p, 46.0, a0, a1, 12, Color(0.3, 0.16, 0.1, 0.55), 2.5)
+
+	## 게임의 좌상단 실드 셀 (hud._draw_life 처럼): 기체 아이콘 셋. 깨진 셀은 어둡게 + 금, 다음에 깨질 셀은 과열만큼 달아오른다
+	func _lives(alive: int, heat := 0.0) -> void:
+		for i in 3:
+			var o := Vector2(30.0 + i * 34.0, 62.0)
+			if i < alive:
+				if i == alive - 1 and heat > 0.0:
+					draw_circle(o, 19.0, Color(1.0, 0.4, 0.1, 0.12 + 0.3 * heat))
+				_ship(o, -PI * 0.5, 1.0, "b", 34.0)
+			else:
+				_ship(o, -PI * 0.5, 0.3, "b", 34.0)
+				draw_line(o + Vector2(-5, -12), o + Vector2(2, -2), Color(0.05, 0.05, 0.07), 2.0)
+				draw_line(o + Vector2(2, -2), o + Vector2(-3, 10), Color(0.05, 0.05, 0.07), 2.0)
+
 	func _barrage() -> void:
-		var T := 8.4
+		var T := 9.0
 		var tt := fmod(t, T)
-		var sp := Vector2(170, 165)
-		if tt < 3.0:
+		var sp := Vector2(330, 170)
+		if tt < 2.8:
 			_caption(Loc.t("① 잔탄은 패리하면 흡수만 — 리버스 드라이브는 없다"), Color(1.0, 0.75, 0.45))
-			var holding := tt >= 0.6 and tt < 2.7
+			_lives(3)
+			var holding := tt >= 0.5 and tt < 2.5
 			_ship(sp, 0.0)
 			_flame(sp, 0.0, 14.0)
-			for k in 5:
-				var bx := 700.0 - (tt - 0.2 - k * 0.32) * 420.0
-				if bx > sp.x + 42.0 and bx < 700.0:
+			for k in 4:
+				var bx := 760.0 - (tt - 0.2 - k * 0.32) * 420.0
+				if bx > sp.x + 42.0 and bx < 760.0:
 					_small(Vector2(bx, sp.y + sin(k * 1.7) * 14.0))
 				elif bx <= sp.x + 42.0 and bx > sp.x - 10.0:
 					_spark(sp + Vector2(40, 0), (sp.x + 42.0 - bx) / 52.0, SMALL_C, 6, 22.0)
-					_txt(Loc.t("흡수"), Vector2(sp.x - 10.0, sp.y - 46.0), 16, Color(1.0, 0.75, 0.45))
+					_txt(Loc.t("흡수"), Vector2(sp.x - 10.0, sp.y - 60.0), 16, Color(1.0, 0.75, 0.45))
 			if holding:
 				_ring(sp, 40.0 + (4.0 if int(t * 10.0) % 2 == 0 else 0.0), Color(1.0, 0.95, 0.75, 0.9), 2.5)
 			_mouse(Vector2(size.x - 40.0, 60.0), false, holding)
-		elif tt < 5.4:
-			var u := tt - 3.0
-			_caption(Loc.t("② 맞으면 과열 — 세 번이면 실드 셀이 깨진다"), Color(1.0, 0.55, 0.35))
-			var hot := _smooth(0.9, 1.1, u)
-			if hot > 0.0:
-				draw_circle(sp, 40.0, Color(1.0, 0.35, 0.1, 0.35 * hot))
+		elif tt < 6.2:
+			var u := tt - 2.8
+			_caption(Loc.t("② 맞을 때마다 과열이 한 칸씩 차오르고, 가득 차면 실드 셀 하나가 깨진다"), Color(1.0, 0.55, 0.35))
+			var hits := [0.6, 1.4, 2.2]
+			var n := 0
+			for h in hits:
+				if u >= h:
+					n += 1
+			var broke := n >= 3
+			var last_h: float = hits[maxi(0, n - 1)]
+			var fl := 1.0 - _smooth(last_h, last_h + 0.35, u) if n > 0 else 0.0
+			_lives(2 if broke else 3, float(n) / 3.0 if not broke else 0.0)
 			_ship(sp, 0.0)
-			var bx := lerpf(700.0, sp.x, _smooth(0.0, 1.0, u))
-			if u < 1.0:
-				_small(Vector2(bx, sp.y))
-			if u >= 1.0:
-				_spark(sp, _smooth(1.0, 1.5, u), Color(1.0, 0.4, 0.1), 10, 40.0)
-				_txt(Loc.t("과열 +1"), Vector2(sp.x - 30.0, sp.y - 56.0), 18, Color(1.0, 0.5, 0.3))
+			_heat_ring(sp, 0 if broke and u >= 2.2 + 0.7 else n, n - 1, fl, (2.2 + 0.7 - u) if broke and u < 2.2 + 0.7 else 0.0)
+			for k in 3:                                     # 잔탄이 하나씩 날아와 맞는다
+				var hk: float = hits[k]
+				var bx := lerpf(760.0, sp.x + 20.0, _smooth(hk - 0.6, hk, u))
+				if u >= hk - 0.6 and u < hk:
+					_small(Vector2(bx, sp.y - 4.0 + k * 4.0))
+				if u >= hk and u < hk + 0.4:
+					_spark(sp + Vector2(16, 0), _smooth(hk, hk + 0.4, u), Color(1.0, 0.4, 0.1), 8, 30.0)
+			if broke and u >= 2.2 and u < 3.2:
+				_spark(Vector2(98, 62), _smooth(2.2, 2.8, u), Color(1.0, 0.4, 0.2), 10, 26.0)
+				_txt(Loc.t("실드 셀 깨짐"), Vector2(130, 56), 16, Color(1.0, 0.5, 0.35))
 		else:
-			var u := tt - 5.4
-			_caption(Loc.t("③ 리버스 드라이브·동조 드라이브로 적을 맞히면 과열 -1"), GOLD)
-			var tgt := Vector2(560, 90)
-			var go := _smooth(0.4, 0.7, u)
+			var u := tt - 6.2
+			_caption(Loc.t("③ 리버스 드라이브·동조 드라이브로 적을 맞히면 과열이 한 칸 빠진다"), GOLD)
+			var tgt := Vector2(660, 80)
+			var go := _smooth(0.6, 0.9, u)
 			var heading := (tgt - sp).angle()
 			var pos := sp.lerp(tgt - Vector2(34, -12), go)
-			var cool := 1.0 - _smooth(0.7, 1.2, u)
-			if cool > 0.0:
-				draw_circle(pos, 40.0, Color(1.0, 0.35, 0.1, 0.35 * cool))
-			_target(tgt, _smooth(0.7, 0.9, u) * (1.0 - _smooth(0.9, 1.4, u)), 3 if u >= 0.7 else 0)
-			if u >= 0.4 and u < 0.7:
+			var n := 2 if u < 0.9 else 1
+			_lives(3, float(n) / 3.0)
+			_target(tgt, _smooth(0.9, 1.1, u) * (1.0 - _smooth(1.1, 1.6, u)), 3 if u >= 0.9 else 0)
+			if u >= 0.6 and u < 0.9:
 				for k in 3:
 					_ship(pos - Vector2.from_angle(heading) * 24.0 * (k + 1), heading, 0.2, "r")
-			_ship(pos, heading, 1.0, "r" if u >= 0.4 and u < 0.7 else "b")
-			if u >= 0.7:
-				_spark(tgt, _smooth(0.7, 1.2, u), Color(1.0, 0.85, 0.5), 12, 60.0)
-				_txt(Loc.t("과열 -1"), Vector2(pos.x - 30.0, pos.y + 50.0), 18, Color(0.75, 0.95, 1.0))
-
+			_ship(pos, heading, 1.0, "r" if u >= 0.6 and u < 0.9 else "b")
+			_heat_ring(pos, n, 1, 1.0 - _smooth(0.9, 1.3, u) if u >= 0.9 else 0.0)
+			if u >= 0.9:
+				_spark(tgt, _smooth(0.9, 1.4, u), Color(1.0, 0.85, 0.5), 12, 60.0)
+				_txt(Loc.t("과열 -1"), Vector2(pos.x - 30.0, pos.y + 56.0), 18, Color(0.75, 0.95, 1.0))
