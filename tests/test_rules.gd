@@ -2810,12 +2810,25 @@ func _carrier_test() -> void:
 	var modes := {}
 	var prev := ""
 	var idle := 0.0
+	var empty := 0.0
+	var overlaps := {}
+	var bad_overlap := false
+	var harassed := false
 	seed(5)
 	for k in int(240.0 / DT):
 		b.step(DT, pp)
 		var kd: String = b.attack_kind()
-		if kd == "":
+		if kd == "" and b.lingering.is_empty():
 			idle += DT
+			if b.shots_near(pp, 2000.0) == 0:
+				empty += DT
+		for la in b.lingering:
+			if kd != "":
+				overlaps[kd + "+" + str(la.kind)] = true
+		if kd == "squad_rush" and (not b.lingering.is_empty() or b.unparry_points(pp).size() > 0):
+			bad_overlap = true
+		if b.harass_i >= 0:
+			harassed = true
 		if kd != "" and kd != prev:
 			turns.append(kd)
 			if kd.begins_with("squad_"):
@@ -2825,13 +2838,19 @@ func _carrier_test() -> void:
 	var repeat := false
 	for k in range(1, squads.size()):
 		repeat = repeat or squads[k] == squads[k - 1]
-	var alt := true
-	for k in range(1, turns.size()):
-		alt = alt and (turns[k].begins_with("squad_") != turns[k - 1].begins_with("squad_"))
-	_check("carrier: squad turns alternate with carrier turns (shell / main cannon), never the same squad twice in a row (%s)" % str(turns.slice(0, 8)),
-		turns.has("squad_gun") and turns.has("squad_rush") and turns.has("squad_veil") and turns.has("big_shell") and turns.has("cannon") and not repeat and alt)
+	_check("carrier: squads and carrier patterns (shell / main cannon) all come up, never the same squad twice in a row (%s)" % str(turns.slice(0, 8)),
+		turns.has("squad_gun") and turns.has("squad_rush") and turns.has("squad_veil") and (turns.has("big_shell") or overlaps.has("squad_gun+big_shell")) and (turns.has("cannon") or overlaps.has("squad_gun+cannon")) and not repeat)
 	_check("carrier: each squad has three patterns incl. a leader pattern (%s)" % str(modes.keys()), modes.size() == 9)
-	_check("carrier: little dead time between patterns (%.0f%% idle)" % (100.0 * idle / 240.0), idle / 240.0 < 0.1)
+	_check("carrier: little dead time between patterns (%.0f%% no pattern running, %.0f%% with an empty screen)" % [100.0 * idle / 240.0, 100.0 * empty / 240.0], idle / 240.0 < 0.12 and empty / 240.0 < 0.03)
+	_check("carrier: ship patterns overlap only with compatible squads, never with melee (%s)" % str(overlaps.keys()),
+		not overlaps.is_empty() and not bad_overlap and not overlaps.has("squad_rush+big_shell") and not overlaps.has("squad_rush+cannon") and not overlaps.has("squad_veil+cannon"))
+	_check("carrier: idle drones take harassing shots", harassed)
+	b.reset()
+	var sc0: float = b.pattern_scale()
+	var bm0: float = b.bolt_mult()
+	for i in 3:
+		b.damage_part(i, 999)
+	_check("carrier: wiping a squad makes the rest fiercer (tempo %.2f -> %.2f, bullets %.2f -> %.2f)" % [sc0, b.pattern_scale(), bm0, b.bolt_mult()], b.pattern_scale() > sc0 + 0.1 and b.bolt_mult() > bm0 + 0.1)
 	# 탄막 편대는 플레이어를 노린다: 부채의 가운데 탄이 플레이어 쪽으로
 	b.reset()
 	b.next_t = 99.0

@@ -7,7 +7,10 @@ extends "res://scripts/colossus_base.gd"
 ##   탄막 편대(금): 조준 부채 / 조준 연사 / 편대장 유도탄
 ##   돌격 편대(진홍, 근접 → 요격): 나란히 돌진 / 연속 돌진 / 편대장 창 돌격
 ##   결계 편대(보라, 패리 불가 → 퍼펙트 회피): 조여 드는 그물 / 꿰뚫는 창 / 편대장 고리 파동
-## 편대 차례 사이에는 모함 본체가 쏜다: 대형 포탄 한 발(터지며 잔탄) ↔ 주포(겨누는 아주 굵은 패리 불가 광선 한 줄기).
+## 모함 본체도 쏜다: 대형 포탄 한 발(터지며 잔탄) ↔ 주포(겨누는 아주 굵은 패리 불가 광선 한 줄기). 겹쳐도 되는 편대 패턴과는 함께 나오고
+## (대형 포탄 = 탄막·결계 편대와, 주포 = 탄막 편대와), 아니면 따로 차례를 받는다. 돌격(근접)과는 절대 겹치지 않는다.
+## 견제 사격: 대기 중인 드론이 가끔 플레이어를 겨눠 금색 탄 한 발 (다른 패턴 중에도. 근접 예고·돌진 중에는 쉬고, 금색이라 패리 연료다).
+## 편대를 하나 전멸시킬 때마다 남은 편대가 사나워진다 (패턴 +15%, 탄 +8%, 견제 사격이 잦아짐).
 ## 편대 차례는 섞이되 같은 편대가 연달아 오지 않는다 (편대 안의 패턴도 직전과 다르게). 돌격(근접)은 날아오는 탄이 걷힌 뒤에만.
 ## 드론 = 외부 시스템 (편대장 체력 높게, 편대원 낮게). 약한 일격(돌진·차지)은 흠집(1)만 — 패턴을 파훼한 일격(리버스 드라이브·요격·동조)으로 부순다.
 ## 부서진 드론은 맞은 쪽으로 튕겼다가 원근으로 작아지며 모함으로 날아가 선체에 꽂혀 불탄다 (꽂힌 자리 = 체력 표시).
@@ -62,6 +65,13 @@ const BARRIER_R := 120.0                     # (open_barrage) 코어 둘레에�
 
 # ── 공격 고르기 ────────────────────────────────────────
 const GAP := Vector2(0.1, 0.2)               # 차례 사이 (짧게: 화면이 비지 않게, v0.106)
+const OVERLAP := {"big_shell": ["gun", "veil"], "cannon": ["gun"]}   # 모함 패턴이 함께 나와도 되는 편대 (위협 두 종류 이하, 보라 둘·근접과 겹침 없음)
+const OVERLAP_DELAY := 0.8                   # 함께 나올 때 모함 패턴은 편대 패턴보다 조금 늦게
+const FURY_TEMPO := 0.15                     # 전멸한 편대 하나마다 남은 편대의 패턴 속도
+const FURY_BOLT := 0.08                      # 〃 탄 속도
+const HARASS_EVERY := Vector2(2.2, 3.2)      # 견제 사격 간격 (전멸한 편대마다 짧아진다)
+const HARASS_WIND := 0.45                    # 쏘기 전 그 드론이 빛난다
+const HARASS_SPEED := 290.0
 const RUSH_WAIT := 2.5                       # 돌격 차례에 탄이 걷히길 기다리는 최대 시간 (넘으면 다른 편대)
 
 # ── 색 ─────────────────────────────────────────────────
@@ -90,6 +100,9 @@ var last_mode: Array[String] = ["", "", ""]
 var squad_turn := true                       # 다음이 편대 차례인가 (모함 차례와 번갈아)
 var last_ship := ""
 var rush_wait := 0.0
+var harass_t := 2.5                          # 다음 견제 사격까지
+var harass_i := -1                           # 견제 사격을 준비 중인 드론 (-1 = 없음)
+var harass_wind := 0.0
 var flung: Array[Dictionary] = []            # 부서져 모함으로 날아가는 드론 {from, dir, t, to(선체 기준), i}
 var burns: Array[Dictionary] = []            # 선체에 꽂혀 타는 자리 {pos(선체 기준), t}
 var cannon_aim := PI * 0.5                   # 주포 포신 방향
@@ -139,6 +152,9 @@ func reset() -> void:
 	squad_turn = true
 	last_ship = ""
 	rush_wait = 0.0
+	harass_t = 2.5
+	harass_i = -1
+	harass_wind = 0.0
 	flung.clear()
 	burns.clear()
 	cannon_aim = PI * 0.5
@@ -270,9 +286,22 @@ func _on_part_broken(i: int) -> void:
 	dglow[i] = 0.0
 
 
-## 탄 속도: 드론이 줄수록 조금씩 빨라진다
+## 전멸한 편대 수 (남은 편대가 그만큼 사나워진다)
+func squads_lost() -> int:
+	var n := 0
+	for s in SQUADS:
+		n += 1 if squad_alive(s).is_empty() else 0
+	return n
+
+
+## 탄 속도: 드론이 줄수록, 편대가 전멸할수록 빨라진다
 func bolt_mult() -> float:
-	return (1.0 + 0.04 * (part_count() - parts_left())) * (1.0 + LEVEL_SPEEDUP * level)
+	return (1.0 + 0.04 * (part_count() - parts_left()) + FURY_BOLT * squads_lost()) * (1.0 + LEVEL_SPEEDUP * level)
+
+
+## 패턴 속도: 편대가 전멸할수록 남은 편대가 빨라진다 (움찔하면 잠깐 느려지는 것은 그대로)
+func pattern_scale() -> float:
+	return super() * (1.0 + FURY_TEMPO * squads_lost())
 
 
 func target_pos(from: Vector2) -> Vector2:
@@ -394,6 +423,39 @@ func _step_phase(dt: float) -> void:
 		dpos[i] = dpos[i].lerp(dwant[i], 1.0 - exp(-MOVE_K * dt))
 		daim[i] = lerp_angle(daim[i], daim_want[i], 1.0 - exp(-8.0 * dt))
 		dcmd[i] = false
+	if phase == 1:
+		_harass(dt)
+
+
+## 견제 사격: 차례가 아닌 드론 하나가 잠깐 빛난 뒤 플레이어를 겨눠 금색 탄 한 발. 근접 예고·돌진 중에는 쉰다 (탄막과 근접은 겹치지 않는다)
+func _harass(dt: float) -> void:
+	var melee := melee_warning() or attack_kind() == "squad_rush"
+	if harass_i >= 0:
+		if not part_alive(harass_i) or melee:
+			harass_i = -1
+			return
+		harass_wind += dt
+		set_drone_glow(harass_i, harass_wind / HARASS_WIND)
+		daim_want[harass_i] = (look_at - dpos[harass_i]).angle()
+		if harass_wind >= HARASS_WIND:
+			var o := dpos[harass_i]
+			var d := (look_at - o).normalized()
+			shots.spawn(o + d * 50.0, d * HARASS_SPEED * bolt_mult(), 6.0)
+			emit(Ev.BOLT, o)
+			harass_i = -1
+		return
+	harass_t -= dt * (1.0 + 0.3 * squads_lost())
+	if harass_t > 0.0 or melee:
+		return
+	harass_t = randf_range(HARASS_EVERY.x, HARASS_EVERY.y)
+	var idle: Array[int] = []
+	for i in part_count():
+		if part_alive(i) and squad_of(i) != active:
+			idle.append(i)
+	if idle.is_empty():
+		return
+	harass_i = idle[randi() % idle.size()]
+	harass_wind = 0.0
 
 
 func _on_attack_finished() -> void:
@@ -425,16 +487,28 @@ func _choose(ppos: Vector2) -> void:
 				start_attack(SquadRush.new(s, mode))
 			"veil":
 				start_attack(SquadVeil.new(s, mode))
+		var ship := _next_ship()                 # 겹쳐도 되는 조합이면 모함 패턴이 함께 (조금 늦게), 아니면 다음 차례에 따로
+		if OVERLAP[ship].has(SQUAD_KIND[s]):
+			last_ship = ship
+			var a = _ship_attack(ship)
+			a.t = -OVERLAP_DELAY
+			start_side(a)
+			squad_turn = true
 		return
 	squad_turn = true                            # 모함 차례: 대형 포탄 ↔ 주포 번갈아
-	last_ship = "cannon" if last_ship == "big_shell" else "big_shell"
-	if last_ship == "big_shell":
-		start_attack(CarrierShell.new())
-	else:
-		start_attack(CarrierCannon.new())
+	last_ship = _next_ship()
+	start_attack(_ship_attack(last_ship))
 
 
-## 다음 편대: 살아 있는 편대 중 직전과 다른 것 (하나만 남으면 그 편대). 돌격은 탄이 걷혔을 때만 (RUSH_WAIT 를 넘기면 다른 편대로)
+func _next_ship() -> String:
+	return "cannon" if last_ship == "big_shell" else "big_shell"
+
+
+func _ship_attack(kind_: String):
+	return CarrierShell.new() if kind_ == "big_shell" else CarrierCannon.new()
+
+
+## 다음 편대: 살아 있는 편대 중 직전과 다른 것 (하나만 남으면 그 편대). 돌격은 탄이 걷히고 함께 도는 모함 패턴이 없을 때만 (RUSH_WAIT 를 넘기면 다른 편대로)
 func _pick_squad(ppos: Vector2) -> int:
 	var cands: Array[int] = []
 	for s in SQUADS:
@@ -443,16 +517,28 @@ func _pick_squad(ppos: Vector2) -> int:
 	if cands.is_empty() and not squad_alive(last_squad).is_empty():
 		cands.append(last_squad)
 	cands.shuffle()
-	for s in cands:
-		if SQUAD_KIND[s] != "rush" or shots_clear(ppos):
-			return s
-	rush_wait += 0.15
-	if rush_wait < RUSH_WAIT:
-		return -1
-	for s in cands:                              # 오래 기다렸다: 돌격이 아닌 다른 편대
-		if SQUAD_KIND[s] != "rush":
+	if not cands.is_empty() and SQUAD_KIND[cands[0]] == "rush":   # 돌격 차례: 탄이 걷히고 함께 도는 패턴이 없어질 때까지 조금 기다린다
+		if shots_clear(ppos) and lingering.is_empty():
+			return cands[0]
+		rush_wait += 0.15
+		if rush_wait < RUSH_WAIT:
+			return -1
+	for s in cands:                              # 아직 도는 모함 패턴과 겹쳐도 되는 편대만 (패리 불가 + 근접, 보라 둘은 겹치지 않는다)
+		if SQUAD_KIND[s] == "rush":
+			if shots_clear(ppos) and lingering.is_empty():
+				return s
+			continue
+		if _fits_lingering(SQUAD_KIND[s]):
 			return s
 	return -1
+
+
+## 지금 도는 모함 패턴들이 이 편대 종류와 함께 나와도 되는가
+func _fits_lingering(squad_kind: String) -> bool:
+	for la in lingering:
+		if not OVERLAP.get(la.kind, []).has(squad_kind):
+			return false
+	return true
 
 
 ## 편대 s 의 패턴: 편대 패턴 둘 + 편대장 패턴 (편대장이 살아 있을 때만). 직전 패턴은 피한다

@@ -24,6 +24,8 @@ func _init() -> void:
 
 
 func step(dt: float, ppos: Vector2) -> void:
+	if t < 0.0:                                      # 편대 패턴과 함께 나올 때: 조금 늦게 시작 (그동안 아무것도 안 한다)
+		return
 	match phase:
 		"aim":
 			origin = boss.cannon_world()
@@ -66,10 +68,12 @@ func beam_hit(p: Vector2, r: float) -> Vector2:
 
 
 func unparry_point(_ppos: Vector2) -> Vector2:
-	return origin if phase != "fade" else Vector2.INF
+	return origin if phase != "fade" and t >= 0.0 else Vector2.INF
 
 
 func draw() -> void:
+	if t < 0.0 or aim_pt == Vector2.INF:            # 아직 첫 진행 전
+		return
 	var c: CanvasItem = boss
 	var e := _end()
 	var blink := 0.6 + 0.4 * sin(boss.t * 24.0)

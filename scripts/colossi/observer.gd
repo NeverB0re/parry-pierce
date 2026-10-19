@@ -368,6 +368,19 @@ func _step_phase(dt: float) -> void:
 ## 한 바퀴씩 고른다: 패턴 다섯을 섞어 차례로 쓰고, 다 쓰면 다시 섞는다 (바퀴가 바뀌어도 같은 패턴이 연달아 나오지 않게).
 ## 대검(근접)은 날아오는 탄이 걷힌 뒤에만 — 제 차례에 잠깐(SWORD_HOLD) 기다리고, 그래도 안 걷히면 다음 패턴을 먼저 쓴다.
 ## 대검만 남았으면 기다린 뒤 그대로 긋는다 (바퀴 밖의 탄막을 끼우지 않는다: 탄막만 이어지던 v0.81 버그)
+## 심장이 깎일수록 사나워진다: 패턴 진행 최대 +20%, 탄 속도 최대 +15% (v0.107 — 모든 보스가 진행할수록 빨라지게)
+const FURY_TEMPO := 0.2
+const FURY_BOLT := 0.15
+
+
+func pattern_scale() -> float:
+	return super() * (1.0 + FURY_TEMPO * core.frac())
+
+
+func bolt_mult() -> float:
+	return super() * (1.0 + FURY_BOLT * core.frac())
+
+
 func _choose(ppos: Vector2) -> void:
 	if not awake:                                        # 잠든 동안은 공격하지 않는다
 		next_t = 0.3

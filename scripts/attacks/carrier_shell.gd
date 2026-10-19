@@ -27,6 +27,8 @@ func _init() -> void:
 
 
 func step(_dt: float, ppos: Vector2) -> void:
+	if t < 0.0:                                      # 편대 패턴과 함께 나올 때: 조금 늦게 시작 (그동안 아무것도 안 한다)
+		return
 	match phase:
 		"aim":
 			origin = boss.cannon_world()
@@ -64,6 +66,8 @@ func _boom() -> void:
 
 
 func draw() -> void:
+	if t < 0.0:
+		return
 	if target == Vector2.INF or phase == "after":
 		return
 	var c: CanvasItem = boss
