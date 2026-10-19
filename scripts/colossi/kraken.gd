@@ -209,6 +209,8 @@ func damage(hit: Dictionary, dmg: int) -> bool:
 	if hit["kind"] == "shield":
 		shield_flash = 1.0
 		shield_hit_n = hit["n"]
+		if dmg >= FLINCH_DMG:
+			flinch()
 		_feed_core(dmg)
 		return false
 	if phase == 3 and dmg > 0:                       # 방어막이 깨진 코어: 가장 약하다 (판이 줄 때마다 세지던 흐름이 끊기지 않게)

@@ -182,6 +182,7 @@ func _stagger_gun() -> void:
 ## 반격 코어로 되돌린 주포 탄이 열린 코어에 꽂혔다: 피해 SHELL_RETURN_DMG (특수 기믹). 그 밖은 보통 규칙
 func damage(hit: Dictionary, dmg: int) -> bool:
 	if hit.get("shell", false) and hit.get("kind", "") == "part" and int(hit.get("idx", -1)) == BIG and gun_exposed and part_alive(BIG):
+		flinch()
 		_stagger_gun()
 		emit(Ev.STOMP, gun_center())
 		_hit_core_armor(SHELL_RETURN_DMG)

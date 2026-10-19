@@ -56,6 +56,14 @@ var gauge_hit := 0.0                         # 방금 깎임 (번쩍·두꺼워�
 var gauge_seen := -1.0
 var gauge_hold := 0.0
 var focus_reach := 0.0               # 이 거리 안의 표적은 더 밝게
+# 움찔 (v1.00): 큰 일격(리버스 드라이브급)을 맞으면 몸이 떨리고, 진행 중인 패턴이 잠깐 느려졌다가 원래 속도로 돌아온다 (끊기지는 않는다)
+const FLINCH_TIME := 1.0             # 느려지는 시간 (끝으로 갈수록 원래 속도로)
+const FLINCH_SLOW := 0.4             # 막 맞았을 때 패턴 속도
+const FLINCH_CD := 2.5               # 연달아 움찔하지 않게
+const FLINCH_DMG := 8                # 이만큼 이상의 일격이면 움찔
+var flinch_t := 0.0
+var flinch_cd := 0.0
+var flinch_on_hit := true            # false 면 피해로는 움찔하지 않는다 (위성: 결계에 금이 갈 때만)
 
 
 func reset() -> void:
@@ -66,6 +74,9 @@ func reset() -> void:
 	atk = null
 	lingering.clear()
 	next_t = 2.5
+	flinch_t = 0.0
+	flinch_cd = 0.0
+	position = Vector2.ZERO
 	part_hp.clear()
 	part_flash.clear()
 	part_stage.clear()
@@ -219,21 +230,39 @@ func step(dt: float, ppos: Vector2) -> void:
 		emit(Ev.BOLT_POP, p)
 	for h in shots.take_hits(self):              # 반사된 탄이 표적에 닿음 → main 이 피해를 준다
 		emit(Ev.REFLECT_HIT, h["pos"], h)
+	var adt := dt * pattern_scale()              # 패턴 진행 (움찔하면 잠깐 느려진다). 날아가는 탄은 그대로
+	flinch_t = maxf(0.0, flinch_t - dt)
+	flinch_cd = maxf(0.0, flinch_cd - dt)
+	var fk := flinch_t / FLINCH_TIME             # 몸 떨림 (그림만: 판정은 상수 좌표라 그대로)
+	position = Vector2(sin(t * 71.0), cos(t * 53.0)) * 9.0 * fk * fk
 	for a in lingering.duplicate():
 		_stepping_linger = a
-		a.t += dt
-		a.step(dt, ppos)
+		a.t += adt
+		a.step(adt, ppos)
 	_stepping_linger = null
 	if atk == null:
 		if hold_attacks:
 			next_t = maxf(next_t, 1.2)         # 날아오른 뒤 잠시 여유를 준다
-		next_t -= dt
+		next_t -= adt
 		if next_t <= 0.0:
 			_choose(ppos)
 	else:
-		atk.t += dt
-		atk.step(dt, ppos)
+		atk.t += adt
+		atk.step(adt, ppos)
 	queue_redraw()
+
+
+## 움찔: 몸이 떨리고 패턴이 잠깐 느려진다 (FLINCH_CD 안에는 다시 안 함, force = 쿨다운 무시)
+func flinch(force := false) -> void:
+	if dead or (flinch_cd > 0.0 and not force):
+		return
+	flinch_t = FLINCH_TIME
+	flinch_cd = FLINCH_CD
+
+
+## 지금 패턴이 흘러가는 속도 (1 = 평소, 움찔 직후 FLINCH_SLOW 에서 1 로)
+func pattern_scale() -> float:
+	return lerpf(1.0, FLINCH_SLOW, flinch_t / FLINCH_TIME)
 
 
 ## 게이지 값 (남은 체력, 전체, 보호 몫이 끝나는 지점). 기본 = 외부 시스템 합 + 코어 장갑, 외부 시스템이 다 부서지면 코어가 열린다
@@ -637,6 +666,8 @@ func blocks_strike(hit: Dictionary, kind: String, _perfect: bool, strong: bool) 
 
 
 func damage(hit: Dictionary, dmg: int) -> bool:
+	if flinch_on_hit and dmg >= FLINCH_DMG:
+		flinch()
 	if hit["kind"] == "core":
 		return damage_core(dmg)
 	damage_part(int(hit["idx"]), dmg)

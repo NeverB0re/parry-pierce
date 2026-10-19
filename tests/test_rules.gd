@@ -2500,6 +2500,22 @@ func _zone_test() -> void:
 	o.damage_core(1)
 	o.step(DT, pp)
 	_check("observer: wakes once the heart has taken WAKE_DMG (asleep at -%d %s, awake now %s)" % [o.WAKE_DMG - 1, still_asleep, o.awake], still_asleep and o.awake)
+	# 움찔: 큰 일격이면 진행 중인 패턴이 잠깐 느려진다 (끊기지 않는다), 쿨다운 안에는 다시 움찔하지 않는다
+	o.flinch_t = 0.0
+	o.flinch_cd = 0.0
+	o.start_attack(o.HaloShot.new())
+	var ht0: float = o.atk.t
+	o.damage({"kind": "core"}, 8)
+	var slow_dt: float = o.pattern_scale()
+	o.step(0.1, Vector2(0, -900))
+	var adv: float = o.atk.t - ht0 if o.atk != null else -1.0
+	var cd_left: float = o.flinch_cd
+	o.flinch_t = 0.0
+	o.damage({"kind": "core"}, 16)
+	_check("big hit flinches the boss: attack keeps going but slower (scale %.2f, +%.3fs in 0.1s), no re-flinch during cooldown (cd %.2f, flinch %.2f)" % [slow_dt, adv, cd_left, o.flinch_t],
+		o.atk != null and absf(slow_dt - o.FLINCH_SLOW) < 0.01 and adv > 0.0 and adv < 0.06 and cd_left > 0.0 and o.flinch_t == 0.0)
+	o.damage({"kind": "core"}, 4)
+	_check("small hits never flinch", o.flinch_t == 0.0)
 	var order := []
 	for i in 4:
 		o.atk = null
@@ -2569,7 +2585,10 @@ func _satellite_test() -> void:
 	_check("satellite: a fully synced charge gets through the barrier", not b.blocks_strike(sh, "charge", false, true))
 	b.start_attack(b.RadialBurst.new(b.CORE_POS, 8))
 	b.damage(sh, 12)
-	_check("satellite: a crack staggers it (running attack cut, short rest)", b.atk == null and b.next_t >= b.STAGGER - 0.01)
+	var at0: float = b.atk.t if b.atk != null else -1.0
+	b.step(0.1, Vector2(0, -900))
+	_check("satellite: a crack only flinches it (attack keeps running, slowed: +%.3fs in 0.1s)" % [b.atk.t - at0 if b.atk != null else -1.0],
+		b.atk != null and b.flinch_t > 0.0 and b.atk.t - at0 < 0.06 and b.atk.t - at0 > 0.0)
 	_check("satellite: the first two strikes only crack it (cracks %d, open %s, hp %d)" % [b.cracks, b.barrier_open, b.core.armor_hp], b.cracks == 1 and not b.barrier_open and b.core.armor_hp == hp0)
 	b.blocks_strike(sh, "power", true, false)
 	b.damage(sh, 16)
