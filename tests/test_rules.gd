@@ -2875,6 +2875,12 @@ func _carrier_test() -> void:
 	for k in b.shots.size():
 		homing += 1 if b.shots.kind[k] == b.shots.Kind.HOMING else 0
 	_check("carrier gun leader: fires homing missiles (%d)" % homing, homing >= 2)
+	var lp: Vector2 = b.part_pos(0)
+	var w1: Vector2 = b.part_pos(1)
+	var w2: Vector2 = b.part_pos(2)
+	var fwd: Vector2 = (pp - lp).normalized()
+	_check("carrier leader pattern: the leader steps forward and its wingmen flank it (%.0f / %.0f from the leader, behind %s)" % [lp.distance_to(w1), lp.distance_to(w2), (w1 - lp).dot(fwd) < 0.0 and (w2 - lp).dot(fwd) < 0.0],
+		lp.distance_to(w1) < 320.0 and lp.distance_to(w2) < 320.0 and (w1 - lp).dot(fwd) < 30.0 and (w2 - lp).dot(fwd) < 30.0 and (w1 - lp).dot(fwd.orthogonal()) * (w2 - lp).dot(fwd.orthogonal()) < 0.0)
 	b.reset()
 	b.next_t = 99.0
 	var pv = b.SquadVeil.new(2, "pulse")

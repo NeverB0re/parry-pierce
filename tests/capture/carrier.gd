@@ -21,6 +21,8 @@ var plan := [
 	["cannon_aim", "cannon", 80],
 	["cannon_fire", "cannon", 150],
 	["fling", "fling", 70],
+	["split_crack", "final", 50],
+	["split_open", "final", 120],
 	["final", "final", 280],
 ]
 var idx := 0

@@ -60,7 +60,10 @@ const CORE_POS := Vector2(0, -2050)          # 떨어져 나온 코어가 내려
 const CORE_R := 60.0
 const HANGARS := [Vector2(-760, 70), Vector2(0, 100), Vector2(760, 70)]   # 편대마다 격납고 (선체 기준)
 const CANNON_BASE := Vector2(1240, 250)      # 뱃머리 아래 주포 포탑 (선체 기준)
-const CANNON_LEN := 330.0
+const CANNON_LEN := 486.0                    # 포가 중심 → 포구 제동기 끝 (GUN_LEN + 제동기)
+const GUN_LEN := 430.0                       # 포신 길이 (탄막 요새 v0.72 의 거대 포와 같은 생김새: 각진 포가 + 네모 포신 셋 + 슬롯 제동기)
+const C_GUN_FACE := Color(0.13, 0.125, 0.13)
+const C_GUN_SIDE := Color(0.07, 0.068, 0.075)
 const BARRIER_R := 120.0                     # (open_barrage) 코어 둘레에서 탄이 나오는 반지름의 두 배
 
 # ── 공격 고르기 ────────────────────────────────────────
@@ -107,14 +110,14 @@ var flung: Array[Dictionary] = []            # 부서져 모함으로 날아가�
 var burns: Array[Dictionary] = []            # 선체에 꽂혀 타는 자리 {pos(선체 기준), t}
 var cannon_aim := PI * 0.5                   # 주포 포신 방향
 var cannon_glow := 0.0
+var cannon_recoil := 0.0                     # 쏜 순간 포신이 뒤로 밀린다
 var hull_shake := 0.0
-var deck_k := 0.0                            # 갑판이 갈라진 정도 (0~1)
 var shield_flash := 0.0                      # 코어에 약한 일격이 튕김 (main 이 채운다)
 var shield_hit_n := Vector2.UP
 
 
 func _init() -> void:
-	open_time = 2.0
+	open_time = 2.8                              # 금이 번지고 → 선체가 갈라지고 → 코어가 나온다
 	attack_gap = GAP
 	core_assist_r = 150.0
 	bolt_speedup_core = 0.0
@@ -159,8 +162,8 @@ func reset() -> void:
 	burns.clear()
 	cannon_aim = PI * 0.5
 	cannon_glow = 0.0
+	cannon_recoil = 0.0
 	hull_shake = 0.0
-	deck_k = 0.0
 	shield_flash = 0.0
 
 
@@ -259,6 +262,20 @@ func ring_slot(i: int) -> Vector2:
 	return p + Vector2(sin(t * 2.1 + i), cos(t * 1.8 + i * 0.7)) * 10.0
 
 
+## 편대장 패턴 동안 편대원 i 의 자리: 앞으로 나선 편대장의 좌우 조금 뒤 (자리를 내주고 붙어 따라간다)
+const ESCORT_SIDE := 170.0
+const ESCORT_BACK := 70.0
+
+
+func escort_slot(i: int) -> Vector2:
+	var l := dpos[leader_of(squad_of(i))]
+	var d := (look_at - l).normalized()
+	if d.length() < 0.1:
+		d = Vector2.DOWN
+	var sd := 1.0 if i % PER == 1 else -1.0
+	return l - d * ESCORT_BACK + d.orthogonal() * ESCORT_SIDE * sd
+
+
 ## 약한 일격은 흠집만. 드론이 부서질 때마다 게이지·기록용 코어 값을 맞춘다
 func damage_part(i: int, dmg: int) -> bool:
 	if dmg > 0 and dmg < FLINCH_DMG:
@@ -284,6 +301,11 @@ func _on_part_broken(i: int) -> void:
 	var to := Vector2(lerpf(-1300.0, 1300.0, slot) + sin(i * 2.3) * 80.0, 20.0 + cos(i * 1.7) * 90.0)   # 선체 기준
 	flung.append({"from": dpos[i], "dir": dir, "t": 0.0, "to": to, "i": i})
 	dglow[i] = 0.0
+	if parts_left() == 1:                        # 마지막 기체: 모함에 크게 금이 가며 선체 파편이 튄다
+		hull_shake = 1.0
+		for k in 10:
+			var a := -PI * 0.5 + (k - 4.5) * 0.3
+			_spawn_shard(ship_to_world(DECK_CORE + Vector2((k - 4.5) * 60.0, -60.0)), randf_range(18.0, 34.0), Vector2.from_angle(a) * randf_range(500.0, 900.0))
 
 
 ## 전멸한 편대 수 (남은 편대가 그만큼 사나워진다)
@@ -352,18 +374,33 @@ func set_cannon_glow(v: float) -> void:
 	cannon_glow = maxf(cannon_glow, clampf(v, 0.0, 1.0))
 
 
+## 주포가 쐈다: 포신이 뒤로 밀렸다 돌아온다
+func cannon_kick() -> void:
+	cannon_recoil = 1.0
+
+
 ## (open_barrage 가 부른다) 발광할 곳이 따로 없다
 func set_glow(_i: int, _v: float) -> void:
 	pass
 
 
-## 떨어져 나온 코어의 그림 위치: 페이즈 2 동안 갑판에서 CORE_POS 로 내려온다 (원근으로 커지며)
-func core_draw_pos() -> Vector2:
+## 갈라짐 연출의 단계 (페이즈 2: open_t / open_time). 금 → 갈라짐 → 코어가 나옴
+const SPLIT_CRACK := 0.45                    # 이때까지 금이 선체 끝까지 번진다
+const SPLIT_OPEN := 0.3                      # 이때부터 가운데가 벌어진다
+const SPLIT_EMERGE := 0.55                   # 이때부터 코어가 갈라진 틈에서 나와 내려온다
+
+
+func split_k() -> float:
 	if phase < 2:
-		return ship_to_world(DECK_CORE)
-	if phase == 3 or dead:
-		return CORE_POS
-	var k := clampf(open_t / maxf(open_time, 0.1), 0.0, 1.0)
+		return 0.0
+	if phase >= 3 or dead:
+		return 1.0
+	return clampf(open_t / maxf(open_time, 0.1), 0.0, 1.0)
+
+
+## 떨어져 나온 코어의 그림 위치: 갈라진 틈에서 나와 CORE_POS 로 내려온다 (원근으로 커지며)
+func core_draw_pos() -> Vector2:
+	var k := clampf((split_k() - SPLIT_EMERGE) / (1.0 - SPLIT_EMERGE), 0.0, 1.0)
 	return ship_to_world(DECK_CORE).lerp(CORE_POS, k * k * (3.0 - 2.0 * k))
 
 
@@ -393,7 +430,9 @@ func _step_effects(dt: float) -> void:
 	hull_shake = maxf(0.0, hull_shake - dt * 2.5)
 	shield_flash = maxf(0.0, shield_flash - dt * 3.0)
 	cannon_glow = maxf(0.0, cannon_glow - dt * 1.5)
-	deck_k = move_toward(deck_k, 1.0 if phase >= 2 else 0.0, dt / maxf(open_time, 0.1))
+	cannon_recoil = maxf(0.0, cannon_recoil - dt * 2.5)
+	if phase == 2:                                # 선체가 갈라지는 동안 계속 흔들린다
+		hull_shake = maxf(hull_shake, 0.7)
 	for i in dglow.size():
 		dglow[i] = move_toward(dglow[i], 0.0, dt * 2.0)
 	for b in burns:
@@ -414,11 +453,18 @@ func _step_phase(dt: float) -> void:
 		core.guard = 0.0
 	ring_a += RING_SPIN * dt
 	ring_c = look_at                             # 포위망은 늘 플레이어를 가운데 둔다 (look_at = 부드럽게 따라가는 플레이어 위치)
+	var lead_cmd: Array[bool] = []               # 편대장이 공격에 불려 나갔는가 (편대장 패턴): 편대원이 좌우로 비켜 따라붙는다
+	for s in SQUADS:
+		var l := leader_of(s)
+		lead_cmd.append(part_alive(l) and dcmd[l])
 	for i in part_count():
 		if not part_alive(i):
 			continue
 		if not dcmd[i]:
-			dwant[i] = _in_arena(ring_slot(i))
+			if not is_leader(i) and lead_cmd[squad_of(i)]:
+				dwant[i] = _in_arena(escort_slot(i))
+			else:
+				dwant[i] = _in_arena(ring_slot(i))
 			daim_want[i] = (look_at - dpos[i]).angle()
 		dpos[i] = dpos[i].lerp(dwant[i], 1.0 - exp(-MOVE_K * dt))
 		daim[i] = lerp_angle(daim[i], daim_want[i], 1.0 - exp(-8.0 * dt))
@@ -685,19 +731,8 @@ func _draw_ship() -> void:
 		draw_circle(b, 40.0, C_HULL_DARK)
 		draw_line(b, b + Vector2(sin(t * 0.8 + k) * 30.0, 90), C_HULL, 16.0)
 	# 주포 (뱃머리 아래): 포신이 겨누는 쪽을 향하고, 모을수록 포구가 달아오른다
-	var cb := CANNON_BASE
-	var cd := Vector2.from_angle(cannon_aim)
-	draw_circle(cb, 110.0, C_HULL_DARK)
-	draw_arc(cb, 110.0, 0.0, TAU, 32, Color(C_RIM, 0.5), 5.0)
-	draw_line(cb, cb + cd * CANNON_LEN, C_HULL_DARK, 70.0)
-	draw_line(cb, cb + cd * CANNON_LEN, C_HULL, 46.0)
-	for k in 3:
-		draw_line(cb + cd * (120.0 + k * 70.0) + cd.orthogonal() * 36.0, cb + cd * (120.0 + k * 70.0) - cd.orthogonal() * 36.0, C_HULL_DARK, 8.0)
-	var mz := cb + cd * CANNON_LEN
-	draw_circle(mz, 40.0, C_HULL_DARK)
-	if cannon_glow > 0.0:
-		draw_circle(mz, 30.0 + 50.0 * cannon_glow, Color(1.0, 0.62, 0.86, 0.25 * cannon_glow))
-		draw_circle(mz, 24.0 * cannon_glow, Color(1.0, 0.85, 0.95, 0.9))
+	_draw_main_gun(sh)
+	_draw_traffic()
 	# 고물 엔진
 	for k in 4:
 		var e := Vector2(-1830, -130 + k * 80.0)
@@ -707,11 +742,6 @@ func _draw_ship() -> void:
 	for sd in [-1.0, 1.0]:                                             # 항해등 (양 끝)
 		var on := float(int(t * 1.5 + (0.5 if sd > 0 else 0.0)) % 2)
 		draw_circle(Vector2(sd * 1820.0, -250), 12.0, Color(1.0, 0.25, 0.2, 0.3 + 0.6 * on) if sd < 0 else Color(0.3, 1.0, 0.45, 0.3 + 0.6 * on))
-	# 갑판이 갈라진다: 가운데가 벌어지고 코어가 드러난다
-	if deck_k > 0.0:
-		var w := 40.0 + 300.0 * deck_k
-		draw_rect(Rect2(DECK_CORE.x - w, -240, w * 2.0, 480), Color(0.02, 0.01, 0.02))
-		_soft_glow(DECK_CORE, 420.0 * deck_k, C_CORE, 0.35 * deck_k)
 	# 꽂힌 드론이 타는 자리
 	for b in burns:
 		var p: Vector2 = b["pos"]
@@ -723,17 +753,21 @@ func _draw_ship() -> void:
 			var life := fmod(t * 0.5 + k * 0.33 + p.x * 0.001, 1.0)
 			draw_circle(p + Vector2(sin(t + k) * 24.0, -50.0 - life * 260.0), 24.0 + life * 50.0, Color(0.2, 0.2, 0.24, 0.4 * (1.0 - life)))
 	draw_colored_polygon(PackedVector2Array([Vector2(-2000, -950), Vector2(2000, -950), Vector2(2000, 300), Vector2(-2000, 300)]), Color(C_HAZE, 0.38))   # 거리의 안개 (배경으로 물러나 보이게)
+	if split_k() > 0.0:                                                # 마지막 편대가 부서졌다: 금이 번지고 선체가 갈라진다 (안개 위에 또렷하게)
+		_draw_hull_split(split_k())
 	draw_set_transform(Vector2.ZERO, 0.0)
 	if phase >= 2 and not dead:
 		var cp := core_draw_pos()
 		var deck := ship_to_world(DECK_CORE)
-		draw_line(deck, cp, Color(C_CORE, 0.25), 10.0)                 # 모함과 이어진 동력선
-		draw_line(deck, cp, Color(1.0, 0.85, 0.6, 0.5), 3.0)
+		if split_k() > SPLIT_EMERGE:
+			draw_line(deck, cp, Color(C_CORE, 0.25), 10.0)             # 모함과 이어진 동력선
+			draw_line(deck, cp, Color(1.0, 0.85, 0.6, 0.5), 3.0)
 		if phase == 3:
 			_draw_exposed_core(CORE_POS, CORE_R, C_CORE)
-		else:
-			var k := clampf(open_t / maxf(open_time, 0.1), 0.0, 1.0)
-			draw_circle(cp, CORE_R * lerpf(SHIP_SCALE * 0.6, 1.0, k), Color(C_CORE, 0.85))
+		elif split_k() > SPLIT_EMERGE:                                 # 갈라진 틈에서 나와 내려오는 코어
+			var k := clampf((split_k() - SPLIT_EMERGE) / (1.0 - SPLIT_EMERGE), 0.0, 1.0)
+			_soft_glow(cp, CORE_R * 3.0, C_CORE, 0.4)
+			draw_circle(cp, CORE_R * lerpf(SHIP_SCALE * 0.6, 1.0, k), Color(C_CORE, 0.9))
 			draw_circle(cp, CORE_R * lerpf(SHIP_SCALE * 0.6, 1.0, k) * 0.5, Color(1, 0.95, 0.8))
 		if shield_flash > 0.0:                                          # 약한 일격이 튕김
 			draw_arc(CORE_POS, CORE_R * 1.8, 0.0, TAU, 32, Color(1, 1, 1, 0.8 * shield_flash), 6.0)
@@ -746,6 +780,111 @@ func _draw_ship() -> void:
 ## 드론은 기체 외곽을 따라 윤곽선을 그린다 (_draw_drone)
 func _rim_part(_i: int) -> bool:
 	return true
+
+
+## 모함 둘레의 작은 기체들 (그림만, 선체 기준): 멀리서 점처럼 보이는 함재기 편대가 선체를 따라 순찰하고, 몇 대는 격납고를 드나든다.
+## 작은 삼각형 몸체 + 깜빡이는 항법등 + 엔진 불빛 (거대한 모함의 크기와 살아 있는 기지라는 설정을 보탠다)
+func _draw_traffic() -> void:
+	for f in 4:                                                        # 순찰 편대 넷: 선체 위아래를 천천히 가로지른다
+		var dir := 1.0 if f % 2 == 0 else -1.0
+		var y: float = [-420.0, -300.0, -560.0, -370.0][f]          # 모두 갑판 위 (경기장으로 내려와 적처럼 보이지 않게)
+		var x := fposmod(t * 140.0 * (1.0 + f * 0.15) * dir + f * 900.0, 4400.0) - 2200.0
+		for k in 3:                                                    # 세 대씩 V 자
+			var p := Vector2(x - dir * k * 46.0, y + (k - 1) * 30.0 * float(k != 0) * (1.0 if k == 1 else -1.0) + sin(t * 1.3 + f) * 20.0)
+			_draw_tiny_craft(p, Vector2(dir, 0.0), f * 3 + k)
+	for h in HANGARS.size():                                           # 격납고를 드나드는 몇 대 (나왔다가 위로 돌아 나간다)
+		var u := fmod(t * 0.18 + h * 0.37, 1.0)
+		var base: Vector2 = HANGARS[h]
+		var p := base + Vector2(sin(u * TAU) * 260.0, -u * 760.0)
+		var d := Vector2(cos(u * TAU) * 260.0 * TAU, -760.0).normalized()
+		if u < 0.85:
+			_draw_tiny_craft(p, d, 20 + h)
+
+
+func _draw_tiny_craft(p: Vector2, d: Vector2, seed_i: int) -> void:
+	var n := d.orthogonal()
+	draw_colored_polygon(PackedVector2Array([p + d * 22.0, p - d * 14.0 + n * 14.0, p - d * 8.0, p - d * 14.0 - n * 14.0]), Color(0.3, 0.33, 0.4))
+	draw_circle(p - d * 14.0, 5.0, Color(0.6, 0.85, 1.0, 0.8))         # 엔진 불빛
+	if int(t * 2.0 + seed_i * 0.7) % 2 == 0:                           # 항법등
+		draw_circle(p + n * 13.0, 3.0, Color(1.0, 0.3, 0.25, 0.9))
+		draw_circle(p - n * 13.0, 3.0, Color(0.3, 1.0, 0.45, 0.9))
+
+
+## 주포 (뱃머리 아래, 선체 기준 좌표계 안에서): 선체에 박힌 장갑 포탑 + 겨누는 쪽으로 도는 각진 포가 + 네모난 포신 셋 + 슬롯 달린 포구 제동기.
+## 탄막 요새 v0.72 의 거대 포 생김새를 다시 쓴다. 모을수록 포구가 달아오르고, 쏘면 포신이 뒤로 밀린다
+func _draw_main_gun(sh: Vector2) -> void:
+	var cb := CANNON_BASE
+	draw_rect(Rect2(cb + Vector2(-190, -150), Vector2(380, 150)), C_HULL_DARK)          # 선체에 박힌 포탑 받침
+	draw_rect(Rect2(cb + Vector2(-190, -150), Vector2(380, 150)), Color(C_RIM, 0.5), false, 4.0)
+	for k in 4:
+		draw_line(cb + Vector2(-170 + k * 110.0, -140), cb + Vector2(-170 + k * 110.0, -10), C_HULL, 8.0)
+	var ship_x := Transform2D(0.0, Vector2(SHIP_SCALE, SHIP_SCALE), 0.0, ship_to_world(Vector2.ZERO) + sh)
+	draw_set_transform_matrix(ship_x * Transform2D(cannon_aim, cb))
+	var L := GUN_LEN - 70.0 * cannon_recoil
+	var mantlet := PackedVector2Array([Vector2(-150, -150), Vector2(10, -150), Vector2(70, -100), Vector2(70, 100), Vector2(10, 150), Vector2(-150, 150)])
+	draw_colored_polygon(mantlet, C_GUN_SIDE)
+	draw_colored_polygon(PackedVector2Array([Vector2(-130, -128), Vector2(0, -128), Vector2(48, -88), Vector2(48, 88), Vector2(0, 128), Vector2(-130, 128)]), C_GUN_FACE)
+	for q in 3:                                                        # 포가 장갑 띠
+		draw_line(Vector2(-110 + q * 45, -120), Vector2(-110 + q * 45, 120), C_HULL_DARK, 6.0)
+	for y in [-64.0, 0.0, 64.0]:                                       # 네모난 포신 셋
+		draw_rect(Rect2(60.0, y - 24.0, L - 60.0, 48.0), C_GUN_SIDE)
+		draw_rect(Rect2(60.0, y - 16.0, L - 60.0, 32.0), C_GUN_FACE)
+		draw_line(Vector2(60.0, y - 16.0), Vector2(L, y - 16.0), Color(C_RIM, 0.4), 3.0)
+		for q in 2:                                                    # 포신 고정 띠
+			var x := 60.0 + (L - 60.0) * (0.3 + q * 0.35)
+			draw_rect(Rect2(x - 10.0, y - 30.0, 20.0, 60.0), C_HULL_DARK)
+		draw_rect(Rect2(L, y - 32.0, 56.0, 64.0), C_HULL_DARK)           # 포구 제동기 (네모, 옆으로 슬롯)
+		for q in 2:
+			draw_rect(Rect2(L + 10.0 + q * 22.0, y - 32.0, 10.0, 14.0), Color(0.02, 0.02, 0.02))
+			draw_rect(Rect2(L + 10.0 + q * 22.0, y + 18.0, 10.0, 14.0), Color(0.02, 0.02, 0.02))
+		if cannon_glow > 0.0:                                          # 모을수록 포구가 달아오른다
+			draw_rect(Rect2(L + 46.0, y - 14.0, 14.0, 28.0), Color(1.0, 0.75, 0.85, 0.4 + 0.6 * cannon_glow))
+	if cannon_glow > 0.0:
+		_soft_glow(Vector2(L + 70.0, 0.0), 140.0 * cannon_glow + 30.0, Color(1.0, 0.62, 0.86), 0.5 * cannon_glow)
+	draw_set_transform_matrix(ship_x)
+
+
+## 선체가 갈라진다 (선체 기준 좌표계 안에서, k = 0~1): 가운데에서 금이 번개처럼 선체 끝까지 번지고(빛나는 균열),
+## 가운데가 들쭉날쭉하게 벌어지며 안에서 붉은 빛이 새고, 그 틈에서 코어가 나온다 (core_draw_pos)
+func _draw_hull_split(k: float) -> void:
+	var crack := clampf(k / SPLIT_CRACK, 0.0, 1.0)
+	var open := clampf((k - SPLIT_OPEN) / (1.0 - SPLIT_OPEN), 0.0, 1.0)
+	var o := DECK_CORE
+	var dirs := [0.05, -0.28, 0.32, PI - 0.05, PI + 0.3, PI - 0.33, -PI * 0.5, PI * 0.5, -0.9, PI + 0.95]
+	var lens := [1750.0, 1500.0, 1450.0, 1750.0, 1450.0, 1400.0, 300.0, 260.0, 600.0, 650.0]
+	for c in dirs.size():                                              # 번지는 금
+		var d := Vector2.from_angle(float(dirs[c]))
+		var n := d.orthogonal()
+		var pts := PackedVector2Array([o])
+		var segs := 14
+		var reach: float = float(lens[c]) * crack
+		for q in range(1, segs + 1):
+			var u := float(q) / segs
+			var p := o + d * reach * u + n * sin(q * 2.7 + c * 1.9) * 38.0 * u
+			p.y = clampf(p.y, -225.0, 255.0)
+			pts.append(p)
+		draw_polyline(pts, Color(1.0, 0.45, 0.12, 0.35), 26.0)
+		draw_polyline(pts, Color(1.0, 0.75, 0.4, 0.9), 9.0)
+		draw_polyline(pts, Color(1.0, 0.97, 0.85), 3.0)
+	if open <= 0.0:
+		return
+	var w := 30.0 + 320.0 * open                                       # 벌어진 틈 (들쭉날쭉)
+	var left := PackedVector2Array()
+	var right := PackedVector2Array()
+	for q in 9:
+		var y := lerpf(-240.0, 270.0, q / 8.0)
+		var jag := sin(q * 3.1) * 40.0 * open
+		left.append(Vector2(o.x - w + jag, y))
+		right.append(Vector2(o.x + w + jag * 0.6, y))
+	var gap := left.duplicate()
+	for q in range(right.size() - 1, -1, -1):
+		gap.append(right[q])
+	draw_colored_polygon(gap, Color(0.05, 0.015, 0.01))
+	_soft_glow(o, 260.0 + 260.0 * open, C_CORE, 0.45 * open)          # 안에서 새는 빛
+	draw_polyline(left, Color(1.0, 0.6, 0.25, 0.9), 10.0)              # 찢어진 가장자리가 달아오른다
+	draw_polyline(right, Color(1.0, 0.6, 0.25, 0.9), 10.0)
+	draw_polyline(left, Color(1.0, 0.95, 0.75), 3.0)
+	draw_polyline(right, Color(1.0, 0.95, 0.75), 3.0)
 
 
 ## 드론들: 차례인 편대는 밝게, 나머지는 조금 어둡게 포위망을 지킨다
