@@ -51,6 +51,9 @@ func _step(n: int) -> void:
 
 func _air(pos: Vector2) -> void:
 	main.reset_run()
+	if main.boss.has_method("wake"):                 # 관측자는 잠든 채 시작한다 (어깨포 꺼짐): 규칙 시험은 깨어난 상태에서
+		main.boss.wake()
+		main.boss.wake_k = 1.0
 	main.boss.next_t = 99.0
 	main.player.reset(pos, false)
 	main.player.aim = Vector2.RIGHT
@@ -106,7 +109,7 @@ func _run() -> void:
 	main.touch_ui = FakeStick.new()
 
 	_check("numbers (cd %.2f, dmg %d/%d/%d/%d, part %d, core %d)" % [p.stats.dash_cooldown, p.DASH_DAMAGE, p.stats.charge_damage, p.stats.power_damage, p.stats.clash_damage, b.PART_HP, b.core.CORE_HP],
-		absf(p.stats.dash_cooldown - 0.9) < 0.001 and p.DASH_DAMAGE == 1 and p.stats.charge_damage == 3 and p.stats.power_damage == 8 and p.stats.power_damage_perfect == 16 and p.stats.clash_damage == 8 and b.PART_HP == 30 and b.ARMOR_HP == 160 and b.core.CORE_HP == 1)
+		absf(p.stats.dash_cooldown - 0.9) < 0.001 and p.DASH_DAMAGE == 1 and p.stats.charge_damage == 3 and p.stats.power_damage == 8 and p.stats.power_damage_perfect == 16 and p.stats.clash_damage == 8 and b.PART_HP == 30 and b.ARMOR_HP == 208 and b.core.CORE_HP == 1)
 
 	# ── 돌진: 짧게 = 돌진, 쿨다운 ──
 	_air(Vector2(-900, -1500))
@@ -387,7 +390,7 @@ func _run() -> void:
 	_check("sword parry: the sword keeps swinging", _ph() == "swing")
 	p.parry_release()
 
-	# ── 코어: 껍질(체력 160)을 다 부수고 나서도 한 발을 더 맞혀야 부서진다 ──
+	# ── 코어: 껍질(체력 208)을 다 부수고 나서도 한 발을 더 맞혀야 부서진다 ──
 	main.reset_run()
 	b.next_t = 99.0
 	_check("observer: the core is a target from the start (hit %s)" % b.strike_hit(b.HEART_POS, 20.0).get("kind", ""), b.strike_hit(b.HEART_POS, 20.0).get("kind", "") == "core" and b.phase == 1)
@@ -397,9 +400,10 @@ func _run() -> void:
 	b.next_t = 99.0
 	b.atk = null
 	_check("core armour = 3x3 plates, all on (%d)" % b.plates_left(), b.plates_left() == b.PLATE_N)
-	b.damage_core(32)
-	_check("armor 20%%: stage 1, armor_hp %d" % b.core.armor_hp, b.core.stage == 1 and b.core.armor_hp == 128 and not b.core.broken)
-	b.damage_core(64)
+	var d20 := int(ceil(b.ARMOR_HP * 0.2))
+	b.damage_core(d20)
+	_check("armor 20%%: stage 1, armor_hp %d" % b.core.armor_hp, b.core.stage == 1 and b.core.armor_hp == b.ARMOR_HP - d20 and not b.core.broken)
+	b.damage_core(int(ceil(b.ARMOR_HP * 0.4)))
 	var gone_mid: int = b.PLATE_N - b.plates_left()
 	_check("armor 60%%: plates falling one by one (gone %d / %d), shards %d" % [gone_mid, b.PLATE_N, b.shards.size()], gone_mid >= 1 and gone_mid < b.PLATE_N and b.shards.size() == gone_mid)
 	var died: bool = b.damage_core(9999)
@@ -2571,6 +2575,7 @@ func _satellite_test() -> void:
 	_check("reverse thrust brakes leftover dash speed quickly (%.0f vs %.0f)" % [v_brake, v_free], v_brake < v_free - 250.0 and v_brake >= p.BRAKE_FROM - 600.0)
 	main.start_stage(0)                                       # 완전 동조 차지 적중: 차지 쿨다운 즉시 회복 + 잔탄 긁힘 한 칸 치료
 	var ob = main.boss
+	ob.wake()                                                    # 잠든 관측자는 어깨포가 꺼져 있다
 	ob.next_t = 99.0
 	var tpp: Vector2 = ob.part_pos(0)
 	p = main.player

@@ -20,7 +20,7 @@ const Burst := preload("res://scripts/attacks/burst.gd")
 
 # ── 구조 ───────────────────────────────────────────────
 const HEART_POS := Vector2(0, -1790)        # 동력 코어 중심 (가슴 갑옷에 박힌 하트 컷 보석)
-const ARMOR_HP := 160                       # 장갑 체력. 다 부서져도 피해가 코어로 넘어가지 않는다
+const ARMOR_HP := 208                       # 장갑 체력 (v0.84: 160 → 208, 배운 걸 익히고 즐길 시간). 다 부서져도 피해가 코어로 넘어가지 않는다
 const CORE_R := 62.0                        # 금고 안 결정 반지름
 # 하트 컷 보석 외곽선 (단위, 직선 12각): 가운데 오목한 위 + 두 둥근 어깨 + 아래 뾰족한 끝
 const HEART_SHAPE := [
@@ -41,6 +41,8 @@ const FIST_R := 95.0                 # 손 (그림)
 # 떠다니는 대검: 회전축(sword_piv)에서 HILT_GAP 떨어진 날밑부터 칼끝까지가 날 (판정 반폭 BLADE_W)
 const SWORD_REST := Vector2(840, -2050)
 const HILT_GAP := 150.0
+const HAND_UP := Vector2(760, -2850)         # 대검을 겨눌 때 오른손을 높이 든다
+const HAND_DOWN := Vector2(800, -1350)       # 그을 때 내리친다
 const BLADE_AT := 70.0               # 그림: 손잡이 끝 ~ 날밑
 const BLADE_L := 820.0               # 몸 높이에 맞먹는 대검
 const BLADE_W := 58.0
@@ -173,14 +175,14 @@ func _should_open() -> bool:
 	return false
 
 
-## 돌진 판정: 어깨포 → 코어 금고 순
+## 돌진 판정: 어깨포 → 심장 순 (잠든 동안은 어깨포가 꺼져 있어 심장만)
 func strike_hit(p: Vector2, r: float) -> Dictionary:
 	if dead:
 		return {}
 	var best := {}
 	var best_d := INF
 	for i in part_count():
-		if not part_alive(i):
+		if not part_alive(i) or not awake:
 			continue
 		var d := p.distance_to(part_pos(i))
 		if d < r + part_radius(i) and d < best_d:
@@ -202,12 +204,18 @@ func assist_targets(from := Vector2.ZERO) -> Array[Dictionary]:
 	if dead:
 		return out
 	for i in part_count():
-		if part_alive(i):
+		if part_alive(i) and awake:
 			out.append({"pos": part_pos(i), "r": part_radius(i)})
 	out.append({"pos": core.center, "r": core_assist_r})
 	for a in active_attacks():
 		a.assist_targets(from, out)
 	return out
+
+
+## 잠든 동안은 어깨포 표적 테두리를 그리지 않는다 (처음엔 심장만 노리게)
+func _draw_part_marks() -> void:
+	if awake:
+		super()
 
 
 ## 체력 게이지: 코어 장갑만 (청록 보호 몫 없음)
@@ -340,10 +348,17 @@ func _step_phase(dt: float) -> void:
 	if not _sword_busy():                                # 쉬는 대검: 제자리에서 천천히 오르내린다 (잠든 동안은 낮게 가라앉아 있다)
 		sword_piv = SWORD_REST + Vector2(sin(t * 0.7) * 14.0, sin(t * 1.1) * 26.0 * wake_k + 420.0 * (1.0 - wake_k))
 		sword_ang = lerp_angle(sword_ang, sword_rest_ang(), 1.0 - exp(-2.0 * dt))
-	var reach := FIST_IDLE[1]                            # 오른손: 대검을 조종하는 쪽으로 뻗는다 (그림만)
+	var reach: Vector2 = FIST_IDLE[1]                    # 오른손: 대검은 원격 조종 — 손은 높이 들었다가(자세) 긋는 순간 내리친다 (그림만)
+	var rate := 4.0
 	if _sword_busy():
-		reach = SHOULDERS[1] + (sword_piv - SHOULDERS[1]).normalized() * 950.0
-	fists[1] = fists[1].lerp(reach, 1.0 - exp(-4.0 * dt))
+		match atk.phase:
+			"rise", "set", "warn":
+				reach = HAND_UP
+				rate = 5.0
+			"swing", "hold":
+				reach = HAND_DOWN
+				rate = 16.0
+	fists[1] = fists[1].lerp(reach, 1.0 - exp(-rate * dt))
 
 
 ## 한 바퀴씩 고른다: 패턴 다섯을 섞어 차례로 쓰고, 다 쓰면 다시 섞는다 (바퀴가 바뀌어도 같은 패턴이 연달아 나오지 않게).
@@ -751,8 +766,9 @@ func _draw_cannon(a: int) -> void:
 		draw_colored_polygon(brake, C_BODY_DARK)
 		draw_polyline(_closed(brake), Color(C_RIM, 0.7), 3.0)
 		var g := cannon_glow[a]
-		draw_circle(mz + d * 20.0, 18.0 + 22.0 * g, Color(C_EYE, 0.12 + 0.5 * g))
-		draw_circle(mz + d * 20.0, 8.0 + 6.0 * g, Color(C_EYE, 0.55 + 0.45 * g))
+		var on := 0.1 + 0.9 * wake_k                                   # 잠든 동안은 포구 불이 꺼져 있다
+		draw_circle(mz + d * 20.0, 18.0 + 22.0 * g, Color(C_EYE, (0.12 + 0.5 * g) * on))
+		draw_circle(mz + d * 20.0, 8.0 + 6.0 * g, Color(C_EYE, (0.55 + 0.45 * g) * on))
 	else:
 		_draw_stump(b + d * 40.0, d, 30.0)
 

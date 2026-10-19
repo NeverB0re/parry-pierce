@@ -45,18 +45,15 @@ func _pages() -> Dictionary:
 		"dodge": {
 			"title": Loc.t("회피 — 돌진"),
 			"lines": [
-				Loc.t("%s(짧게)으로 돌진합니다. 돌진하는 동안은 무적이라 탄과 레이저를 통과할 수 있습니다. 단, 근접공격은 돌진으로 피할 수 없습니다.") % dash,
-				Loc.t("돌진은 횟수 제한 없이 쿨다운만 있습니다. 표적에 닿으면 피해를 주고 위로 튕겨 오릅니다. 일반 돌진은 튕기는 동안 무적이 아닙니다."),
-				Loc.t("돌진을 시작한 직후 공격이 스치면 '퍼펙트 회피'! 다음 차지 강습이 강해지고 돌진 쿨다운이 바로 돌아옵니다."),
+				Loc.t("%s(짧게)으로 돌진합니다. 돌진하는 동안은 무적이라 탄을 통과할 수 있습니다.") % dash,
+				Loc.t("돌진으로 표적에 부딪히면 피해를 주고 튕겨 오릅니다."),
 			],
 		},
 		"parry": {
 			"title": Loc.t("패리 — 막고 리버스 드라이브"),
 			"lines": [
 				Loc.t("금색 탄은 %s(으)로 막을 수 있습니다. 탄이 닿기 직전에 누르세요.") % par,
-				Loc.t("막으면 시간이 느려집니다. 방향을 정하고 버튼을 떼면 리버스 드라이브 — 받아낸 힘으로 돌진하는 강력한 일격입니다. 적중하면 쌓인 잔탄 긁힘도 한 칸 치료됩니다."),
-				Loc.t("금색 = 패리할 수 있는 공격입니다. 근접공격을 패리하면 막기만 하고 피해는 주지 못합니다 (둔탁한 소리와 회색 불꽃)."),
-				Loc.t("막아 내면 패리 쿨다운이 없어 바로 다시 패리할 수 있습니다. 헛치면 잠깐 쿨다운이 생깁니다."),
+				Loc.t("막으면 시간이 느려집니다. 방향을 정하고 버튼을 떼면 리버스 드라이브 — 받아낸 힘으로 돌진하는 강력한 일격입니다."),
 			],
 		},
 		"dashparry": {
@@ -75,9 +72,8 @@ func _pages() -> Dictionary:
 		"intercept": {
 			"title": Loc.t("요격 — 멈춘 근접공격을 차지 강습으로"),
 			"lines": [
-				Loc.t("적의 근접공격이 위치를 잡고 붉게 점멸하며 멈춰 있을 때 차지 강습으로 부딪히면 요격! 공격을 끊고 그 부위에 큰 피해를 줍니다. 요격에 성공하면 차지 쿨다운이 바로 돌아옵니다."),
-				Loc.t("들어 올리는 중에는 요격할 수 없습니다. 근접공격은 돌진으로 통과할 수 없으니 요격하거나 범위 밖으로 피하세요."),
-				Loc.t("근접공격은 모두 붉은 빗금 + ⚠ 표지로 예고됩니다. 천장이 내려오는 프레스는 정지선 아래로 피하거나 요격하세요."),
+				Loc.t("근접공격이 자세를 잡고 붉게 점멸할 때 차지 강습으로 부딪히면 요격! 공격을 끊고 큰 피해를 줍니다."),
+				Loc.t("근접공격은 돌진으로 통과할 수 없습니다. 요격하거나 범위 밖으로 피하세요."),
 			],
 		},
 		"barrage": {
@@ -106,8 +102,8 @@ func _pages() -> Dictionary:
 		"unparry": {
 			"title": Loc.t("패리 불가 — 보라색 공격"),
 			"lines": [
-				Loc.t("검붉은 보라색 공격(레이저·동심원 파동)은 패리할 수 없습니다. 돌진의 무적으로 통과하세요. 지나갈 범위가 미리 표시됩니다."),
-				Loc.t("돌진을 시작한 직후 스치게 피하면 '강한 퍼펙트 회피'! 다음 차지 강습이 매우 강해지고 금빛 꼬리가 길게 늘어집니다."),
+				Loc.t("보라색 공격은 패리할 수 없습니다. 돌진의 무적으로 통과하세요."),
+				Loc.t("돌진을 시작한 직후 스치듯 피하면 완전 동조 — 다음 차지 강습이 매우 강해집니다."),
 			],
 		},
 	}
@@ -589,9 +585,8 @@ class Stage extends Control:
 			_ship(pos, 0.0, 1.0, col)
 		else:
 			_caption(Loc.t("멈춘 근접 공격에 차지 강습으로 부딪히면 요격!"), Color(1.0, 0.8, 0.6))
-			# 관측자의 떠다니는 대검: 떠오름(요격 불가) → 자세 고정·진홍 점멸(지금!) → 차지 강습으로 쳐냄 → 튕겨 올라 돌다가 심장에 꽂힌다
+			# 근접공격(그림은 대검): 떠오름(요격 불가) → 자세 고정·붉게 점멸(지금!) → 차지 강습으로 부딪힘 → 공격이 튕겨 나간다
 			var u := tt - 3.6
-			var heart := Vector2(110, 180)
 			var piv := Vector2(250, 30)
 			var ang := 0.45
 			var phase := ""
@@ -603,25 +598,18 @@ class Stage extends Control:
 			elif u < 2.4:
 				phase = "set"
 			else:
-				phase = "fling"
-				var k := _smooth(2.4, 3.5, u)
-				var apex := Vector2(190, 5)
-				var end := heart - Vector2(0, 165)
-				piv = Vector2(250, 30).lerp(apex, sqrt(minf(1.0, k * 2.0))) if k < 0.5 else apex.lerp(end, pow((k - 0.5) * 2.0, 2.0))
-				ang = lerp_angle(0.45 + 3.0 * TAU * k, PI * 0.5, _smooth(0.55, 0.9, k))
+				phase = "hit"
+				var k := _smooth(2.4, 3.3, u)
+				piv = Vector2(250, 30) + Vector2(-70.0, 20.0) * k
+				ang = 0.45 - 0.45 * k
 			var blink := 0.5 + 0.5 * sin(t * 24.0)
-			if phase == "set":                                          # 예고: 날이 쓸고 지나갈 띠 (진홍 점멸)
+			if phase == "set":                                          # 예고: 쓸고 지나갈 띠 (붉게 점멸)
 				var band := PackedVector2Array()
 				for q in 13:
 					band.append(piv + Vector2.from_angle(lerpf(0.45, 1.65, q / 12.0)) * 215.0)
 				for q in range(12, -1, -1):
 					band.append(piv + Vector2.from_angle(lerpf(0.45, 1.65, q / 12.0)) * 30.0)
 				draw_colored_polygon(band, Color(1.0, 0.16, 0.12, 0.08 + 0.2 * blink))
-			var hit := _smooth(3.45, 3.55, u) * (1.0 - _smooth(3.9, 4.4, u))  # 심장 (붉은 하트 보석)
-			var hp := PackedVector2Array()
-			for q in [Vector2(0, -0.55), Vector2(0.4, -0.95), Vector2(0.95, -0.55), Vector2(0.9, 0.0), Vector2(0, 1.0), Vector2(-0.9, 0.0), Vector2(-0.95, -0.55), Vector2(-0.4, -0.95)]:
-				hp.append(heart + q * 42.0)
-			draw_colored_polygon(hp, Color(0.75, 0.12, 0.16).lerp(Color.WHITE, hit * 0.6))
 			_draw_blade(piv, ang, (0.4 + 0.6 * blink) if phase == "set" else 0.0)
 			if phase == "rise":
 				_txt(Loc.t("떠오르는 중 — 아직 요격 불가"), Vector2(250, 250), 16, Color(0.75, 0.78, 0.85))
@@ -642,15 +630,13 @@ class Stage extends Control:
 			_ship(pos, (mid - spx).angle() if u < 2.4 else -PI * 0.5, 1.0, "r" if u >= 1.6 else "b")
 			if dashing:
 				_ring(pos, 40.0, Color(1.0, 0.6, 0.2, 0.6), 2.0)
-			if u >= 2.4 and u < 2.9:
-				_spark(mid, _smooth(2.4, 2.9, u), Color(1.0, 0.85, 0.5), 12, 50.0)
-			if u >= 3.45:
-				_spark(heart, _smooth(3.45, 4.0, u), Color(1.0, 0.5, 0.35), 16, 70.0)
-				_txt(Loc.t("요격! 쳐낸 검이 심장에 꽂힌다"), Vector2(heart.x + 50.0, heart.y - 70.0), 20, GOLD)
+			if u >= 2.4 and u < 3.6:
+				_spark(mid, _smooth(2.4, 3.0, u), Color(1.0, 0.85, 0.5), 14, 60.0)
+				_txt(Loc.t("요격!"), Vector2(mid.x + 10.0, mid.y + 40.0), 22, GOLD)
 			if u >= 1.5 and u < 2.4:
 				_mouse(Vector2(size.x - 40.0, 60.0), true, false)
 
-	## 떠다니는 대검 (튜토리얼 그림): 회전축 piv 에서 ang 방향으로 날밑·날. hot = 진홍 테두리
+	## 근접공격 그림 (대검): 회전축 piv 에서 ang 방향으로 날밑·날. hot = 진홍 테두리
 	func _draw_blade(piv: Vector2, ang: float, hot: float) -> void:
 		var d := Vector2.from_angle(ang)
 		var n := d.orthogonal()

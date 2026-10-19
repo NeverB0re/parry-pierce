@@ -353,7 +353,7 @@ func _observer_tutor(delta: float) -> void:
 ## trigger 가 처음 참이 되면 장을 띄우고(처음 보는 장일 때만), 그 뒤 slow_while 인 동안 실시간 cap 초까지 느리게
 func _tut_moment(id: String, trigger: bool, slow_while: bool, cap: float, delta: float) -> void:
 	if not tut_live.has(id):
-		if trigger and tutorial.enabled and not tutorial.seen.has(id):
+		if trigger and tutorial.enabled and not tutorial.seen.get(id, false):
 			tut_live[id] = cap
 			tutorial.request([id])
 		return

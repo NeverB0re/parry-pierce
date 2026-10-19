@@ -35,7 +35,7 @@ func record_physics(us: int) -> void:
 
 ## 개발용 키(F1~F8: 무적·코어 전부 얻기·진행 삭제 등)는 배포 빌드에서는 꺼 둔다 (--debug 로만 켠다)
 static func keys_enabled() -> bool:
-	return OS.is_debug_build() or OS.get_cmdline_user_args().has("--debug")
+	return OS.is_debug_build() or OS.has_feature("telemetry") or OS.get_cmdline_user_args().has("--debug")   # 플레이 시험용 빌드(Windows Telemetry)에서도
 
 
 func _unhandled_input(e: InputEvent) -> void:
