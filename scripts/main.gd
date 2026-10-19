@@ -25,7 +25,7 @@ const WorldMap := preload("res://scripts/world_map.gd")
 const Ftl := preload("res://scripts/ftl.gd")
 
 const SPAWN := Vector2(650, -52)   # 시작 발판 위 (Player.PLAT_CENTER - 반지름)
-const CAM_ZOOM := 0.6              # 기본 줌아웃 (넓게 보여서 탄막 사이 빈틈이 보이게)
+const CAM_ZOOM := 0.54             # 기본 줌아웃 (넓게 보여서 탄막 사이 빈틈이 보이게). v0.103: 0.6 → 0.54 (기체도 함께 작아진다 — 보스가 압도적으로 보이게)
 const MOBILE_AREA := 1.2             # 모바일 시야 면적 = PC 화면의 이 배수 (폰 화면 비율에 맞춰 줌을 계산)
 const AIM_ZOOM := 0.85             # 방향 지정 중엔 물러나 표적을 넓게 본다
 const CHARGE_ZOOM := 0.85            # 차징 중에만 물러난다

@@ -134,7 +134,7 @@ func _draw() -> void:
 
 	# 조작
 	if main.touch_ui == null:
-		_text(Vector2(28, s.y - 24), Loc.t("좌클릭: 회피·돌진   우클릭 꾹: 패리   Esc: 메뉴 (조작법 보기)"), 12, Color(0.75, 0.77, 0.82, 0.6))
+		_text(Vector2(28, s.y - 24), Loc.t("좌클릭: 회피·돌진 / 꾹: 차지 강습   우클릭 꾹: 패리   Esc: 메뉴 (조작법 보기)"), 12, Color(0.75, 0.77, 0.82, 0.6))
 
 	if warp_t > 0.0:                          # 퍼펙트 회피: 청록 틴트 + 가장자리에서 모여드는 선
 		var wk := clampf(warp_t / warp_max, 0.0, 1.0)
