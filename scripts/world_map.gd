@@ -282,7 +282,7 @@ func refresh() -> void:
 	cores_button.text = Loc.t("동력 코어 장착")
 	back_button.visible = allow_back
 	var st: Dictionary = Stages.LIST[profile.stage]
-	info_l.text = Loc.t("도약지 %d. %s — 콜로서스 「%s」") % [profile.stage + 1, Loc.t(st["coord"]), Loc.t(st["name"])]
+	info_l.text = Loc.t("도약지 %d — 콜로서스 「%s」") % [profile.stage + 1, Loc.t(st["name"])]   # 구간 이름은 빼서 짧게 (영어에서 잘리지 않게)
 	hint_l.text = Loc.t("은하를 눌러 도약지를 고르세요. 깬 곳은 다시 싸울 수 있습니다")
 	for id in core_tiles:
 		var tile: CoreTile = core_tiles[id]

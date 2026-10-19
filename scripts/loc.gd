@@ -163,7 +163,7 @@ const EN := {
 	"연속 요격": "Chain Intercept",
 	"패리 불가": "Unparryable",
 	"동력 코어 장착": "Equip Cores",
-	"도약지 %d. %s — 콜로서스 「%s」": "Destination %d. %s — Colossus \"%s\"",
+	"도약지 %d — 콜로서스 「%s」": "Destination %d — Colossus \"%s\"",
 	"은하를 눌러 도약지를 고르세요. 깬 곳은 다시 싸울 수 있습니다": "Click a galaxy to pick your destination. Cleared ones can be fought again",
 	"장착 칸이 비어 있습니다": "No core equipped",
 	"콜로서스를 처리하면 그 동력 코어를 얻습니다. 코어를 눌러 장착하세요 — 장착한 코어만 작동합니다.": "Defeat a Colossus to take its power core. Click a core to equip it — only equipped cores work.",
