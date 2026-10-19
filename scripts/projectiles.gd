@@ -16,7 +16,8 @@ const WARMUP_FLOOR := 0.5
 const HOMING_TIME := 3.6              # 유도탄은 발사 후 이 시간 동안만 방향을 튼다
 const HOMING_TURN := 2.0              # 초당 회전 (라디안)
 const STEER_CONE := 1.75              # steer 를 준 유도탄이 쫓는 앞쪽 범위 (반각, 약 100도)
-const HOMING_BLINK := 1.2             # 적 유도탄은 수명이 이만큼 남으면 점멸한다 (곧 사라진다는 표시)
+const END_BLINK := 0.6                # 적 주탄(잔탄 제외)은 수명이 이만큼 남으면 빠르게 몇 번 점멸한다 (곧 사라진다는 표시)
+const END_BLINK_HZ := 7.0
 const SHELL_HOME := 9.0               # 대구경 포탄: 이 시간 동안 플레이어 쪽으로 천천히 방향을 튼다 (중요한 탄이 엉뚱한 데로 지나가지 않게)
 const SHELL_TURN := 1.1
 const ORBIT_SPIN := 1.3               # 호위탄이 포탄 둘레를 도는 속도 (rad/s)
@@ -308,13 +309,12 @@ func draw(ci: CanvasItem) -> void:
 				mod = Color(1, 1, 1, blink)
 			ci.draw_texture_rect(_tex_small, Rect2(pos[i] - half, half * 2.0), false, mod)
 			continue
+		if mine[i] == 0 and life[i] < END_BLINK and fmod(life[i] * END_BLINK_HZ, 1.0) < 0.45:   # 곧 사라진다: 직전에 빠르게 점멸
+			continue
 		var hot: bool = k == Kind.HOMING and mine[i] == 0
 		var fade := 1.0
 		if hot:
 			half = Vector2.ONE * float(RADII[k]) * 2.1
-			if life[i] < HOMING_BLINK:              # 곧 사라진다: 점멸 (끝에 가까울수록 빠르게)
-				fade = 1.0 if fmod(sqrt(life[i]) * 10.0, 1.0) > 0.4 else 0.22
-				mod = Color(1, 1, 1, fade)
 		var tex: Texture2D = _tex_lava if k == Kind.LAVA else (_tex_homing if hot else _tex_bolt)
 		if k == Kind.SHELL and mine[i] == 1:        # 되돌린 대구경 포탄: 플레이어 색(푸른빛)으로 크고 무겁게
 			ci.draw_circle(pos[i], RADII[k] * 3.0 + 10.0 * pulse, Color(C_RETURN, 0.12))

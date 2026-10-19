@@ -322,15 +322,14 @@ class Stage extends Control:
 		draw_colored_polygon(PackedVector2Array([b + side * 5.0, b - side * 5.0, b + back * len]), Color(0.95, 0.15, 0.05))
 		draw_colored_polygon(PackedVector2Array([b + side * 2.5, b - side * 2.5, b + back * len * 0.6]), Color(1.0, 0.8, 0.3))
 
-	## 패리할 주탄: 탄막 요새 주포 탄처럼 큰 금색 주탄 + 둘레를 도는 잔탄 고리 (게임과 같은 모양)
-	func _shell(p: Vector2, v := Vector2.LEFT, escorts := true) -> void:
+	## 돌진패리 그림의 주탄: 탄막 요새 주포 탄처럼 큰 금색 주탄 + 둘레를 도는 호위탄 고리 (게임과 같은 모양)
+	func _shell(p: Vector2, v := Vector2.LEFT) -> void:
 		draw_line(p, p - v.normalized() * 44.0, Color(GOLD, 0.35), 14.0)
 		draw_circle(p, 20.0, Color(GOLD, 0.25))
 		draw_circle(p, 14.0, GOLD)
 		draw_circle(p, 7.0, Color(1, 1, 0.9))
-		if escorts:
-			for j in 10:
-				_small(p + Vector2.from_angle(t * 1.3 + j * TAU / 10.0) * 46.0, Vector2.from_angle(t * 1.3 + j * TAU / 10.0 + PI * 0.5))
+		for j in 10:
+			_small(p + Vector2.from_angle(t * 1.3 + j * TAU / 10.0) * 46.0, Vector2.from_angle(t * 1.3 + j * TAU / 10.0 + PI * 0.5))
 
 	func _bolt(p: Vector2, v := Vector2.LEFT) -> void:
 		draw_line(p, p - v.normalized() * 34.0, Color(GOLD, 0.35), 8.0)
@@ -482,7 +481,7 @@ class Stage extends Control:
 			_flame(ship_pos, heading, 14.0)
 		if not parried:
 			var bp := Vector2(680, 150).lerp(sp + Vector2(18, -4), bolt_k)
-			_shell(bp, Vector2(-1, 0.2))
+			_bolt(bp, Vector2(-1, 0.2))
 		if holding:
 			var pr := 40.0 + (4.0 if int(t * 10.0) % 2 == 0 else 0.0)
 			_ring(sp, pr, Color(1.0, 0.95, 0.75, 0.9), 2.5)
