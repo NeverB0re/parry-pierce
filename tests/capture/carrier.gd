@@ -20,7 +20,7 @@ var plan := [
 	["shell", "shell", 100],
 	["cannon_aim", "cannon", 80],
 	["cannon_fire", "cannon", 150],
-	["fling", "fling", 50],
+	["fling", "fling", 70],
 	["final", "final", 280],
 ]
 var idx := 0

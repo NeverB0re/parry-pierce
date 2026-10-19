@@ -369,7 +369,7 @@ func core_draw_pos() -> Vector2:
 
 # ── 진행 ───────────────────────────────────────────────
 const FLING_KNOCK := 0.28                    # 맞은 쪽으로 튕기는 시간
-const FLING_FLY := 0.85                      # 모함까지 날아가는 시간 (원근으로 작아진다)
+const FLING_FLY := 1.1                       # 모함까지 날아가는 시간 (원근으로 작아진다. 불꽃 꼬리가 보이게 조금 느리게)
 const FLING_KNOCK_D := 240.0
 
 
@@ -555,14 +555,55 @@ func _pick_mode(s: int) -> String:
 func _draw() -> void:
 	_draw_ship()
 	for f in flung:
+		_draw_fling_trail(f)
 		var st := fling_state(f)
 		_draw_drone(st[0], int(f["i"]), float(st[1]), 1.0, float(f["t"]) * 14.0)
+		_draw_burning(st[0], float(st[1]))
 	_draw_drones()
 	_draw_part_marks()
 	_draw_shards()
 	for a in active_attacks():
 		a.draw()
 	shots.draw(self)
+
+
+## 부서져 날아가는 드론의 불꽃 꼬리: 지나온 길을 따라 불덩이 → 검은 연기로 (모함에 꽂히는 길이 눈에 보이게)
+func _draw_fling_trail(f: Dictionary) -> void:
+	var tt := float(f["t"])
+	var n := 44
+	var pts: Array[Vector2] = []
+	var scs: Array[float] = []
+	for k in n + 1:                                                 # 0 = 드론 바로 뒤 … n = 꼬리 끝
+		var back := k * 0.018
+		if tt - back < 0.0:
+			break
+		var g := f.duplicate()
+		g["t"] = tt - back
+		var st := fling_state(g)
+		var u := float(k) / n
+		pts.append(Vector2(st[0]) + Vector2(sin(t * 23.0 + k * 0.9), cos(t * 19.0 + k * 1.3)) * 9.0 * u * float(st[1]))
+		scs.append(st[1])
+	for k in range(pts.size() - 2, -1, -1):                         # 꼬리 끝(연기)부터 그려서 불길이 위에 오게
+		var u := float(k) / n
+		var a: Vector2 = pts[k]
+		var b: Vector2 = pts[k + 1]
+		var sc: float = scs[k]
+		if u < 0.5:                                                 # 불길: 굵고 밝게 → 가늘고 붉게
+			var w := lerpf(46.0, 18.0, u / 0.5) * sc
+			draw_line(a, b, Color(1.0, 0.4, 0.08, 0.3 * (1.0 - u)), w * 1.8)
+			draw_line(a, b, Color(1.0, 0.62 - 0.3 * u, 0.18, 0.9 * (1.0 - u * 1.4)), w)
+			draw_line(a, b, Color(1.0, 0.95, 0.7, 0.9 * maxf(0.0, 1.0 - u * 3.0)), w * 0.4)
+		else:                                                       # 연기: 넓어지며 옅어진다
+			draw_line(a, b, Color(0.17, 0.16, 0.17, 0.5 * (1.0 - u)), lerpf(24.0, 60.0, u) * sc)
+
+
+## 날아가는 드론 몸에 붙은 불길
+func _draw_burning(p: Vector2, sc: float) -> void:
+	var fl := 0.7 + 0.3 * sin(t * 31.0)
+	draw_circle(p, 46.0 * sc * fl, Color(1.0, 0.5, 0.12, 0.35))
+	for k in 3:
+		var q := p + Vector2.from_angle(t * 9.0 + k * TAU / 3.0) * 22.0 * sc
+		draw_circle(q, 16.0 * sc * fl, Color(1.0, 0.75, 0.3, 0.8))
 
 
 ## 배경의 항공모함 (선체 기준 좌표로 그린 뒤 ship_to_world 로 옮긴다): 장갑 선체 + 비행갑판 + 함교 + 갑판 포탑 + 격납고 + 하부 포대 + 주포 + 엔진.
