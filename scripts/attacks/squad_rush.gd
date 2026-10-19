@@ -179,7 +179,7 @@ func clash_box(ppos: Vector2) -> Dictionary:
 	var best := {}
 	var bd := INF
 	for r in runs:
-		if r["phase"] != "warn" and r["phase"] != "strike":
+		if not _can_clash(r):
 			continue
 		var hb := _box(r, ppos)
 		var d: float = Vector2(hb["pos"]).distance_to(ppos)
@@ -191,18 +191,23 @@ func clash_box(ppos: Vector2) -> Dictionary:
 	return best
 
 
+## 겨누는 중(aim)에도 요격된다 — 연속 돌진은 앞 기체를 쳐낸 직후 다음 기체가 겨누는 중이라, 곧바로 이어 칠 수 있어야 한다
+func _can_clash(r: Dictionary) -> bool:
+	return r["phase"] == "aim" or r["phase"] == "warn" or r["phase"] == "strike"
+
+
 func assist_targets(_from: Vector2, out: Array[Dictionary]) -> void:
 	for r in runs:
-		if r["phase"] == "warn" or r["phase"] == "strike":
+		if _can_clash(r):
 			out.append({"pos": boss.drone_pos(int(r["i"])), "r": 56.0, "intercept": true})
 
 
 ## 요격당함: 그 기체만 부딪힌 방향으로 튕겨 나간다 (나머지는 계속)
 func on_parried(hb: Dictionary) -> void:
 	var r: Dictionary = hb.get("run", {})
-	if r.is_empty() or (r["phase"] != "warn" and r["phase"] != "strike"):
+	if r.is_empty() or not _can_clash(r):
 		return
-	if mode != "line":                                   # 연속 돌진·돌격: 한 기체를 요격하면 아직 달려들지 않은 나머지 돌진은 끊긴다
+	if mode == "lance":                                  # 편대장 한 기체의 두 번 돌격: 첫 돌격을 쳐내면 다음 돌격은 끊긴다
 		for o in runs:
 			if o != r and (o["phase"] == "wait" or o["phase"] == "aim" or o["phase"] == "warn"):
 				o["phase"] = "done"
