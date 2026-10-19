@@ -1089,6 +1089,12 @@ func _immune_left() -> float:
 
 
 func _draw() -> void:
+	if main != null and main.wingman_t > 0.0:   # 호위기 (호위기 코어): 기체 둘레를 도는 작은 금빛 구체. 끝나 갈수록 깜빡인다
+		var wp: Vector2 = main.wingman_pos() - position
+		var wa := 1.0 if main.wingman_t > 1.0 or int(main.wingman_t * 10.0) % 2 == 0 else 0.35
+		draw_circle(wp, 13.0, Color(1.0, 0.85, 0.4, 0.25 * wa))
+		draw_circle(wp, 7.0, Color(1.0, 0.9, 0.55, wa))
+		draw_circle(wp, 3.5, Color(1, 1, 1, wa))
 	var jitter := Vector2.ZERO
 	if is_hovering_charge():           # 차지 중엔 몸이 떨린다 (완료되면 더)
 		var amp := 0.8 if is_charged() else 0.6 + 1.6 * clampf(charge_t / charge_need(), 0.0, 1.0)

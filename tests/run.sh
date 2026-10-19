@@ -41,6 +41,8 @@ run smoke.gd -- --stage=2
 run smoke_stages.gd -- --stage=2
 run smoke.gd -- --stage=3
 run smoke_stages.gd -- --stage=3
+run smoke.gd -- --stage=4
+run smoke_stages.gd -- --stage=4
 
 # 동작 궤적: 시드·입력을 고정해 4200 프레임 상태를 기록하고 tests/golden/trace.txt 와 비교한다.
 # 리팩터라면 "같음"이어야 한다. 수치·규칙을 일부러 바꿨다면 --update-trace 로 새 기준을 저장한다 (실패로 치지 않음)

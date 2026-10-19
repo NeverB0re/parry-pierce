@@ -94,6 +94,13 @@ var spawn := SPAWN
 var spawn_on_platform := true
 var win_t := 0.0                   # 승리 후 흐른 시간 (바로 클릭해 정비로 넘어가는 실수 방지)
 var heat := 0                      # 과열 게이지 (잔탄 피격 횟수)
+# 호위기 코어 (모함 보상): PERFECT 패리 뒤 WINGMAN_TIME 동안 호위기가 기체 곁을 돌며 가까운 표적에 보조탄(잔탄급 피해)을 쏜다
+const WINGMAN_TIME := 4.0
+const WINGMAN_EVERY := 0.33
+const WINGMAN_ORBIT := 46.0
+var wingman_t := 0.0
+var wingman_cd := 0.0
+var wingman_a := 0.0
 var last_strike_t := -99.0         # 마지막으로 적을 때린 시각 (텔레메트리: 때린 직후 피격)
 var reflect_carry := 0.0           # 반사탄의 소수점 피해 (잔탄 0.5) 를 모아 둔다
 var heat_t := 0.0                  # 다음에 한 칸 식을 때까지
@@ -240,6 +247,7 @@ func reset_run() -> void:
 	win_t = 0.0
 	heat = 0
 	heat_t = 0.0
+	wingman_t = 0.0
 	reflect_carry = 0.0
 	lives = player.stats.shield_cells
 	hitstop = 0.0
@@ -533,6 +541,7 @@ func _physics_body(delta: float) -> void:
 	boss.focus_glow = 1.0 if (player.aim_phase or player.is_charged()) else 0.0
 	boss.focus_from = player.position
 	boss.aim_from = player.position
+	boss.view_c = cam.get_screen_center_position()
 	boss.aim_dir = player.aim
 	boss.focus_reach = player.parry_dash_reach() \
 		if player.aim_phase else Player.CHARGE_SPEED * Player.CHARGE_DASH_TIME
@@ -546,6 +555,7 @@ func _physics_body(delta: float) -> void:
 	_drain_boss_events()
 	player.step(delta)
 	_heat_cool(dt)
+	_wingman(dt)
 	_reflect()
 	if state == State.PLAY:
 		_check_attacks()
@@ -870,6 +880,29 @@ func heat_level() -> float:
 	return clampf(f / float(HEAT_MAX - 1), 0.0, 1.0)
 
 
+## 호위기 위치 (기체 둘레를 돈다)
+func wingman_pos() -> Vector2:
+	return player.position + Vector2.from_angle(wingman_a) * WINGMAN_ORBIT
+
+
+## 호위기: 곁을 돌며 WINGMAN_EVERY 마다 가장 가까운 표적에 보조탄 한 발 (반사 잔탄과 같은 피해 0.5)
+func _wingman(dt: float) -> void:
+	if wingman_t <= 0.0:
+		return
+	wingman_t -= dt
+	wingman_a += 5.0 * dt
+	if state != State.PLAY or boss.dead:
+		return
+	wingman_cd -= dt
+	if wingman_cd > 0.0:
+		return
+	wingman_cd = WINGMAN_EVERY
+	var o := wingman_pos()
+	boss.shots.spawn(o, Vector2.ZERO, 3.0, boss.shots.WARMUP, 0.0, boss.shots.Kind.SMALL)
+	boss.shots.reflect_one(boss.shots.size() - 1, boss.target_pos(o))
+	tele.add("wingman_shot")
+
+
 func _heat_cool(dt: float) -> void:
 	if heat <= 0 or state != State.PLAY:
 		return
@@ -881,6 +914,8 @@ func _heat_cool(dt: float) -> void:
 
 func _parry_feedback(p: Vector2, perfect: bool, hb: Dictionary) -> void:
 	tele.add("parry_perfect" if perfect else "parry")
+	if perfect and player.stats.wingman:         # 호위기 코어: 호위기가 나와 곁을 돈다 (다시 PERFECT 면 시간 갱신)
+		wingman_t = WINGMAN_TIME
 	var hp_pos: Vector2 = hb["pos"]
 	var contact := p.lerp(hp_pos, 0.25) if not hb.has("rect") else p
 	_buzz(70 if perfect else 40)

@@ -16,6 +16,9 @@ const CORES := {
 	"sync": {"name": "동조 코어", "from": "satellite", "color": Color(0.35, 0.7, 1.0),
 		"desc": "퍼펙트 회피에 성공하면 기체 둘레의 적 탄이 사라진다",
 		"mods": {"sync_clear": ["set", true]}},
+	"wingman": {"name": "호위기 코어", "from": "carrier", "color": Color(0.95, 0.85, 0.35),
+		"desc": "PERFECT 패리에 성공하면 몇 초 동안 호위기가 기체 곁을 돌며 가까운 표적에 보조탄을 쏜다",
+		"mods": {"wingman": ["set", true]}},
 }
 
 

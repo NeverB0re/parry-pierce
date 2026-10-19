@@ -39,6 +39,7 @@ func _process(_d: float) -> bool:
 	_title_test()
 	_telemetry_test()
 	_satellite_test()
+	_carrier_test()
 	print("FAILS ", fails)
 	quit(fails)
 	return false
@@ -2747,5 +2748,124 @@ func _satellite_test() -> void:
 	var w = b.BarrierWall.new(Vector2(500, -900))
 	w.boss = b
 	_check("barrier wall starts on the far side from the player", w.x0 < 0.0 and w.x1 > 0.0)
+	main.debug.god = false
+	main.start_stage(0)
+
+
+## 5스테이지 모함: 드론 9기(편대 셋 × 3기) = 외부 시스템, 포위 고리, 편대 차례 섞기(연달아 같은 편대 없음), 패턴 판정, 부서진 드론이 모함으로, 마지막 코어, 호위기 코어
+func _carrier_test() -> void:
+	main.start_stage(4)
+	var b = main.boss
+	var p = main.player
+	main.debug.god = true
+	b.next_t = 99.0
+	var pp := Vector2(150, -1450)
+	p.reset(pp, false)
+	_check("carrier: stage 5 is the carrier with nine drones in three squads (leaders %d, wings %d, total %d)" % [b.part_max_hp(0), b.part_max_hp(1), b.ARMOR_HP],
+		main.Stages.LIST[4]["id"] == "carrier" and b.part_count() == 9 and b.part_max_hp(0) == b.LEADER_HP and b.part_max_hp(1) == b.WING_HP and b.part_max_hp(3) == b.LEADER_HP
+		and b.LEADER_HP > b.WING_HP and b.ARMOR_HP == 3 * b.LEADER_HP + 6 * b.WING_HP)
+	for k in int(4.0 / DT):
+		b.step(DT, pp)
+	var near := 0
+	for i in 9:
+		var d: float = b.part_pos(i).distance_to(pp)
+		if d > 450.0 and d < 1300.0:
+			near += 1
+	var before: Vector2 = b.part_pos(0)
+	for k in int(1.0 / DT):
+		b.step(DT, pp)
+	_check("carrier: the nine drones encircle the player and keep moving (%d on the ring, moved %.0f)" % [near, before.distance_to(b.part_pos(0))], near >= 7 and before.distance_to(b.part_pos(0)) > 20.0)
+	var hp0: int = b.part_hp[1]
+	b.damage({"kind": "part", "idx": 1}, 3)
+	var chip: int = hp0 - b.part_hp[1]
+	b.damage({"kind": "part", "idx": 1}, 8)
+	_check("carrier: a dash or charge only chips a drone, a reverse drive bites (chip %d, drive %d)" % [chip, hp0 - chip - b.part_hp[1]], chip == b.CHIP and hp0 - chip - b.part_hp[1] == 8)
+	# 차례: 편대 ↔ 모함 번갈아, 같은 편대가 연달아 오지 않는다
+	b.reset()
+	var turns: Array[String] = []
+	var squads: Array[int] = []
+	var prev := ""
+	seed(5)
+	for k in int(120.0 / DT):
+		b.step(DT, pp)
+		var kd: String = b.attack_kind()
+		if kd != "" and kd != prev:
+			turns.append(kd)
+			if kd.begins_with("squad_"):
+				squads.append(b.active)
+		prev = kd
+	var repeat := false
+	for k in range(1, squads.size()):
+		repeat = repeat or squads[k] == squads[k - 1]
+	var alt := true
+	for k in range(1, turns.size()):
+		alt = alt and (turns[k].begins_with("squad_") != turns[k - 1].begins_with("squad_"))
+	_check("carrier: squad turns alternate with carrier turns, never the same squad twice in a row (%s)" % str(turns.slice(0, 10)),
+		turns.has("squad_gun") and turns.has("squad_rush") and turns.has("squad_veil") and turns.has("shells") and turns.has("burst") and not repeat and alt)
+	# 돌격 편대: 겨누고 멈춘 순간 요격 → 그 드론에 피해, 튕겨 나가 다음 기로
+	b.reset()
+	b.next_t = 99.0
+	b.shots.clear()
+	var rs = b.SquadRush.new(1)
+	b.start_attack(rs)
+	var guard := 0
+	while rs.phase != "warn" and guard < 400:
+		b.step(DT, pp)
+		guard += 1
+	var hb: Dictionary = b.clash_box(pp)
+	var first: int = rs._drone()
+	var hp1: int = b.part_hp[first]
+	main._clash(hb, pp)
+	_check("carrier rush: a locked-on drone can be intercepted; it takes the hit and is knocked away (drone %d hp %d -> %d, phase %s)" % [first, hp1, b.part_hp[first], rs.phase],
+		not hb.is_empty() and int(hb.get("part", -1)) == first and b.part_hp[first] < hp1 and rs.phase == "knocked" and b.melee_warning() == false)
+	# 결계 편대: 보라 선은 가는 심줄만 맞는다, 퍼펙트 회피한 선은 사라진다
+	b.reset()
+	b.next_t = 99.0
+	var vl = b.SquadVeil.new(2)
+	b.start_attack(vl)
+	guard = 0
+	while vl.phase != "fire" and guard < 400:
+		b.step(DT, pp)
+		guard += 1
+	var es: Array = vl._edges()
+	var on_edge: Vector2 = (es[0][0] + es[0][1]) * 0.5
+	_check("carrier veil: three drones string unparryable lines between them; only the line hurts", es.size() == 3 and b.beam_hit(on_edge, 12.0) != Vector2.ZERO and b.beam_hit(vl.c, 12.0) == Vector2.ZERO)
+	b.mark_beam_dodged(on_edge, 12.0)
+	_check("carrier veil: a perfect-evaded line vanishes", vl.beam_hit(on_edge, 12.0) == Vector2.ZERO and vl.dodged_edges.size() == 1)
+	# 부서진 드론은 모함으로 날아가 꽂힌다
+	b.reset()
+	b.next_t = 99.0
+	b.damage_part(2, 999)
+	var flying: int = b.flung.size()
+	for k in int(1.5 / DT):
+		b.step(DT, pp)
+	_check("carrier: a destroyed drone flies back into the carrier and burns there (flying %d, burns %d)" % [flying, b.burns.size()], flying == 1 and b.flung.is_empty() and b.burns.size() == 1)
+	# 아홉 기를 다 잡으면 코어가 내려오고, 리버스 드라이브 한 방만 들어간다
+	for i in 9:
+		b.damage_part(i, 999)
+	_check("carrier: all nine down opens the core (phase %d)" % b.phase, b.phase == 2 and b.parts_left() == 0)
+	for k in int((b.open_time + 1.5) / DT):
+		b.step(DT, pp)
+	var ch: Dictionary = b.strike_hit(b.CORE_POS, 20.0)
+	_check("carrier: last stand — the core sprays a gold barrage and is bare (phase %d, attack %s, broken %s)" % [b.phase, b.attack_kind(), b.core.broken],
+		b.phase == 3 and b.attack_kind() == "open" and b.core.broken and ch.get("kind", "") == "core")
+	_check("carrier: dash and charge bounce off the last core, a reverse drive does not", b.blocks_strike(ch, "dash", false, false) and b.blocks_strike(ch, "charge", false, true) and not b.blocks_strike(ch, "power", false, false))
+	_check("carrier: one reverse drive kills the last core", b.damage(ch, 8))
+	# 호위기 코어: PERFECT 패리 → 몇 초 동안 보조탄
+	main.start_stage(4)
+	b = main.boss
+	b.next_t = 99.0
+	p = main.player
+	p.reset(pp, false)
+	p.stats.wingman = true
+	main.tele.counts.erase("wingman_shot")
+	main._parry_feedback(pp, true, {"pos": pp})
+	for k in int(1.0 / DT):
+		main.hitstop = 0.0
+		main._physics_process(DT)
+	var shots0: int = main.tele.counts.get("wingman_shot", 0)
+	_check("wingman core: a PERFECT parry sends out a wingman that fires support shots (%.1fs left, %d shots in 1s)" % [main.wingman_t, shots0], main.wingman_t > 2.0 and shots0 >= 2)
+	p.stats.wingman = false
+	main.wingman_t = 0.0
 	main.debug.god = false
 	main.start_stage(0)

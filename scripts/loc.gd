@@ -175,4 +175,8 @@ const EN := {
 	"빈 칸": "Empty",
 	" · 획득: %s (항로도 → 동력 코어 장착)": " · Got: %s (Route map → Equip Cores)",
 	" · 최단 기록 갱신": " · New best time",
+	"모함": "Carrier",
+	"퇴각 항로 5구간 — 정박지": "Retreat Route — Leg 5 (Anchorage)",
+	"호위기 코어": "Wingman Core",
+	"PERFECT 패리에 성공하면 몇 초 동안 호위기가 기체 곁을 돌며 가까운 표적에 보조탄을 쏜다": "After a PERFECT parry, a wingman orb circles your ship for a few seconds and fires support shots at the nearest target",
 }

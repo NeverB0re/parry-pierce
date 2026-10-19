@@ -12,6 +12,8 @@ const LIST := [
 		"coord": "퇴각 항로 3구간"},
 	{"id": "satellite", "name": "결계 위성", "script": "res://scripts/colossi/satellite.gd", "core": "sync",
 		"coord": "퇴각 항로 4구간 — 궤도", "theme": "orbit"},
+	{"id": "carrier", "name": "모함", "script": "res://scripts/colossi/carrier.gd", "core": "wingman",
+		"coord": "퇴각 항로 5구간 — 정박지", "theme": "orbit"},
 ]
 
 const MAP_STAGES := 9                # 월드 맵의 스테이지 수 (목적지는 그다음, 10번째)

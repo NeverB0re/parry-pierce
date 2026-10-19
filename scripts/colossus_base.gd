@@ -45,6 +45,7 @@ var focus_from := Vector2.ZERO       # 강조 기준 위치(플레이어)
 var aim_from := Vector2.ZERO         # 플레이어 위치와 조준 방향 (main 이 매 프레임): 겨눈 쪽 표적의 테두리가 조금 더 밝다
 var aim_dir := Vector2.UP
 var look_at := Vector2(0, -1200)       # 플레이어 위치 (그림 전용: 대기 모션이 바라본다. 판정에는 쓰지 않는다)
+var view_c := Vector2(0, -1500)        # 화면 가운데 (main 이 매 프레임): 멀리 있는 배경 몸체(모함)를 원근으로 그릴 때 쓴다
 # 체력 게이지: 코어를 두른 링 (모든 보스 공통, _draw 에서 _draw_gauge 를 부른다)
 const GAUGE_W := 10.0
 const GAUGE_HOLD := 0.45                     # 깎인 몫(흰 꼬리)이 머무는 시간
