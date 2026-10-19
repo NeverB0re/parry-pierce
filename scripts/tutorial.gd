@@ -589,53 +589,81 @@ class Stage extends Control:
 			_ship(pos, 0.0, 1.0, col)
 		else:
 			_caption(Loc.t("멈춘 근접 공격에 차지 강습으로 부딪히면 요격!"), Color(1.0, 0.8, 0.6))
+			# 관측자의 떠다니는 대검: 떠오름(요격 불가) → 자세 고정·진홍 점멸(지금!) → 차지 강습으로 쳐냄 → 튕겨 올라 돌다가 심장에 꽂힌다
 			var u := tt - 3.6
-			var sh := Vector2(110, 60)
-			var arm_len := 380.0
-			var ang := 0.2
+			var heart := Vector2(110, 180)
+			var piv := Vector2(250, 30)
+			var ang := 0.45
 			var phase := ""
 			if u < 1.2:
-				phase = "prep"
-				ang = lerpf(-0.5, 0.55, _smooth(0.0, 1.2, u))
+				phase = "rise"
+				var k := _smooth(0.0, 1.2, u)
+				piv = Vector2(200, 230).lerp(Vector2(250, 30), k)
+				ang = lerpf(1.5, 0.45, k)
 			elif u < 2.4:
 				phase = "set"
-				ang = 0.55
 			else:
-				phase = "hit"
-				ang = 0.55 - 0.5 * _smooth(2.7, 3.3, u)
-			var fist := sh + Vector2.from_angle(ang) * arm_len
+				phase = "fling"
+				var k := _smooth(2.4, 3.5, u)
+				var apex := Vector2(190, 5)
+				var end := heart - Vector2(0, 165)
+				piv = Vector2(250, 30).lerp(apex, sqrt(minf(1.0, k * 2.0))) if k < 0.5 else apex.lerp(end, pow((k - 0.5) * 2.0, 2.0))
+				ang = lerp_angle(0.45 + 3.0 * TAU * k, PI * 0.5, _smooth(0.55, 0.9, k))
 			var blink := 0.5 + 0.5 * sin(t * 24.0)
-			if phase == "set":
-				draw_colored_polygon(PackedVector2Array([sh, sh + Vector2.from_angle(0.55) * 420.0, sh + Vector2.from_angle(1.35) * 420.0]), Color(1.0, 0.3, 0.25, 0.1 + 0.25 * blink))
-			var arm_c := Color(0.35, 0.37, 0.45)
-			draw_line(sh, fist, arm_c, 22.0)
-			draw_circle(fist, 24.0, Color(0.22, 0.23, 0.3))
-			draw_circle(sh, 26.0, Color(0.18, 0.19, 0.25))
-			var el := sh.lerp(fist, 0.55)
-			draw_circle(el, 13.0, Color(1.0, 0.42, 0.22).lerp(Color.WHITE, _smooth(2.35, 2.5, u) * (1.0 - _smooth(2.5, 2.9, u))))
-			if phase == "prep":
-				_txt(Loc.t("들어 올리는 중 — 아직 요격 불가"), Vector2(240, 230), 16, Color(0.75, 0.78, 0.85))
+			if phase == "set":                                          # 예고: 날이 쓸고 지나갈 띠 (진홍 점멸)
+				var band := PackedVector2Array()
+				for q in 13:
+					band.append(piv + Vector2.from_angle(lerpf(0.45, 1.65, q / 12.0)) * 215.0)
+				for q in range(12, -1, -1):
+					band.append(piv + Vector2.from_angle(lerpf(0.45, 1.65, q / 12.0)) * 30.0)
+				draw_colored_polygon(band, Color(1.0, 0.16, 0.12, 0.08 + 0.2 * blink))
+			var hit := _smooth(3.45, 3.55, u) * (1.0 - _smooth(3.9, 4.4, u))  # 심장 (붉은 하트 보석)
+			var hp := PackedVector2Array()
+			for q in [Vector2(0, -0.55), Vector2(0.4, -0.95), Vector2(0.95, -0.55), Vector2(0.9, 0.0), Vector2(0, 1.0), Vector2(-0.9, 0.0), Vector2(-0.95, -0.55), Vector2(-0.4, -0.95)]:
+				hp.append(heart + q * 42.0)
+			draw_colored_polygon(hp, Color(0.75, 0.12, 0.16).lerp(Color.WHITE, hit * 0.6))
+			_draw_blade(piv, ang, (0.4 + 0.6 * blink) if phase == "set" else 0.0)
+			if phase == "rise":
+				_txt(Loc.t("떠오르는 중 — 아직 요격 불가"), Vector2(250, 250), 16, Color(0.75, 0.78, 0.85))
 			elif phase == "set":
-				_txt(Loc.t("위치 고정 · 붉게 점멸 = 지금!"), Vector2(240, 230), 16, Color(1.0, 0.6, 0.5))
+				_txt(Loc.t("자세 고정 · 붉게 점멸 = 지금!"), Vector2(250, 250), 16, Color(1.0, 0.6, 0.5))
+			var mid := Vector2(250, 30) + Vector2.from_angle(0.45) * 120.0
 			var spx := Vector2(520, 205)
 			var pos := spx
 			var dashing := false
 			if u >= 1.9 and u < 2.4:
-				pos = spx.lerp(el + Vector2(26, 20), _smooth(1.9, 2.4, u) * 0.999)
+				pos = spx.lerp(mid + Vector2(20, 26), _smooth(1.9, 2.4, u) * 0.999)
 				dashing = true
 			elif u >= 2.4:
-				pos = el + Vector2(26, 20) + Vector2(60.0, -60.0) * _smooth(2.4, 3.2, u)
+				pos = mid + Vector2(20, 26) + Vector2(60.0, -60.0) * _smooth(2.4, 3.2, u)
 			if u >= 1.6 and u < 1.9:
 				pos += Vector2(randf_range(-1, 1), randf_range(-1, 1)) * 2.0
 				draw_arc(pos, 44.0, -PI * 0.5, -PI * 0.5 + TAU * _smooth(1.6, 1.9, u), 32, Color(1.0, 0.6, 0.2), 3.0)
-			_ship(pos, (el - spx).angle() if u < 2.4 else -PI * 0.5, 1.0, "r" if u >= 1.6 else "b")
+			_ship(pos, (mid - spx).angle() if u < 2.4 else -PI * 0.5, 1.0, "r" if u >= 1.6 else "b")
 			if dashing:
 				_ring(pos, 40.0, Color(1.0, 0.6, 0.2, 0.6), 2.0)
-			if u >= 2.4 and u < 3.6:
-				_spark(el, _smooth(2.4, 3.0, u), Color(1.0, 0.85, 0.5), 14, 60.0)
-				_txt(Loc.t("요격! 구동부에 큰 피해"), Vector2(el.x + 10.0, el.y - 36.0), 20, GOLD)
+			if u >= 2.4 and u < 2.9:
+				_spark(mid, _smooth(2.4, 2.9, u), Color(1.0, 0.85, 0.5), 12, 50.0)
+			if u >= 3.45:
+				_spark(heart, _smooth(3.45, 4.0, u), Color(1.0, 0.5, 0.35), 16, 70.0)
+				_txt(Loc.t("요격! 쳐낸 검이 심장에 꽂힌다"), Vector2(heart.x + 50.0, heart.y - 70.0), 20, GOLD)
 			if u >= 1.5 and u < 2.4:
 				_mouse(Vector2(size.x - 40.0, 60.0), true, false)
+
+	## 떠다니는 대검 (튜토리얼 그림): 회전축 piv 에서 ang 방향으로 날밑·날. hot = 진홍 테두리
+	func _draw_blade(piv: Vector2, ang: float, hot: float) -> void:
+		var d := Vector2.from_angle(ang)
+		var n := d.orthogonal()
+		var g := piv + d * 25.0
+		var tip := piv + d * 205.0
+		var blade := PackedVector2Array([g + n * 11.0, tip - d * 30.0 + n * 9.0, tip, tip - d * 30.0 - n * 9.0, g - n * 11.0])
+		draw_line(piv - d * 10.0, g, Color(0.12, 0.13, 0.16), 10.0)
+		draw_colored_polygon(blade, Color(0.42, 0.45, 0.52).lerp(Color(1.0, 0.16, 0.12), 0.3 * hot))
+		if hot > 0.0:
+			var ol := blade.duplicate()
+			ol.append(blade[0])
+			draw_polyline(ol, Color(1.0, 0.16, 0.12, hot), 3.0)
+		draw_line(g + n * 28.0, g - n * 28.0, Color(0.12, 0.13, 0.16), 8.0)
 
 	## 촉수 요격: 겨누고 멈춘 촉수에 차지 강습 → 움츠러들고 전류가 방어막 속 외눈으로 → 끊어진 촉수는 떨어져 나간다
 	func _tentacle() -> void:

@@ -2359,6 +2359,28 @@ func _zone_test() -> void:
 	main.start_stage(0)
 	var o = main.boss
 	var pp: Vector2 = o.SHOULDERS[1] + Vector2(300, 500)
+	# 튜토리얼 보스: 잠든 동안은 공격하지 않고, 심장에 피해가 쌓이면 깨어나 INTRO 순서로 한 번씩 보여 준다
+	o.shots.clear()
+	for i in 5:
+		o.atk = null
+		o._choose(pp)
+	_check("observer: asleep at the start, no patterns (awake %s, atk %s)" % [o.awake, o.attack_kind()], not o.awake and o.attack_kind() == "")
+	o.damage_core(o.WAKE_DMG - 1)
+	o.step(DT, pp)
+	var still_asleep: bool = not o.awake
+	o.damage_core(1)
+	o.step(DT, pp)
+	_check("observer: wakes once the heart has taken WAKE_DMG (asleep at -%d %s, awake now %s)" % [o.WAKE_DMG - 1, still_asleep, o.awake], still_asleep and o.awake)
+	var order := []
+	for i in 4:
+		o.atk = null
+		o.shots.clear()
+		o.lingering.clear()
+		o._choose(pp)
+		order.append(o.attack_kind())
+	_check("observer: after waking it shows barrage, halo, rings, then the greatsword (%s)" % str(order), order == ["volley", "halo", "rings", "sword"])
+	o.atk = null
+	o.lingering.clear()
 	o.shots.clear()
 	o.shots.spawn(pp + Vector2(-400, 0), Vector2(300, 0), 5.0)       # 플레이어에게 다가오는 탄
 	var swung := 0

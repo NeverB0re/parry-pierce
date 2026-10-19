@@ -6,6 +6,8 @@ extends "res://scripts/colossus_base.gd"
 ## 페이즈는 1 그대로 (개방 연출 없음): 부위와 코어를 함께 노린다.
 ## 공격: 조준 연사 · 흩뿌리기(어깨포, 둘 다 부서지면 방패 보석) · 헤일로 사격 · 대검 긋기(요격) · 방패 동심원(패리 불가)
 ## 고르기는 한 바퀴씩 (PATTERNS 를 섞어 차례로 다 쓴 뒤 다시 섞는다): 고르게, 그러나 순서는 매번 다르게
+## 튜토리얼 보스 (docs/BOSS_observer.md 4.1): 처음엔 잠들어 있다 (패턴 없음, 눈·헤일로가 꺼져 있음) — 플레이어가 둘러보며
+## 심장을 자유롭게 때린다. 심장에 WAKE_DMG 가 쌓이면 깨어나 INTRO 순서(탄막 → 헤일로 → 동심원 → 대검)로 한 번씩 보여 준 뒤 바퀴로 돈다
 ## 바닥 y=0, 위쪽이 음수. 몸 중심 x=0.
 
 const ArmoredCore := preload("res://scripts/armored_core.gd")
@@ -60,6 +62,10 @@ const LENSES := 16
 # ── 공격 고르기 ────────────────────────────────────────
 const PATTERNS := ["volley", "burst", "halo", "sword", "rings"]   # 한 바퀴에 하나씩
 const SWORD_HOLD := 2.5              # 대검 차례에 탄이 걷히길 기다리는 최대 시간
+const INTRO := ["volley", "halo", "rings", "sword"]   # 깨어난 뒤 한 번씩 보여 주는 순서 (패리 → 패리 → 패리 불가 → 요격)
+const WAKE_DMG := 20                 # 심장에 이만큼 쌓이면 깨어난다
+const WAKE_FALLBACK := 40.0          # 아무것도 안 해도 이만큼 지나면 깨어난다 (막힘 방지)
+const WAKE_TIME := 1.4               # 깨어나는 연출 (눈·헤일로가 켜지고 대검이 떠오른다)
 
 # ── 색 ─────────────────────────────────────────────────
 const C_BODY := Color(0.075, 0.08, 0.10)
@@ -83,6 +89,10 @@ var sword_ang := PI * 0.5            # 대검 방향 (회전축 → 칼끝)
 var halo_glow: Array[float] = []     # 렌즈별 발사 전 발광
 var bag: Array[String] = []          # 이번 바퀴에 남은 패턴
 var sword_hold := 0.0
+var awake := false
+var wake_k := 0.0                    # 깨어난 정도 (그림: 눈·헤일로 밝기, 대검 높이)
+var sleep_t := 0.0
+var intro: Array[String] = []
 
 
 func _init() -> void:
@@ -116,6 +126,10 @@ func reset() -> void:
 		halo_glow.append(0.0)
 	bag.clear()
 	sword_hold = 0.0
+	awake = false
+	wake_k = 0.0
+	sleep_t = 0.0
+	intro.assign(INTRO)
 
 
 # ── 외부 시스템 (어깨포 둘) ─────────────────────────────
@@ -226,9 +240,18 @@ func gauge_radius() -> float:
 
 
 # ── 무기 ───────────────────────────────────────────────
-## 쉬는 대검: 칼끝을 아래로, 플레이어 쪽으로 살짝 기운다
+## 쉬는 대검: 칼끝을 아래로, 플레이어 쪽으로 살짝 기운다 (잠든 동안은 축 늘어져 기울어 있다)
 func sword_rest_ang() -> float:
-	return PI * 0.5 + clampf((look_at.x - SWORD_REST.x) / 2000.0, -0.25, 0.25)
+	return PI * 0.5 + clampf((look_at.x - SWORD_REST.x) / 2000.0, -0.25, 0.25) * wake_k + 0.35 * (1.0 - wake_k)
+
+
+## 깨어난다: 눈·헤일로가 켜지고 대검이 떠오른 뒤 첫 패턴
+func wake() -> void:
+	if awake:
+		return
+	awake = true
+	next_t = WAKE_TIME
+	emit(Ev.WAKE, EYES[0].lerp(EYES[1], 0.5))
 
 
 ## 헤일로 렌즈 k 의 위치 (천천히 돈다, _draw_halo 와 같다)
@@ -309,8 +332,13 @@ func _step_phase(dt: float) -> void:
 		halo_glow[k] = move_toward(halo_glow[k], 0.0, dt * 1.5)
 	for i in 2:
 		cannon_glow[i] = move_toward(cannon_glow[i], 0.0, dt * 2.0)
-	if not _sword_busy():                                # 쉬는 대검: 제자리에서 천천히 오르내린다
-		sword_piv = SWORD_REST + Vector2(sin(t * 0.7) * 14.0, sin(t * 1.1) * 26.0)
+	if not awake:                                        # 잠들어 있다: 심장에 피해가 쌓이면(또는 오래 지나면) 깨어난다
+		sleep_t += dt
+		if ARMOR_HP - core.armor_hp >= WAKE_DMG or sleep_t >= WAKE_FALLBACK:
+			wake()
+	wake_k = move_toward(wake_k, 1.0 if awake else 0.0, dt / WAKE_TIME)
+	if not _sword_busy():                                # 쉬는 대검: 제자리에서 천천히 오르내린다 (잠든 동안은 낮게 가라앉아 있다)
+		sword_piv = SWORD_REST + Vector2(sin(t * 0.7) * 14.0, sin(t * 1.1) * 26.0 * wake_k + 420.0 * (1.0 - wake_k))
 		sword_ang = lerp_angle(sword_ang, sword_rest_ang(), 1.0 - exp(-2.0 * dt))
 	var reach := FIST_IDLE[1]                            # 오른손: 대검을 조종하는 쪽으로 뻗는다 (그림만)
 	if _sword_busy():
@@ -322,21 +350,26 @@ func _step_phase(dt: float) -> void:
 ## 대검(근접)은 날아오는 탄이 걷힌 뒤에만 — 제 차례에 잠깐(SWORD_HOLD) 기다리고, 그래도 안 걷히면 다음 패턴을 먼저 쓴다.
 ## 대검만 남았으면 기다린 뒤 그대로 긋는다 (바퀴 밖의 탄막을 끼우지 않는다: 탄막만 이어지던 v0.81 버그)
 func _choose(ppos: Vector2) -> void:
-	if bag.is_empty():
+	if not awake:                                        # 잠든 동안은 공격하지 않는다
+		next_t = 0.3
+		return
+	var list: Array[String] = intro if not intro.is_empty() else bag   # 깨어난 직후엔 INTRO 순서대로
+	if list.is_empty():
 		bag.assign(PATTERNS)
 		bag.shuffle()
 		if bag[0] == last and bag.size() > 1:
 			bag.push_back(bag.pop_front())
-	var kind: String = bag[0]
+		list = bag
+	var kind: String = list[0]
 	if kind == "sword" and not shots_clear(ppos):
 		if sword_hold < SWORD_HOLD:                     # 제 차례에서 잠깐 기다린다 (순서가 늘 맨 뒤로 밀려 뻔해지지 않게)
 			sword_hold += 0.15
 			next_t = 0.15
 			return
-		if bag.size() > 1:                              # 그래도 안 걷히면 다음 패턴 먼저 (대검은 이번 바퀴에 남는다)
-			kind = bag[1]
+		if list.size() > 1:                             # 그래도 안 걷히면 다음 패턴 먼저 (대검은 이번 바퀴에 남는다)
+			kind = list[1]
 	sword_hold = 0.0
-	bag.erase(kind)
+	list.erase(kind)
 	last = kind
 	match kind:
 		"halo":
@@ -763,7 +796,7 @@ func _draw_halo() -> void:
 		var p := lens_pos(k)
 		var seq := 0.5 + 0.5 * sin(t * 2.2 - k * 0.8)
 		var watch := maxf(0.0, cos(angle_difference(a, to_p))) ** 6
-		var g := (0.25 + 0.45 * seq + 0.6 * watch) * dim
+		var g := (0.25 + 0.45 * seq + 0.6 * watch) * dim * (0.12 + 0.88 * wake_k)   # 잠든 동안은 렌즈도 어둡다
 		draw_circle(p, 34.0, C_BODY)
 		draw_arc(p, 34.0, 0.0, TAU, 16, Color(C_RIM, 0.55), 3.0)
 		draw_circle(p, 14.0 + 8.0 * watch, Color(C_EYE, minf(1.0, g)))
@@ -832,7 +865,7 @@ func _draw_head() -> void:
 	draw_polyline(rim, C_RIM, 5.0)
 	draw_line(Vector2(0, -2790), Vector2(0, -2650), Color(C_RIM, 0.5), 4.0)
 	draw_rect(Rect2(-125, -2640, 250, 70), Color(0.02, 0.02, 0.03))
-	var glow := 0.55 + 0.45 * eye_glow
+	var glow := (0.55 + 0.45 * eye_glow) * (0.08 + 0.92 * wake_k)   # 잠든 동안은 눈이 꺼져 있다
 	if dead:
 		glow = maxf(0.0, 0.55 - death_t * 0.4)
 	for e in EYES:

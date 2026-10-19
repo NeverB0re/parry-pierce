@@ -30,6 +30,7 @@ const MOBILE_AREA := 1.2             # 모바일 시야 면적 = PC 화면의 �
 const AIM_ZOOM := 0.85             # 방향 지정 중엔 물러나 표적을 넓게 본다
 const CHARGE_ZOOM := 0.85            # 차징 중에만 물러난다
 const AIM_SLOW := 0.08             # 방향 지정 중 월드 시간 배율
+const TUT_SLOW := 0.15             # 관측자 튜토리얼 장면: 공격이 닿는 동안 월드 시간 배율 (직접 해 보게)
 const DASH_SLOW := 0.5             # 패리 돌진 중 월드 시간 배율 (적중·종료 즉시 원래 속도). 플레이어는 항상 실시간
 const RESPAWN_DELAY := 1.3         # 용암에 빠진 뒤 재출격까지
 const RESPAWN_INVULN := 1.5
@@ -70,6 +71,8 @@ var zoom_punch := 0.0                # PERFECT 리버스 드라이브 적중: �
 var drive_from := Vector2.ZERO      # PERFECT 리버스 드라이브 출발점 (잔상 궤적)
 const CHARGED_SLOW := 0.12        # 차지 완료 순간 짧은 슬로우
 var slowmo := 0.0
+var tut_slow := false                # 지금 튜토리얼 장면이라 월드가 느리다 (_observer_tutor)
+var tut_live := {}                   # 이번 판에 띄운 장면 튜토리얼 → 남은 느린 시간(실시간)
 var shake := 0.0
 var run_time := 0.0
 var lives := 0                     # 남은 실드 셀 (최대는 player.stats.shield_cells)
@@ -313,14 +316,62 @@ func _on_jump() -> void:
 func _on_arrived() -> void:
 	if touch_ui == null:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if OS.has_feature("web") else Input.MOUSE_MODE_CONFINED
-	var ids := ["dodge", "charge", "parry"]               # 꼭 알아야 할 것만 스테이지별로: ① 돌진 → 차지 → 패리 ② 요격 ③ 연속 요격 (본 장은 다시 안 뜬다)
+	var ids := ["dodge", "charge"]                         # 꼭 알아야 할 것만 스테이지별로: ① 돌진 → 차지 (패리·패리 불가·요격은 관측자가 그 공격을 처음 쓸 때) ② 요격 ③ 연속 요격 (본 장은 다시 안 뜬다)
 	if stage_idx >= 1:
+		ids.append("parry")
 		ids.append("intercept")
 	if stage_idx >= 2:
 		ids.append("tentacle")
 	if stage_idx >= 3:
 		ids.append("barrier")
 	tutorial.request(ids)
+
+
+## 관측자(튜토리얼 보스)의 장면별 튜토리얼: 그 공격이 처음 닥치는 순간에 장을 띄우고, 닫은 뒤엔 그 공격이 닿는 동안
+## 세계를 아주 느리게(TUT_SLOW) 만들어 직접 해 보게 한다. 처음 보는 장일 때만 (본 장은 다시 안 뜨고 느려지지도 않는다)
+## 패리 = 첫 금빛 탄이 가까이 왔을 때 · 패리 불가 = 방패가 동심원을 모으기 시작할 때 · 요격 = 대검이 자세를 잡고 경고할 때
+func _observer_tutor(delta: float) -> void:
+	tut_slow = false
+	if stage_idx != 0 or state != State.PLAY or boss.dead or not boss.awake or player.aim_phase:
+		return
+	var bolt := _bolt_coming(400.0)
+	_tut_moment("parry", bolt, bolt, 4.0, delta)
+	var rg = null
+	for a in boss.active_attacks():
+		if a.kind == "rings":
+			rg = a
+	var ring_near := false
+	if rg != null:
+		var d: float = player.position.distance_to(rg.origin)
+		for k in rg.started:
+			ring_near = ring_near or absf(rg._radius(k) - d) < 320.0
+	_tut_moment("unparry", rg != null and rg.started == 0, ring_near, 5.0, delta)
+	var sw = boss.atk if boss.attack_kind() == "sword" else null
+	_tut_moment("intercept", sw != null and sw.phase == "warn", sw != null and (sw.phase == "warn" or sw.phase == "swing"), 6.0, delta)
+
+
+## trigger 가 처음 참이 되면 장을 띄우고(처음 보는 장일 때만), 그 뒤 slow_while 인 동안 실시간 cap 초까지 느리게
+func _tut_moment(id: String, trigger: bool, slow_while: bool, cap: float, delta: float) -> void:
+	if not tut_live.has(id):
+		if trigger and tutorial.enabled and not tutorial.seen.has(id):
+			tut_live[id] = cap
+			tutorial.request([id])
+		return
+	if slow_while and float(tut_live[id]) > 0.0:
+		tut_live[id] = float(tut_live[id]) - delta
+		tut_slow = true
+
+
+## 플레이어에게 다가오는 금빛 탄(잔탄 아님)이 r 안에 있는가
+func _bolt_coming(r: float) -> bool:
+	var sh = boss.shots
+	for i in sh.size():
+		if sh.mine[i] != 0 or sh.kind[i] == sh.Kind.SMALL:
+			continue
+		var to: Vector2 = player.position - sh.pos[i]
+		if to.length() < r and to.dot(sh.vel[i]) > 0.0:
+			return true
+	return false
 
 
 ## 발판을 띄운다 (instant: 바로 / 아니면 용암에서 솟아오르는 연출)
@@ -423,7 +474,8 @@ func _physics_body(delta: float) -> void:
 		player.aim_left -= delta          # 방향 지정 시간은 실시간
 		if player.aim_left <= 0.0:
 			player.launch_parry_dash()
-	# 슬로우는 월드에만: 방향 지정 중, 그리고 패리 돌진이 적중하거나 끝날 때까지
+	_observer_tutor(delta)
+	# 슬로우는 월드에만: 방향 지정 중, 그리고 패리 돌진이 적중하거나 끝날 때까지 (튜토리얼 장면도)
 	var dt := delta * world_scale()
 	if not player.aim_phase and slowmo > 0.0:
 		slowmo -= delta
@@ -478,6 +530,8 @@ func _exit_tree() -> void:
 func world_scale() -> float:
 	if player.aim_phase:
 		return AIM_SLOW
+	if tut_slow:
+		return TUT_SLOW
 	if slowmo > 0.0:
 		return 0.3
 	if player.dash_kind == "power":
@@ -953,6 +1007,12 @@ func _drain_boss_events() -> void:
 				shake = maxf(shake, 10.0)
 				sfx.play("land", 2.0)
 				fx.burst(pos, 20, Color(0.55, 0.57, 0.6, 0.8), 500.0, 0.6, 5.0, 900.0, Vector2.UP, PI * 0.45)
+			Ev.WAKE:                             # 잠든 관측자가 깨어난다
+				shake = maxf(shake, 18.0)
+				sfx.play("open", 2.0, 0.0)
+				sfx.play("stomp", -2.0)
+				fx.ring(pos, Color(1.0, 0.8, 0.45), 900.0, 0.9, 10.0)
+				hud.flash(0.12, Color(1.0, 0.85, 0.55))
 			Ev.CORE_OPEN:                        # 모든 부위 파괴 → 가슴이 열린다
 				tele.mark("core_open", run_time)
 				hitstop = 0.25
