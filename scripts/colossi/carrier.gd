@@ -32,9 +32,9 @@ const PER := 3                               # 편대당 기체 수 (0번 = 편�
 const SQUAD_KIND := ["gun", "rush", "veil"]
 const SQUAD_MODES := {"gun": ["fan", "stream", "missiles"], "rush": ["line", "chain", "lance"], "veil": ["net", "cross", "pulse"]}   # 마지막 = 편대장 패턴
 const SQUAD_COL := [Color(1.0, 0.8, 0.35), Color(1.0, 0.24, 0.18), Color(0.85, 0.3, 0.75)]   # 금 / 진홍 / 보라 (색 규칙)
-const LEADER_HP := 40                        # 편대장: PERFECT 리버스 드라이브 세 방쯤
-const WING_HP := 25                          # 편대원: 두 방쯤
-const ARMOR_HP := 270                        # = 아홉 기 체력 합 (게이지·플레이 기록용)
+const LEADER_HP := 55                        # 편대장: PERFECT 리버스 드라이브 네 방쯤 (v0.108: 40 → 55, 첫 클리어 1:06 → 1:30 목표)
+const WING_HP := 35                          # 편대원: 세 방쯤 (v0.108: 25 → 35)
+const ARMOR_HP := 375                        # = 아홉 기 체력 합 (게이지·플레이 기록용)
 const CHIP := 1                              # 약한 일격(돌진·차지)은 이만큼만
 const WING_SIZE := 62.0                      # 편대원 그림 크기
 const LEADER_SIZE := 96.0                    # 편대장 그림 크기 (육중한 지휘기)

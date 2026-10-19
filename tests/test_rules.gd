@@ -2875,6 +2875,13 @@ func _carrier_test() -> void:
 	for k in b.shots.size():
 		homing += 1 if b.shots.kind[k] == b.shots.Kind.HOMING else 0
 	_check("carrier gun leader: fires homing missiles (%d)" % homing, homing >= 2)
+	b.reset()
+	b.next_t = 99.0
+	var pv = b.SquadVeil.new(2, "pulse")
+	b.start_attack(pv)
+	for k in int(2.6 / DT):
+		b.step(DT, pp + Vector2(sin(k * 0.05) * 400.0, 0))      # 플레이어가 움직여도
+	_check("carrier veil leader: both ring pulses come from the same spot (%d pulses)" % pv.pulses.size(), pv.pulses.size() == 2 and Vector2(pv.pulses[0]["o"]).distance_to(pv.pulses[1]["o"]) < 1.0)
 	# 돌격 편대: 나란히 돌진 — 멈춰 겨눈 기체를 요격하면 그 기체만 피해 + 튕겨 나가고 나머지는 계속
 	b.reset()
 	b.next_t = 99.0
