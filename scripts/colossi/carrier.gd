@@ -743,28 +743,39 @@ func _draw_ship() -> void:
 		draw_arc(CORE_POS, CORE_R + kk * 900.0, 0.0, TAU, 48, Color(1, 0.95, 0.8, 1.0 - kk), 8.0)
 
 
+## 드론은 기체 외곽을 따라 윤곽선을 그린다 (_draw_drone)
+func _rim_part(_i: int) -> bool:
+	return true
+
+
 ## 드론들: 차례인 편대는 밝게, 나머지는 조금 어둡게 포위망을 지킨다
 func _draw_drones() -> void:
 	for i in part_count():
 		if not part_alive(i):
 			continue
 		var on := squad_of(i) == active
-		_draw_drone(dpos[i], i, 1.0, 1.0 if on or active < 0 else 0.7, 0.0)
+		_draw_drone(dpos[i], i, 1.0, 1.0 if on or active < 0 else 0.7, 0.0, true)
 
 
-func _draw_drone(p: Vector2, i: int, scale_k: float, lit: float, spin: float) -> void:
+## target = 살아 있는 드론: 차지·조준 중이거나 막 맞았으면 기체 외곽이 붉게 빛난다 (평소엔 편대 색 테두리)
+func _draw_drone(p: Vector2, i: int, scale_k: float, lit: float, spin: float, target := false) -> void:
 	var col: Color = SQUAD_COL[squad_of(i)]
 	var rim := Color(col, 0.35 + 0.45 * lit)                       # 편대 색 테두리
+	var hot := false
+	if target:
+		var rc := rim_color(i)
+		rim = Color(col, rim.a).lerp(Color(rc, 1.0), rc.a)
+		hot = rc.a > 0.3
 	var g: float = dglow[i] if i < dglow.size() else 0.0
 	var a: float = (daim[i] if i < daim.size() else 0.0) + spin
 	if lit >= 1.0 and active == squad_of(i):                      # 차례인 편대: 편대 색 빛무리
 		draw_circle(p, (LEADER_SIZE if is_leader(i) else WING_SIZE) * 1.3 * scale_k, Color(col, 0.08 + 0.14 * g))
 	if is_leader(i):
 		draw_set_transform(p, a, Vector2.ONE * LEADER_SIZE * scale_k)
-		_leader_body(col, lit, g, rim)
+		_leader_body(col, lit, g, rim, hot)
 	else:
 		draw_set_transform(p, a, Vector2.ONE * WING_SIZE * scale_k)
-		_wing_body(col, lit, g, rim)
+		_wing_body(col, lit, g, rim, hot)
 	draw_set_transform(Vector2.ZERO, 0.0)
 
 
@@ -775,32 +786,34 @@ static func _mirror(pts: Array) -> PackedVector2Array:
 	return out
 
 
-func _poly(pts: Array, fill: Color, edge: Color, w: float) -> void:
+func _poly(pts: Array, fill: Color, edge: Color, w: float, glow := false) -> void:
 	var pa := PackedVector2Array(pts)
 	draw_colored_polygon(pa, fill)
 	var ol := pa.duplicate()
 	ol.append(pa[0])
+	if glow:                                                           # 표적 윤곽선: 바깥으로 번진다
+		draw_polyline(ol, Color(edge, edge.a * 0.3), w * 3.5)
 	draw_polyline(ol, edge, w)
 
 
 ## 편대원: 날렵한 요격기 (단위 크기, 앞 = +x). 앞으로 젖힌 날개 + 쌍 꼬리날개 + 날개 끝 기관포 + 편대 색 조종석·날개 띠 + 쌍 엔진
-func _wing_body(col: Color, lit: float, g: float, rim: Color) -> void:
+func _wing_body(col: Color, lit: float, g: float, rim: Color, hot: bool) -> void:
 	var body := C_DRONE.lightened(0.12 * lit)
 	var dark := C_DRONE_DARK
 	var edge := rim
 	var wing := [Vector2(0.2, 0.14), Vector2(-0.05, 0.92), Vector2(-0.38, 0.95), Vector2(-0.42, 0.16)]
 	for side in [wing, _mirror(wing)]:
-		_poly(side, dark, edge, 0.04)
+		_poly(side, dark, edge, 0.04, hot)
 	for sd in [1.0, -1.0]:                                             # 날개 띠 + 날개 끝 기관포
 		draw_line(Vector2(0.05, 0.55 * sd), Vector2(-0.28, 0.6 * sd), Color(col, 0.55 * lit + 0.3 * g), 0.08)
 		draw_line(Vector2(-0.2, 0.93 * sd), Vector2(0.28, 0.93 * sd), dark, 0.07)
 		draw_circle(Vector2(0.3, 0.93 * sd), 0.035, Color(col, 0.4 + 0.6 * g))
 	var fin := [Vector2(-0.55, 0.12), Vector2(-0.95, 0.45), Vector2(-0.9, 0.12)]
 	for side in [fin, _mirror(fin)]:
-		_poly(side, dark, edge, 0.035)
+		_poly(side, dark, edge, 0.035, hot)
 	var hull := [Vector2(1.05, 0.0), Vector2(0.6, 0.12), Vector2(-0.2, 0.19), Vector2(-0.8, 0.15), Vector2(-0.9, 0.0),
 		Vector2(-0.8, -0.15), Vector2(-0.2, -0.19), Vector2(0.6, -0.12)]
-	_poly(hull, body, edge, 0.035)
+	_poly(hull, body, edge, 0.035, hot)
 	draw_line(Vector2(0.55, 0), Vector2(-0.75, 0), Color(dark, 0.9), 0.025)   # 등줄기
 	draw_line(Vector2(-0.1, 0.12), Vector2(-0.1, -0.12), Color(dark, 0.9), 0.02)
 	_poly([Vector2(0.62, 0.0), Vector2(0.42, 0.08), Vector2(0.18, 0.07), Vector2(0.18, -0.07), Vector2(0.42, -0.08)],
@@ -813,15 +826,15 @@ func _wing_body(col: Color, lit: float, g: float, rim: Color) -> void:
 
 
 ## 편대장: 육중한 지휘 포격기 (단위 크기, 앞 = +x). 두꺼운 장갑 몸통 + 넓은 날개 끝 엔진 포드 + 쌍 주포 + 편대 색 감지 눈 + 계급 갈매기 문장
-func _leader_body(col: Color, lit: float, g: float, rim: Color) -> void:
+func _leader_body(col: Color, lit: float, g: float, rim: Color, hot: bool) -> void:
 	var body := C_DRONE.lightened(0.14 * lit)
 	var dark := C_DRONE_DARK
 	var edge := rim
 	var wing := [Vector2(0.3, 0.28), Vector2(-0.15, 1.02), Vector2(-0.62, 1.0), Vector2(-0.55, 0.32)]
 	for side in [wing, _mirror(wing)]:
-		_poly(side, dark, edge, 0.03)
+		_poly(side, dark, edge, 0.03, hot)
 	for sd in [1.0, -1.0]:                                             # 날개 끝 엔진 포드
-		_poly([Vector2(-0.05, 0.9 * sd), Vector2(-0.75, 0.9 * sd), Vector2(-0.8, 1.12 * sd), Vector2(-0.05, 1.12 * sd)], body, edge, 0.03)
+		_poly([Vector2(-0.05, 0.9 * sd), Vector2(-0.75, 0.9 * sd), Vector2(-0.8, 1.12 * sd), Vector2(-0.05, 1.12 * sd)], body, edge, 0.03, hot)
 		var fl := 0.1 + 0.04 * sin(t * 26.0 + sd * 3.0)
 		draw_circle(Vector2(-0.85 - fl, 1.01 * sd), 0.08, Color(0.55, 0.8, 1.0, 0.6 * lit))
 		draw_circle(Vector2(-0.82, 1.01 * sd), 0.05, Color(0.9, 0.97, 1.0, 0.85 * lit))
@@ -832,7 +845,7 @@ func _leader_body(col: Color, lit: float, g: float, rim: Color) -> void:
 		draw_circle(Vector2(1.2, sd), 0.06, Color(col, 0.35 + 0.65 * g))
 	var hull := [Vector2(0.85, 0.0), Vector2(0.55, 0.34), Vector2(-0.45, 0.4), Vector2(-0.82, 0.22), Vector2(-0.82, -0.22),
 		Vector2(-0.45, -0.4), Vector2(0.55, -0.34)]
-	_poly(hull, body, edge, 0.035)
+	_poly(hull, body, edge, 0.035, hot)
 	_poly([Vector2(0.45, 0.0), Vector2(0.2, 0.24), Vector2(-0.35, 0.26), Vector2(-0.35, -0.26), Vector2(0.2, -0.24)],
 		C_HULL_LIT.darkened(0.2 * (1.0 - lit)), Color(dark, 0.9), 0.025)   # 등 장갑판
 	for k in 3:                                                        # 계급 갈매기 문장 (편대 색)

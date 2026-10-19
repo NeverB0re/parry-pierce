@@ -283,6 +283,11 @@ func part_emphasis(i: int) -> float:
 
 
 ## 코어 포대 표적: 코어 둘레의 붉은 원 하나 (다른 표적 테두리와 같은 굵기). 드러나면 굵고 밝게 맥동한다
+## 보조 포탑·사일로는 그림의 외곽을 따라 윤곽선을 그린다 (코어 포대는 기본 원)
+func _rim_part(i: int) -> bool:
+	return i != BIG
+
+
 ## 부서진 포대는 포신이, 사일로는 해치가 떨어져 나간다
 func _on_part_broken(i: int) -> void:
 	var s := 1.0 if i % 2 == 1 else -1.0
@@ -968,7 +973,12 @@ func _draw_batteries() -> void:
 		var tip: Vector2 = battery_tip(i)
 		var d := (tip - b).normalized()
 		var n := d.orthogonal()
+		var rim := rim_color(i)
 		if part_alive(i):
+			if rim.a > 0.0:                                            # 차지·조준 중: 포신 둘레가 붉게
+				for k in [-1.0, 1.0]:
+					_cap(b + n * 14.0 * k, tip + n * 14.0 * k, 30.0, Color(rim, rim.a * 0.22))
+					_cap(b + n * 14.0 * k, tip + n * 14.0 * k, 24.0, rim)
 			for k in [-1.0, 1.0]:
 				_cap(b + n * 14.0 * k, tip + n * 14.0 * k, 18.0, C_HULL_DARK)
 			var g := glow[i]
@@ -978,6 +988,9 @@ func _draw_batteries() -> void:
 			draw_circle(b + d * 40.0, 10.0, Color(C_HEART, 0.25 + 0.15 * sin(t * 4.0)))
 		draw_circle(b, 48.0, C_TOP)
 		draw_arc(b, 48.0, PI, TAU, 20, C_RIM, 4.0)
+		if part_alive(i) and rim.a > 0.0:                              # 차지·조준 중: 포탑 둘레가 붉게
+			draw_arc(b, 50.0, PI, TAU, 24, Color(rim, rim.a * 0.22), 16.0)
+			draw_arc(b, 50.0, PI, TAU, 24, rim, 4.5)
 		draw_rect(Rect2(b.x - 56.0, b.y + 20.0, 112.0, 28.0), C_HULL_DARK)
 
 
@@ -988,6 +1001,8 @@ func _draw_silos() -> void:
 		var rc := Rect2(p.x - 52.0, p.y - 62.0, 104.0, 124.0)
 		draw_rect(rc, C_HULL_DARK)
 		draw_rect(rc, Color(C_RIM, 0.6), false, 3.0)
+		if part_alive(2 + k):                                         # 차지·조준 중: 상자 외곽이 붉게
+			rim_poly(PackedVector2Array([rc.position, Vector2(rc.end.x, rc.position.y), rc.end, Vector2(rc.position.x, rc.end.y)]), rim_color(2 + k), 4.5)
 		draw_line(Vector2(rc.position.x, p.y + 10.0), Vector2(rc.end.x, p.y + 10.0), Color(C_RIM, 0.25), 3.0)
 		var hatch := p + Vector2(0, -36)
 		if part_alive(2 + k):
@@ -1018,9 +1033,14 @@ func _draw_reactor() -> void:
 		draw_circle(v, 40.0, C_HULL_DARK)
 		draw_arc(v, 40.0, 0.0, TAU, 20, C_RIM, 4.0)
 		draw_circle(v, 14.0 + 12.0 * g, Color(C_GLOW, 0.3 + 0.6 * g))
+	var ra: float = core.flash                       # 맞은 순간 잠깐 붉은 테두리
 	if focus_glow > 0.0:
 		var in_reach := hc.distance_to(focus_from) <= focus_reach + 200.0
-		_soft_glow(hc, 300.0, C_HEART, focus_glow * (0.35 if in_reach else 0.12))       # 노릴 수 있는 코어가 빛난다 (윤곽선 없이)
+		_soft_glow(hc, 300.0, C_HEART, focus_glow * (0.35 if in_reach else 0.12))       # 노릴 수 있는 코어가 빛나고 붉은 테두리
+		ra = maxf(ra, focus_glow * (1.0 if in_reach else 0.35))
+	if ra > 0.0:
+		draw_arc(hc, CORE_R + 40.0, 0.0, TAU, 48, Color(C_TARGET, minf(1.0, ra) * 0.22), 14.0)
+		draw_arc(hc, CORE_R + 40.0, 0.0, TAU, 48, Color(C_TARGET, minf(1.0, ra)), 4.0)
 
 
 func _draw_debris() -> void:

@@ -160,6 +160,24 @@ func part_pos(i: int) -> Vector2:
 	return cannon_base(i).lerp(MUZZLES[i], 0.55)
 
 
+## 어깨포 외곽 (포좌 상자 + 포신 + 제퇴기, _draw_cannon 과 같은 치수): 차지·조준 중 표적 윤곽선
+func part_outline(i: int) -> PackedVector2Array:
+	var b := cannon_base(i)
+	var mz: Vector2 = MUZZLES[i]
+	var d := (mz - b).normalized()
+	var n := d.orthogonal()
+	var L := (mz - b).length()
+	var out := PackedVector2Array()
+	for q in [[-64.0, 58.0], [30.0, 58.0], [30.0, 24.0], [L - 22.0, 24.0], [L - 22.0, 36.0], [L + 20.0, 36.0],
+			[L + 20.0, -36.0], [L - 22.0, -36.0], [L - 22.0, -24.0], [30.0, -24.0], [30.0, -58.0], [-64.0, -58.0]]:
+		out.append(b + d * float(q[0]) + n * float(q[1]))
+	return out
+
+
+func _rim_part(_i: int) -> bool:
+	return true
+
+
 ## 코어는 처음부터 드러나 있다: 부위를 다 부숴도 개방 연출은 없다
 func _should_open() -> bool:
 	return false
@@ -599,9 +617,12 @@ func _draw_core() -> void:
 		var life := fmod(t * 0.5 + k * 0.17, 1.0)
 		var sp := hc + Vector2(sin(k * 2.3 + t * 0.8) * 120.0, -140.0 - life * 190.0)
 		draw_circle(sp, 14.0 + life * 30.0, Color(0.3, 0.3, 0.33, 0.35 * (1.0 - life)))
-	if focus_glow > 0.0:                           # 방향 지정·차지 중: 노릴 수 있는 심장이 빛난다 (윤곽선 없이)
+	var heart_rim: float = core.flash               # 맞은 순간 잠깐 하트 테두리가 붉게
+	if focus_glow > 0.0:                           # 방향 지정·차지 중: 노릴 수 있는 심장이 빛나고 하트 테두리가 붉게
 		var in_reach := hc.distance_to(focus_from) <= focus_reach + 200.0
 		_soft_glow(hc, 330.0, C_HEART, focus_glow * (0.35 if in_reach else 0.12))
+		heart_rim = maxf(heart_rim, focus_glow * (1.0 if in_reach else 0.35) * (0.75 + 0.25 * sin(t * 6.0)))
+	rim_poly(_heart(1.3), Color(C_TARGET, minf(1.0, heart_rim)), 5.0)
 
 
 ## 하트 컷 외곽선 (직선 10각, HEART_POS 기준 k 배, off 만큼 옮김)
@@ -782,6 +803,8 @@ func _draw_cannon(a: int) -> void:
 		var brake := PackedVector2Array([mz - d * 22.0 + n * 36.0, mz + d * 20.0 + n * 36.0, mz + d * 20.0 - n * 36.0, mz - d * 22.0 - n * 36.0])
 		draw_colored_polygon(brake, C_BODY_DARK)
 		draw_polyline(_closed(brake), Color(C_RIM, 0.7), 3.0)
+		if awake and not dead:                                         # 차지·조준 중: 어깨포 외곽이 붉게 빛난다
+			rim_poly(part_outline(a), rim_color(a), 5.0)
 		var g := cannon_glow[a]
 		var on := 0.1 + 0.9 * wake_k                                   # 잠든 동안은 포구 불이 꺼져 있다
 		draw_circle(mz + d * 20.0, 18.0 + 22.0 * g, Color(C_EYE, (0.12 + 0.5 * g) * on))
