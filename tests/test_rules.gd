@@ -590,6 +590,10 @@ func _meta_test() -> void:
 	main._core_destroyed(main.boss.core.center)
 	_check("win records clear and core (state %d, cores %s)" % [main.state, mp.cores], main.state == main.State.WON and mp.cleared.has("observer") and mp.cores.has("counter"))
 	_check("win records the clear time as the best time (%.2f)" % mp.best_time(0), mp.best_time(0) > 0.0 and absf(mp.best_time(0) - main.run_time) < 0.01)
+	var tx: Dictionary = main._tele_extra()
+	var dl: String = main.tele.deal_line(100, 240, 50.0, 40.0)
+	_check("play log measures core damage and dealing time (%s)" % dl, tx.has("core_dealt") and tx.has("deal_time") and int(tx["core_max"]) == main.boss.ARMOR_HP
+		and dl.contains("초당 2.00") and dl.contains("(80%)") and dl.contains("1:30 → 체력 180") and dl.contains("2:00 → 체력 240"))
 	main.open_world()
 	_check("world map opens and pauses, ship on the next stage (%d)" % mp.stage, main.world.visible and paused and mp.stage == 1)
 	# 동력 코어 장착은 따로 화면: 열고, 코어를 눌러 빼고 다시 끼우고, 닫는다
@@ -1053,6 +1057,10 @@ func _v035_test() -> void:
 	_check("the big gun has hit points: about thirty-two PERFECT drives break it and open the core (%d, phase %d, other parts alive %d)" % [more, b.phase, b.parts_left()], more >= 31 and more <= 33 and b.phase == 2 and b.parts_left() == 4)
 	main.start_stage(1)
 	b = main.boss
+	b.gun_exposed = true
+	var dmg_open: bool = b.core_damageable()
+	b.gun_exposed = false
+	_check("fortress dealing window = big gun open (open %s, closed %s)" % [dmg_open, b.core_damageable()], dmg_open and not b.core_damageable())
 	b.gun_exposed = true
 	b.damage_part(b.BIG, 1)
 	_check("small hits (reflected bullets) on the exposed gun only chip it, no stagger", b.part_hp[b.BIG] == b.BIG_HP - 1 and b.gun_shake == 0.0)

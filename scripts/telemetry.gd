@@ -94,6 +94,8 @@ func _append_md(d: Dictionary) -> void:
 	lines.append("- 빌드 %s · 남은 실드 %d · 끝난 페이즈 %s · 코어 %s · 외부 시스템 %s" % [build, int(d["lives_left"]), str(d.get("phase", "?")), str(d.get("armor_hp", "?")), str(d.get("part_hp", "?"))])
 	lines.append("- 피격: %s" % _fmt(d["hurt"]))
 	lines.append("- 준 피해: %s" % _fmt(d["damage"]))
+	if d.has("core_dealt"):
+		lines.append("- 딜 측정: %s" % deal_line(int(d["core_dealt"]), int(d["core_max"]), gt, float(d["deal_time"])))
 	var pats := {}
 	var acts := {}
 	for k in d["counts"]:
@@ -115,6 +117,16 @@ func _append_md(d: Dictionary) -> void:
 	else:
 		f.store_string("# Parry Pierce 플레이 기록\n\n판마다 아래에 하나씩 쌓입니다. 이 파일을 그대로 보내 주세요.\n\n")
 	f.store_string("\n".join(lines) + "\n")
+
+
+## 체력 조정용 한 줄: 코어 피해 ÷ 싸운 시간 = 초당 피해, 딜 가능 시간(코어를 때릴 수 있던 시간)과 비율,
+## 그 속도로 1:30 · 2:00 에 깨지는 체력 (지금 체력과 비교)
+static func deal_line(dealt: int, hp_max: int, fight_t: float, deal_t: float) -> String:
+	if fight_t < 1.0:
+		return "-"
+	var dps := dealt / fight_t
+	return "코어 피해 %d / %d초 = 초당 %.2f · 딜 가능 시간 %d초 (%d%%) · 이 속도면 1:30 → 체력 %d, 2:00 → 체력 %d (지금 %d)" % [
+		dealt, int(fight_t), dps, int(deal_t), int(round(100.0 * deal_t / fight_t)), int(round(dps * 90.0)), int(round(dps * 120.0)), hp_max]
 
 
 ## [{name, t}, ...] → "0:07 이름, ..."

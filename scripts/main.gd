@@ -82,6 +82,7 @@ var last_phys_ms := 0                # 마지막 물리 프레임 시각 (멈췄
 var tut_live := {}                   # 이번 판에 띄운 장면 튜토리얼
 var shake := 0.0
 var run_time := 0.0
+var deal_time := 0.0                       # 그중 코어에 피해를 넣을 수 있던 시간 (플레이 기록: 체력 조정용)
 var lives := 0                     # 남은 실드 셀 (최대는 player.stats.shield_cells)
 var dead_t := 0.0
 var respawn_t := 0.0
@@ -235,6 +236,7 @@ func reset_run() -> void:
 	fx.clear()
 	state = State.PLAY
 	run_time = 0.0
+	deal_time = 0.0
 	win_t = 0.0
 	heat = 0
 	heat_t = 0.0
@@ -522,6 +524,8 @@ func _physics_body(delta: float) -> void:
 		slowmo -= delta
 	if state == State.PLAY:
 		run_time += dt
+		if boss.core_damageable():
+			deal_time += dt
 	elif state == State.WON:
 		win_t += delta
 	_update_platform(dt)
@@ -558,7 +562,8 @@ func _physics_body(delta: float) -> void:
 
 func _tele_extra() -> Dictionary:
 	return {"stage": Stages.LIST[stage_idx]["id"], "cores": Array(profile.equipped),
-		"phase": boss.phase, "part_hp": boss.part_hp.duplicate(), "armor_hp": boss.core.armor_hp}
+		"phase": boss.phase, "part_hp": boss.part_hp.duplicate(), "armor_hp": boss.core.armor_hp,
+		"core_max": boss.ARMOR_HP, "core_dealt": boss.ARMOR_HP - boss.core.armor_hp, "deal_time": snappedf(deal_time, 0.01)}
 
 
 func _exit_tree() -> void:

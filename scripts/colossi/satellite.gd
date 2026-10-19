@@ -216,6 +216,10 @@ func gauge_radius() -> float:
 	return GAUGE_R
 
 
+## 딜 가능: 결계가 열려 있을 때
+func core_damageable() -> bool:
+	return barrier_open
+
 # ── 결계 열림 · 닫힘 ───────────────────────────────────
 func _open() -> void:
 	barrier_open = true

@@ -167,6 +167,11 @@ func damage_part(i: int, dmg: int) -> bool:
 	return _hit_core_armor(int(floor(dmg * BIG_CLOSED_K)))
 
 
+## 딜 가능: 대구경 포가 열려 있을 때 (포가 부서진 뒤에는 맨 코어)
+func core_damageable() -> bool:
+	return gun_exposed or phase >= 2
+
+
 func _stagger_gun() -> void:
 	gun_shake = 1.0
 	for m in active_attacks():
