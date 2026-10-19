@@ -36,7 +36,7 @@ const EyeSweep := preload("res://scripts/attacks/eye_sweep.gd")
 # ── 구조 ───────────────────────────────────────────────
 const DROP := 640.0                          # 몸을 천장에서 이만큼 내려 걸었다 (튕겨 올라가도 천장에 붙지 않게)
 const CORE_POS := Vector2(0, -2520.0 + DROP)          # 외눈 = 동력 코어 중심 (외투막 한가운데)
-const ARMOR_HP := 546                        # 코어 체력 (v0.88: +10%, v0.95: ×1.55) (장갑판 없이 균열로 보인다). 다 깎이면 한 발 더 맞아야 부서진다 (armored_core.gd)
+const ARMOR_HP := 470                        # 코어 체력 (v0.96: 클리어 2:05 목표, 초당 3.6쯤) (장갑판 없이 균열로 보인다). 다 깎이면 한 발 더 맞아야 부서진다 (armored_core.gd)
 const SHIELD_PASS_MIN := 0.5                 # 방어막이 온전할 때 코어까지 뚫고 들어가는 피해 비율 (집게로 깎일수록 1.0 으로)
 const CORE_FLOOR := 100                      # 방어막이 남은 채 코어가 여기까지 깎이면 방어막이 깨진다 (집게 없이 피해 누적으로 여는 길)
 const SHIELD_R := 240.0                      # 방어막 반지름

@@ -9,3 +9,6 @@
 # itch.io 업로드용 산출물 (용량이 커서 올리지 않는다)
 itch/build/
 itch/*.zip
+
+# 텔레메트리 빌드의 플레이 기록 (실행 파일 옆 logs/)
+logs/

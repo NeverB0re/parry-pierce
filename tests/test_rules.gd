@@ -109,7 +109,7 @@ func _run() -> void:
 	main.touch_ui = FakeStick.new()
 
 	_check("numbers (cd %.2f, dmg %d/%d/%d/%d, part %d, core %d)" % [p.stats.dash_cooldown, p.DASH_DAMAGE, p.stats.charge_damage, p.stats.power_damage, p.stats.clash_damage, b.PART_HP, b.core.CORE_HP],
-		absf(p.stats.dash_cooldown - 0.9) < 0.001 and p.DASH_DAMAGE == 1 and p.stats.charge_damage == 3 and p.stats.power_damage == 8 and p.stats.power_damage_perfect == 16 and p.stats.clash_damage == 8 and b.PART_HP == 30 and b.ARMOR_HP == 309 and b.core.CORE_HP == 1)
+		absf(p.stats.dash_cooldown - 0.9) < 0.001 and p.DASH_DAMAGE == 1 and p.stats.charge_damage == 3 and p.stats.power_damage == 8 and p.stats.power_damage_perfect == 16 and p.stats.clash_damage == 8 and b.PART_HP == 30 and b.ARMOR_HP == 240 and b.core.CORE_HP == 1)
 
 	# ── 돌진: 짧게 = 돌진, 쿨다운 ──
 	_air(Vector2(-900, -1500))
@@ -1046,11 +1046,11 @@ func _v035_test() -> void:
 	b.damage_part(b.BIG, 16)
 	_check("closed gun shield: damage is cut down hard (%d -> %d, exposed %s)" % [hp_c, b.part_hp[b.BIG], b.gun_exposed], not b.gun_exposed and hp_c - b.part_hp[b.BIG] == 2 and b.part_emphasis(b.BIG) < 1.0)
 	var more := 0
-	while b.part_alive(b.BIG) and more < 30:
+	while b.part_alive(b.BIG) and more < 40:
 		b.gun_exposed = true
 		b.damage_part(b.BIG, 16)
 		more += 1
-	_check("the big gun has hit points: about twenty-two PERFECT drives break it and open the core (%d, phase %d, other parts alive %d)" % [more, b.phase, b.parts_left()], more >= 21 and more <= 23 and b.phase == 2 and b.parts_left() == 4)
+	_check("the big gun has hit points: about thirty-two PERFECT drives break it and open the core (%d, phase %d, other parts alive %d)" % [more, b.phase, b.parts_left()], more >= 31 and more <= 33 and b.phase == 2 and b.parts_left() == 4)
 	main.start_stage(1)
 	b = main.boss
 	b.gun_exposed = true

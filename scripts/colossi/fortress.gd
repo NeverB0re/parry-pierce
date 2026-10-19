@@ -26,7 +26,7 @@ const BigGun := preload("res://scripts/attacks/big_gun.gd")
 
 # ── 구조 ───────────────────────────────────────────────
 const REACTOR_POS := Vector2(0, -1550)      # 동력 코어 = 코어 포대 (포방패 안, 2층 가운데)
-const ARMOR_HP := 175                       # = BIG_HP: 코어 포대의 체력이 곧 코어 장갑 (깎일수록 장갑판이 떨어져 나간다)
+const ARMOR_HP := 250                       # = BIG_HP: 코어 포대의 체력이 곧 코어 장갑 (깎일수록 장갑판이 떨어져 나간다)
 const CORE_R := 58.0
 # 반응로 외곽선 (REACTOR_POS 기준): 모서리를 깎은 팔각형 + 위아래 냉각 돌기
 const REACTOR_OUTLINE := [
@@ -46,7 +46,7 @@ const VENTS := [Vector2(-340, -1550), Vector2(340, -1550)]          # 코어 페
 const PART_HP := 30
 const PART_R := [46.0, 46.0, 50.0, 50.0, 190.0]
 const BIG := 4                       # 대구경 포대 (외부 시스템 4): 체력제. 포방패가 닫힌 동안은 피해가 크게 줄고, 드러났을 때는 그대로 들어간다
-const BIG_HP := 175                  # 주 공략 대상이라 튼튼하게 (v0.88: +10%, v0.95: ×1.45) (리버스 드라이브 8 / PERFECT 16, 반사탄은 0.5~3)
+const BIG_HP := 250                  # 주 공략 대상이라 튼튼하게 (v0.96: 클리어 1:55 목표 — 피해는 포가 열린 동안 절반만 들어가므로 수치가 낮아 보여도 시간은 길다) (리버스 드라이브 8 / PERFECT 16, 반사탄은 0.5~3)
 const BIG_CLOSED_K := 0.15           # 포방패 너머로 들어가는 피해 비율
 const BIG_OPEN_K := 0.5              # 열려 있어도 보통 일격은 절반만 (다른 탄으로 리버스 드라이브를 우겨넣어 금방 깨지지 않게)
 const SHELL_RETURN_DMG := 20         # 반격 코어(관측자 보상)로 되돌린 주포 탄이 열린 코어에 꽂히면 — 특수 기믹

@@ -200,9 +200,14 @@ func _ready() -> void:
 	world.back_requested.connect(func() -> void: _open_title(title.can_resume))
 	tele = Telemetry.new()
 	tele.enabled = DisplayServer.get_name() != "headless" and (OS.get_cmdline_user_args().has("--telemetry") or OS.has_feature("telemetry"))   # 플레이어에게는 기록을 남기지 않는다 (dev 빌드·개발용 옵션만)
-	if tele.enabled:                                     # 판마다 사람이 읽을 요약: 텔레메트리 빌드는 실행 파일 옆, 에디터는 user://telemetry
+	if tele.enabled:                                     # 판마다 사람이 읽을 요약: 텔레메트리 빌드는 실행 파일 옆 logs 폴더, 에디터는 user://telemetry
 		var exe := OS.get_executable_path()
-		tele.md_path = exe.get_basename() + "_log.md" if OS.has_feature("template") else Telemetry.DIR + "/log.md"
+		if OS.has_feature("template"):
+			var dir := exe.get_base_dir().path_join("logs")
+			DirAccess.make_dir_recursive_absolute(dir)
+			tele.md_path = dir.path_join(exe.get_file().get_basename() + "_log.md")
+		else:
+			tele.md_path = Telemetry.DIR + "/log.md"
 	debug = Debug.new()
 	debug.main = self
 	add_child(debug)
