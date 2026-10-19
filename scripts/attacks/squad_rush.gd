@@ -4,7 +4,7 @@ extends "res://scripts/attacks/attack.gd"
 ## 모드 — 편대 패턴 둘 + 편대장 패턴 하나
 ##   line  : 셋이 나란히 한 줄로 늘어서서 플레이어를 겨누고, 다 함께 돌진한다 (줄 끝 밖으로 빠지거나 하나를 요격해 틈을 연다)
 ##   chain : 셋이 차례로 연달아 돌진한다 (앞 기체가 들이받기 시작하면 다음 기체가 겨눈다. 예고는 겨누는 기체만, 기다리는 기체는 순번만)
-##   lance : 편대장이 멀리서 굵은 몸통으로 두 번 돌격한다 (두 번째는 다시 겨눈다)
+##   lance : 편대장이 굵은 몸통으로 관통 돌격 — 플레이어를 꿰뚫고 반대편 끝까지 달려간 뒤, 곧바로 그 자리에서 몸을 돌려 되돌아 꿰뚫는다 (첫 돌격을 쳐내면 두 번째는 끊긴다)
 ## 겨누는 동안(aim)은 플레이어를 따라간다. 멈춘 뒤(warn)엔 그 줄로.
 ## boss 에 필요한 것: squad_alive(s), squad_center(s), leader_of(s), want_drone, hold_drone, drone_pos, aim_drone, seg_closest, emit
 
@@ -22,6 +22,9 @@ const HALF := 46.0                   # 몸통 판정 반폭
 const LANCE_STAND := 760.0
 const LANCE_REACH := 1500.0
 const LANCE_HALF := 80.0             # 편대장 몸통 판정 (굵다)
+const AIM_BACK := 0.35               # lance: 되돌아 꿰뚫기 전 겨누기와 멈춤
+const WARN_BACK := 0.2
+const READY_WAIT := 0.45             # chain: 뒤 기체가 멈춰 서서 기다리는 시간
 const KNOCK := 320.0
 const KNOCK_TIME := 0.4
 
@@ -41,13 +44,13 @@ func _setup() -> void:
 		var l: int = boss.leader_of(squad)
 		if boss.part_alive(l):
 			for k in 2:
-				runs.append({"i": l, "phase": "wait", "t": 0.0, "half": LANCE_HALF, "stand": LANCE_STAND, "reach": LANCE_REACH})
+				runs.append({"i": l, "phase": "wait", "t": 0.0, "half": LANCE_HALF, "stand": LANCE_STAND, "reach": LANCE_REACH, "pierce": not runs.is_empty()})
 	else:
 		var order: Array = boss.squad_alive(squad).duplicate()
 		order.reverse()                                   # 편대원 먼저, 편대장 마지막
 		for i in order:
 			runs.append({"i": i, "phase": "wait", "t": 0.0, "half": HALF, "stand": STAND, "reach": REACH})
-	if mode == "line":
+	if mode == "line" or mode == "chain":              # 셋이 한꺼번에 겨누기 시작한다 (chain 은 뒤 기체가 먼저 겨누기를 마치고 멈춰 차례를 기다린다)
 		for r in runs:
 			r["phase"] = "aim"
 	elif not runs.is_empty():
@@ -70,17 +73,12 @@ func step(dt: float, ppos: Vector2) -> void:
 		live += 1
 		r["t"] = float(r["t"]) + dt
 		_run(r, k, ppos)
-	if mode != "line":                                   # chain: 앞 기체가 들이받기 시작하면 다음 기체가 겨누기 시작
+	if mode == "lance":                                  # 같은 기체라 앞 돌격이 끝난 뒤 다시 겨눈다
 		for k in range(1, runs.size()):
-			var ready: bool = _started(runs[k - 1]) if mode == "chain" else runs[k - 1]["phase"] == "done"   # lance: 같은 기체라 앞 돌격이 끝난 뒤
-			if runs[k]["phase"] == "wait" and ready:
+			if runs[k]["phase"] == "wait" and runs[k - 1]["phase"] == "done":
 				_go(runs[k], "aim")
 	if live == 0:
 		boss.finish_attack()
-
-
-func _started(r: Dictionary) -> bool:
-	return r["phase"] == "strike" or r["phase"] == "recover" or r["phase"] == "done" or r["phase"] == "knocked"
 
 
 func _go(r: Dictionary, ph: String) -> void:
@@ -108,7 +106,8 @@ func _run(r: Dictionary, k: int, ppos: Vector2) -> void:
 				_go(r, "warn")
 		"warn":
 			boss.hold_drone(i, r["from"])
-			if tt >= (WARN_FIRST if k == 0 or mode == "line" else WARN):
+			var go: bool = _prev_done(k) if mode == "chain" and k > 0 else tt >= (WARN_BACK if mode == "lance" and k > 0 else WARN_FIRST if k == 0 or mode == "line" else WARN)   # chain 뒤 기체: 멈춰 겨눈 채로 앞 기체의 돌진이 끝나길 기다린다
+			if go:
 				r["prev"] = r["from"]
 				dodged = false                             # 기체마다 새 공격
 				_go(r, "strike")
@@ -131,7 +130,18 @@ func _run(r: Dictionary, k: int, ppos: Vector2) -> void:
 
 
 func _aim_time(k: int) -> float:
+	if mode == "lance" and k > 0:                        # 되돌아 꿰뚫기: 짧게 겨눈다
+		return AIM_BACK
+	if mode == "chain" and k > 0:                        # 앞 기체가 들이받을 때쯤 겨누기를 마쳐 잠깐 멈춰 기다린다 (첫 기체만 예고가 길다)
+		return AIM_FIRST + WARN_FIRST + k * (STRIKE + RECOVER) - READY_WAIT
 	return AIM_FIRST if k == 0 or mode == "line" else AIM
+
+
+## chain: 앞 기체의 돌진이 끝났는가 (요격으로 튕겨 나갔다면 잠깐 뒤)
+func _prev_done(k: int) -> bool:
+	var pr: Dictionary = runs[k - 1]
+	var ph: String = pr["phase"]
+	return ph == "recover" or ph == "done" or (ph == "knocked" and float(pr["t"]) >= 0.3)
 
 
 ## 겨누는 자리 (겨누기 앞쪽 80% 동안 플레이어를 따라간다). line 은 셋이 같은 쪽에서 나란히
@@ -140,6 +150,14 @@ func _place(r: Dictionary, k: int, ppos: Vector2) -> void:
 		return
 	var stand: float = r["stand"]
 	var reach: float = r["reach"]
+	if r.get("pierce", false):                           # 되돌아 꿰뚫기: 선 자리에서 그대로 몸을 돌려 플레이어를 지나 반대편 끝까지
+		var cur: Vector2 = boss.drone_pos(int(r["i"]))
+		var d: Vector2 = (ppos - cur).normalized()
+		if d.length() < 0.1:
+			d = Vector2.UP
+		r["from"] = cur
+		r["to"] = cur + d * (cur.distance_to(ppos) + 900.0)
+		return
 	if mode == "line":
 		var side: Vector2 = (boss.squad_center(squad) - ppos).normalized()
 		if side.length() < 0.1:
@@ -191,9 +209,9 @@ func clash_box(ppos: Vector2) -> Dictionary:
 	return best
 
 
-## 겨누는 중(aim)에도 요격된다 — 연속 돌진은 앞 기체를 쳐낸 직후 다음 기체가 겨누는 중이라, 곧바로 이어 칠 수 있어야 한다
+## 멈춰 겨눈(warn) 기체와 들이받는(strike) 기체만 요격된다
 func _can_clash(r: Dictionary) -> bool:
-	return r["phase"] == "aim" or r["phase"] == "warn" or r["phase"] == "strike"
+	return r["phase"] == "warn" or r["phase"] == "strike"
 
 
 func assist_targets(_from: Vector2, out: Array[Dictionary]) -> void:

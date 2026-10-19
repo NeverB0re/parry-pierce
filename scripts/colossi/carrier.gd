@@ -488,7 +488,7 @@ func _step_phase(dt: float) -> void:
 
 ## 견제 사격: 차례가 아닌 드론 하나가 잠깐 빛난 뒤 플레이어를 겨눠 금색 탄 한 발. 근접 예고·돌진 중에는 쉰다 (탄막과 근접은 겹치지 않는다)
 func _harass(dt: float) -> void:
-	var melee := melee_warning() or attack_kind() == "squad_rush"
+	var melee := melee_warning() or attack_kind() == "squad_rush" or rush_wait > 0.0   # 돌격이 탄이 걷히길 기다리는 중에도 견제 사격은 쉰다
 	if harass_i >= 0:
 		if not part_alive(harass_i) or melee:
 			harass_i = -1
@@ -585,6 +585,8 @@ func _pick_squad(ppos: Vector2) -> int:
 		rush_wait += 0.15
 		if rush_wait < RUSH_WAIT:
 			return -1
+	if rush_wait >= RUSH_WAIT and not squad_alive(last_squad).is_empty() and not cands.has(last_squad):   # 돌격만 남아 탄을 기다리다 지쳤으면 직전 편대가 다시 나선다 (멈춰 서지 않게)
+		cands.append(last_squad)
 	for s in cands:                              # 아직 도는 모함 패턴과 겹쳐도 되는 편대만 (패리 불가 + 근접, 보라 둘은 겹치지 않는다)
 		if SQUAD_KIND[s] == "rush":
 			if shots_clear(ppos) and lingering.is_empty():
