@@ -63,6 +63,7 @@ const LENSES := 16
 
 # ── 공격 고르기 ────────────────────────────────────────
 const PATTERNS := ["homing", "halo", "sword", "rings"]   # 한 바퀴에 하나씩
+const MISSILE_STEER := 2.6           # 유도탄 선회력 (앞쪽 목표만, 지나치면 돌아오지 않는다)
 const CLEAR_WAIT := 5.0              # 필드가 비길 기다리는 최대 시간 (오래 남는 탄 때문에 멈추지 않게)
 const SWORD_HOLD := 2.5              # 대검 차례에 탄이 걷히길 기다리는 최대 시간
 const INTRO := ["homing", "halo", "rings", "sword"]   # 깨어난 뒤 한 번씩 보여 주는 순서 (패리 → 패리 → 패리 불가 → 요격)
@@ -406,7 +407,10 @@ func _choose(ppos: Vector2) -> void:
 			start_attack(gs)
 			gs.aim_at(ppos)
 		"homing":
-			start_attack(Homing.new())
+			var hm := Homing.new()
+			hm.speed = Homing.SPEED * 1.15                  # 플레이어 쪽으로 쏘고, 날아오는 동안 앞의 목표를 쫓는다
+			hm.steer = MISSILE_STEER
+			start_attack(hm)
 
 
 ## 필드에 적 탄이나 자리를 내준 공격(퍼지는 동심원)이 남아 있는가

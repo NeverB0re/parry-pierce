@@ -30,8 +30,10 @@ const MOBILE_AREA := 1.2             # 모바일 시야 면적 = PC 화면의 �
 const AIM_ZOOM := 0.85             # 방향 지정 중엔 물러나 표적을 넓게 본다
 const CHARGE_ZOOM := 0.85            # 차징 중에만 물러난다
 const AIM_SLOW := 0.08             # 방향 지정 중 월드 시간 배율
-const TUT_SLOW := 0.15             # 관측자 튜토리얼 장을 닫은 직후 월드 시간 배율 (TUT_GRACE 동안 1 로 돌아온다)
-const TUT_GRACE := 1.6             # 상황 파악 유예 (실시간 초)
+const TUT_SLOW := 0.15             # 멈췄다 돌아온 직후(튜토리얼 장·ESC 메뉴) 월드 시간 배율 — 유예 동안 1 로 돌아온다
+const RESUME_GRACE := 1.0          # 기본 유예 (실시간 초)
+const TUT_GRACE := 2.5             # 관측자의 패리 불가·요격 장 뒤 유예
+const RING_TUT_GAP := 450.0        # 패리 불가 장: 고리가 화면에 들어와 플레이어와 이만큼까지 다가오면
 const DASH_SLOW := 0.5             # 패리 돌진 중 월드 시간 배율 (적중·종료 즉시 원래 속도). 플레이어는 항상 실시간
 const RESPAWN_DELAY := 1.3         # 용암에 빠진 뒤 재출격까지
 const RESPAWN_INVULN := 1.5
@@ -74,6 +76,9 @@ const CHARGED_SLOW := 0.12        # 차지 완료 순간 짧은 슬로우
 var slowmo := 0.0
 var tut_scale := 1.0                 # 튜토리얼 장을 닫은 직후의 월드 시간 배율 (_observer_tutor)
 var tut_grace := 0.0
+var tut_grace_len := 1.0
+var pending_grace := 0.0             # 지금 띄운 장을 닫았을 때 줄 유예
+var last_phys_ms := 0                # 마지막 물리 프레임 시각 (멈췄다 돌아왔는지 알아낸다)
 var tut_live := {}                   # 이번 판에 띄운 장면 튜토리얼
 var shake := 0.0
 var run_time := 0.0
@@ -329,35 +334,43 @@ func _on_arrived() -> void:
 	tutorial.request(ids)
 
 
+## 멈췄다 돌아오면(튜토리얼 장·ESC 메뉴) 잠깐 세계가 느렸다가 원래 속도로 돌아온다 — 상황을 파악할 유예.
+## 기본 RESUME_GRACE, 관측자의 패리 불가·요격 장 뒤엔 TUT_GRACE.
 ## 관측자(튜토리얼 보스)의 장면별 튜토리얼: 그 공격이 처음 닥치는 순간에 장을 띄운다 (처음 보는 장일 때만).
-## 패리 = 첫 금빛 탄이 가까이 왔을 때 · 패리 불가 = 보라 동심원이 화면에 들어왔을 때 · 요격 = 대검이 자세를 잡고 경고할 때.
-## 패리 불가·요격 장을 닫은 직후엔 잠깐(TUT_GRACE) 세계가 느렸다가 원래 속도로 돌아온다 — 상황을 파악할 유예
+## 패리 = 첫 금빛 탄이 가까이 왔을 때 · 패리 불가 = 보라 동심원이 화면에 들어와 플레이어 쪽으로 더 다가왔을 때 · 요격 = 대검이 자세를 잡고 경고할 때
 func _observer_tutor(delta: float) -> void:
+	var now := Time.get_ticks_msec()
+	if tutorial.enabled and last_phys_ms > 0 and now - last_phys_ms > 250 and state == State.PLAY:   # 멈췄다 돌아왔다
+		tut_grace_len = maxf(RESUME_GRACE, pending_grace)
+		tut_grace = tut_grace_len
+		pending_grace = 0.0
+	last_phys_ms = now
 	tut_scale = 1.0
 	if tut_grace > 0.0:
 		tut_grace = maxf(0.0, tut_grace - delta)
-		tut_scale = lerpf(1.0, TUT_SLOW, tut_grace / TUT_GRACE)
+		tut_scale = lerpf(1.0, TUT_SLOW, tut_grace / tut_grace_len)
 	if stage_idx != 0 or state != State.PLAY or boss.dead or not boss.awake or player.aim_phase:
 		return
-	_tut_moment("parry", _bolt_coming(400.0), false)
+	_tut_moment("parry", _bolt_coming(400.0), RESUME_GRACE)
 	var ring_seen := false
 	for a in boss.active_attacks():
 		if a.kind == "rings":
+			var d: float = player.position.distance_to(a.origin)
 			for k in a.started:
-				ring_seen = ring_seen or _ring_on_screen(a.origin, a._radius(k))
-	_tut_moment("unparry", ring_seen, true)
+				var r: float = a._radius(k)
+				ring_seen = ring_seen or (_ring_on_screen(a.origin, r) and r < d and d - r < RING_TUT_GAP)
+	_tut_moment("unparry", ring_seen, TUT_GRACE)
 	var sw = boss.atk if boss.attack_kind() == "sword" else null
-	_tut_moment("intercept", sw != null and sw.phase == "warn", true)
+	_tut_moment("intercept", sw != null and sw.phase == "warn", TUT_GRACE)
 
 
-## trigger 가 처음 참이 되면 장을 띄운다 (처음 보는 장일 때만). grace = 닫은 직후 잠깐 느리게
-func _tut_moment(id: String, trigger: bool, grace: bool) -> void:
+## trigger 가 처음 참이 되면 장을 띄운다 (처음 보는 장일 때만). grace = 장을 닫은 뒤 느린 시간
+func _tut_moment(id: String, trigger: bool, grace: float) -> void:
 	if tut_live.has(id) or not trigger or not tutorial.enabled or tutorial.seen.get(id, false):
 		return
 	tut_live[id] = true
 	tutorial.request([id])
-	if grace:
-		tut_grace = TUT_GRACE
+	pending_grace = maxf(pending_grace, grace)
 
 
 ## 원(동심원 고리)이 지금 화면 안에 걸쳐 있는가
@@ -395,6 +408,17 @@ func aim_offset(from: Vector2) -> Vector2:
 	if touch_ui != null:
 		return touch_ui.stick * 160.0
 	return player.get_global_mouse_position() - from
+
+
+## 숨은 개발자 명령 (안내 없음, 모든 빌드에 남긴다): Ctrl+Shift+O = 모든 스테이지를 고를 수 있게
+func _input(e: InputEvent) -> void:
+	if e is InputEventKey and e.pressed and not e.echo and e.ctrl_pressed and e.shift_pressed and e.keycode == KEY_O:
+		profile.open_all = true
+		profile.save()
+		if world != null:
+			world.refresh()
+		sfx.play("open", 0.0, 0.0)
+		get_viewport().set_input_as_handled()
 
 
 func touch_dash(pressed: bool) -> void:
@@ -437,6 +461,8 @@ func _unhandled_input(e: InputEvent) -> void:
 			_dash_input(e.pressed)             # 발판 위면 발사. 짧게 떼면 돌진, 꾹 눌러 모으면 차지 돌진
 		elif e.button_index == MOUSE_BUTTON_RIGHT:
 			_parry_input(e.pressed)
+	elif e is InputEventKey and not e.echo and e.pressed and e.keycode == KEY_R:
+		reset_run()
 
 
 ## 돌진 버튼: 패리 후 방향 지정 중에 누르면 즉시 패리 돌진
@@ -1307,4 +1333,4 @@ func _die() -> void:
 	tele.finish("dead", run_time, lives, _tele_extra())
 	state = State.DEAD
 	dead_t = 2.5
-	hud.banner(Loc.t("기체 손실"), Loc.t("잠시 후 재시작"))
+	hud.banner(Loc.t("기체 손실"), Loc.t("잠시 후 재시작 (R: 즉시)"))

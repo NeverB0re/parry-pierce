@@ -11,13 +11,15 @@ const AFTER := 0.6                   # 쏜 뒤 다음 공격까지
 
 var origins: Array = []              # [[번호, 위치], ...] (쏘는 순간 다시 확인: 부서진 사일로는 빠진다)
 var fired := false
+var speed := SPEED
+var steer := 0.0                     # >0: 플레이어 쪽으로 쏘고, 날아오는 동안 앞쪽 목표를 이 선회력으로 쫓는다 (관측자)
 
 
 func _init() -> void:
 	kind = "homing"
 
 
-func step(_dt: float, _ppos: Vector2) -> void:
+func step(_dt: float, ppos: Vector2) -> void:
 	if origins.is_empty():
 		origins = boss.homing_origins()
 	if not fired:
@@ -29,7 +31,8 @@ func step(_dt: float, _ppos: Vector2) -> void:
 		for o in boss.homing_origins():
 			var p: Vector2 = o[1]
 			var side := signf(p.x) if absf(p.x) > 1.0 else 0.0
-			boss.shots.spawn(p, Vector2(side * 0.5, -1.0).normalized() * SPEED, LIFE, 0.0, 0.0, Projectiles.Kind.HOMING)
+			var dir := (ppos - p).normalized() if steer > 0.0 else Vector2(side * 0.5, -1.0).normalized()
+			boss.shots.spawn(p, dir * speed, LIFE, 0.0, 0.0, Projectiles.Kind.HOMING, 0, 0.0, 0.0, steer)
 			boss.set_glow(int(o[0]), 1.0)
 		boss.emit(Ev.BOLT, origins[0][1])
 		return

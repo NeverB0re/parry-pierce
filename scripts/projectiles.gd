@@ -15,6 +15,7 @@ const WARMUP := 0.3                   # 발사 직후 50% 속도에서 출발해
 const WARMUP_FLOOR := 0.5
 const HOMING_TIME := 3.6              # 유도탄은 발사 후 이 시간 동안만 방향을 튼다
 const HOMING_TURN := 2.0              # 초당 회전 (라디안)
+const STEER_CONE := 1.75              # steer 를 준 유도탄이 쫓는 앞쪽 범위 (반각, 약 100도)
 const HOMING_BLINK := 1.2             # 적 유도탄은 수명이 이만큼 남으면 점멸한다 (곧 사라진다는 표시)
 const SHELL_HOME := 9.0               # 대구경 포탄: 이 시간 동안 플레이어 쪽으로 천천히 방향을 튼다 (중요한 탄이 엉뚱한 데로 지나가지 않게)
 const SHELL_TURN := 1.1
@@ -41,6 +42,7 @@ var dodged := PackedByteArray()       # 1 = 플레이어가 회피 무적으로 
 var grp := PackedInt32Array()         # 묶음 번호 (0 = 없음). 묶음의 우두머리(orb_r 0)를 나머지가 orb_r 반지름으로 돌며 따라간다
 var orb := PackedFloat64Array()       # 묶음 안의 각도
 var orb_r := PackedFloat64Array()
+var steer := PackedFloat64Array()     # 유도탄 선회력 (0 = 기본 HOMING_TURN, 그 밖 = 이 값으로 앞쪽 목표만 쫓는다)
 static var _next_grp := 1
 
 static var _tex_bolt: Texture2D
@@ -69,9 +71,10 @@ func clear() -> void:
 	grp.clear()
 	orb.clear()
 	orb_r.clear()
+	steer.clear()
 
 
-func spawn(p: Vector2, v: Vector2, lf: float, a := 0.0, g := 0.0, k := Kind.BOLT, group := 0, orbit_a := 0.0, orbit_r := 0.0) -> void:
+func spawn(p: Vector2, v: Vector2, lf: float, a := 0.0, g := 0.0, k := Kind.BOLT, group := 0, orbit_a := 0.0, orbit_r := 0.0, turn := 0.0) -> void:
 	pos.append(p)
 	vel.append(v)
 	life.append(lf)
@@ -83,6 +86,7 @@ func spawn(p: Vector2, v: Vector2, lf: float, a := 0.0, g := 0.0, k := Kind.BOLT
 	grp.append(group)
 	orb.append(orbit_a)
 	orb_r.append(orbit_r)
+	steer.append(turn)
 
 
 ## 새 묶음 번호 (대구경 포탄 + 호위탄)
@@ -103,6 +107,7 @@ func remove(i: int) -> void:
 	grp.remove_at(i)
 	orb.remove_at(i)
 	orb_r.remove_at(i)
+	steer.remove_at(i)
 
 
 func is_lava(i: int) -> bool:
@@ -121,7 +126,10 @@ func step(dt: float, player: Vector2, boss_target: Vector2) -> PackedVector2Arra
 		if kind[i] == Kind.HOMING and a < HOMING_TIME:
 			var want := (boss_target if mine[i] == 1 else player) - pos[i]
 			var da := wrapf(want.angle() - v.angle(), -PI, PI)
-			v = v.rotated(clampf(da, -HOMING_TURN * dt, HOMING_TURN * dt))
+			if steer[i] <= 0.0:
+				v = v.rotated(clampf(da, -HOMING_TURN * dt, HOMING_TURN * dt))
+			elif absf(da) < STEER_CONE:                   # 앞쪽 목표만 세게 쫓는다 (지나치면 돌아오지 않는다)
+				v = v.rotated(clampf(da, -steer[i] * dt, steer[i] * dt))
 		elif kind[i] == Kind.SHELL and mine[i] == 0 and a < SHELL_HOME:
 			var da2 := wrapf((player - pos[i]).angle() - v.angle(), -PI, PI)
 			v = v.rotated(clampf(da2, -SHELL_TURN * dt, SHELL_TURN * dt))
@@ -141,6 +149,7 @@ func step(dt: float, player: Vector2, boss_target: Vector2) -> PackedVector2Arra
 		grp[w] = grp[i]
 		orb[w] = orb[i]
 		orb_r[w] = orb_r[i]
+		steer[w] = steer[i]
 		w += 1
 	if w < pos.size():
 		pos.resize(w)
@@ -154,6 +163,7 @@ func step(dt: float, player: Vector2, boss_target: Vector2) -> PackedVector2Arra
 		grp.resize(w)
 		orb.resize(w)
 		orb_r.resize(w)
+		steer.resize(w)
 	_follow_groups()
 	return popped
 

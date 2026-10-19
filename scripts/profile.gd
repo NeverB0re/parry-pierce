@@ -12,6 +12,7 @@ var stage := 0                       # 다음에 싸울 스테이지 번호 (Sta
 var cleared: Array[String] = []      # 처음 처리한 콜로서스 id
 var cores: Array[String] = []        # 얻은 코어
 var equipped: Array[String] = []     # 장착한 코어 (작동하는 것은 이것뿐, slots() 개까지)
+var open_all := false                # 숨은 개발자 명령: 모든 스테이지를 고를 수 있다
 const SLOT_BONUS_AFTER := 4          # 이 번호의 스테이지(5스테이지)를 깨면 장착 칸이 하나 늘어난다
 
 
@@ -23,6 +24,7 @@ func load_from_disk() -> void:
 		return
 	stage = clampi(int(cf.get_value("run", "stage", 0)), 0, Stages.LIST.size() - 1)
 	cleared.assign(cf.get_value("run", "cleared", []))
+	open_all = bool(cf.get_value("run", "open_all", false))
 	cores.clear()
 	for id in cf.get_value("upgrade", "cores", []):  # 없어진 코어(기동·파동 등)는 버린다
 		if Upgrades.CORES.has(id):
@@ -45,6 +47,7 @@ func save() -> void:
 	var cf := ConfigFile.new()
 	cf.set_value("run", "stage", stage)
 	cf.set_value("run", "cleared", Array(cleared))
+	cf.set_value("run", "open_all", open_all)
 	cf.set_value("upgrade", "cores", Array(cores))
 	cf.set_value("upgrade", "equip", Array(equipped))
 	cf.save(path)
@@ -55,6 +58,7 @@ func reset() -> void:
 	cleared.clear()
 	cores.clear()
 	equipped.clear()
+	open_all = false
 
 
 ## 스테이지 클리어: 처음이면 그 콜로서스의 코어를 얻는다 (빈 장착 칸이 있으면 바로 장착). 다음 스테이지로 넘어간다 (마지막이면 그대로). 보상 내용을 돌려준다
@@ -103,7 +107,7 @@ func toggle_equip(id: String) -> bool:
 func can_play(i: int) -> bool:
 	if i < 0 or i >= Stages.LIST.size():
 		return false
-	return i == 0 or cleared.has(Stages.LIST[i - 1]["id"])
+	return i == 0 or open_all or cleared.has(Stages.LIST[i - 1]["id"])
 
 
 func is_cleared(i: int) -> bool:

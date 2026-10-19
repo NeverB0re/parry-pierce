@@ -1373,6 +1373,24 @@ func _v037_test() -> void:
 	b.damage_part(0, 999)
 	b.damage_part(1, 999)
 	_check("observer missile: with both cannons broken it comes from the shield gem", b.homing_origins().size() == 1 and b.homing_origins()[0][1] == b.shield_center())
+	# 관측자 유도탄 선회: 앞쪽 목표는 쫓고, 지나친 목표로는 돌아오지 않는다
+	var sh = b.shots
+	sh.clear()
+	sh.spawn(Vector2(0, -1500), Vector2(300, 0), 5.0, 0.0, 0.0, K.HOMING, 0, 0.0, 0.0, b.MISSILE_STEER)
+	for k in 20:
+		sh.step(DT, Vector2(400, -1300), Vector2.ZERO)
+	var bent_front: float = sh.vel[0].angle()
+	sh.clear()
+	sh.spawn(Vector2(0, -1500), Vector2(300, 0), 5.0, 0.0, 0.0, K.HOMING, 0, 0.0, 0.0, b.MISSILE_STEER)
+	for k in 20:
+		sh.step(DT, Vector2(-400, -1500), Vector2.ZERO)
+	var bent_back: float = sh.vel[0].angle()
+	sh.clear()
+	_check("observer missile chases a target ahead but does not turn back for one behind (ahead %.2f rad, behind %.2f)" % [bent_front, bent_back], bent_front > 0.3 and absf(bent_back) < 0.01)
+	var pr_open = main.Profile.new()
+	pr_open.persist = false
+	pr_open.open_all = true
+	_check("hidden open-all: every stage can be chosen", pr_open.can_play(pr_open.Stages.LIST.size() - 1) and not main.Profile.new().can_play(pr_open.Stages.LIST.size() - 1))
 	main.start_stage(0)
 
 
