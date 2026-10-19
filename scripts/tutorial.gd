@@ -22,7 +22,8 @@ var font: Font
 var dim: ColorRect
 var title_l: Label
 var stage: Control
-var desc_l: Label
+var desc_l: RichTextLabel
+var desc_plain := ""                 # 색 꾸밈 없는 설명 (글 크기 맞추기용)
 var page_l: Label
 var btn: Button
 
@@ -100,6 +101,50 @@ func _pages() -> Dictionary:
 	}
 
 
+# ── 색 규칙 (게임과 같다): 금 = 패리할 수 있는 탄, 보라 = 패리 불가, 진홍 = 근접, 주황 = 잔탄, 파랑 = 이로운 효과 ──
+const C_GOLD := "#ffd65a"
+const C_PURPLE := "#e07cff"
+const C_RED := "#ff4a3d"
+const C_ORANGE := "#ff9a3d"
+const C_BLUE := "#6fd3ff"
+const TERMS := {
+	"ko": [["금색 탄", C_GOLD], ["주탄", C_GOLD], ["유도탄", C_GOLD], ["보라색 공격", C_PURPLE], ["근접공격", C_RED], ["근접 공격", C_RED],
+		["잔탄", C_ORANGE], ["무적", C_BLUE], ["완전 동조", C_BLUE], ["더 강한 피해", C_BLUE], ["바로 다시 모여", C_BLUE], ["한 칸 내려갑니다", C_BLUE]],
+	"en": [["gold bullets", C_GOLD], ["Gold bullets", C_GOLD], ["main shot", C_GOLD], ["homing missiles", C_GOLD], ["Purple attacks", C_PURPLE],
+		["melee attack", C_RED], ["Melee attack", C_RED], ["melee blows", C_RED], ["melee", C_RED], ["small bullets", C_ORANGE], ["small bullet", C_ORANGE],
+		["Small bullet", C_ORANGE], ["invincible", C_BLUE], ["Full Sync", C_BLUE], ["hits harder", C_BLUE], ["refills your charge", C_BLUE], ["removes one heat", C_BLUE]],
+}
+
+
+## 설명 글의 개념어에 색을 입힌다 (긴 말부터, 한 번 칠한 곳은 다시 칠하지 않는다)
+static func _colorize(s: String) -> String:
+	if s.contains("["):
+		return s.replace("[", "[lb]")                  # 대괄호가 섞인 글은 위치가 어긋나므로 색 없이
+	var terms: Array = TERMS.get(Loc.lang, TERMS["ko"]).duplicate()
+	terms.sort_custom(func(a, b): return String(a[0]).length() > String(b[0]).length())
+	var marks := []                                    # [시작, 끝, 색]
+	for tc in terms:
+		var term: String = tc[0]
+		var from := 0
+		while true:
+			var i := s.find(term, from)
+			if i < 0:
+				break
+			var free := true
+			for m in marks:
+				if i < int(m[1]) and i + term.length() > int(m[0]):
+					free = false
+					break
+			if free:
+				marks.append([i, i + term.length(), tc[1]])
+			from = i + term.length()
+	marks.sort_custom(func(a, b): return int(a[0]) > int(b[0]))
+	var out := s
+	for m in marks:
+		out = out.substr(0, int(m[0])) + "[color=%s]" % m[2] + out.substr(int(m[0]), int(m[1]) - int(m[0])) + "[/color]" + out.substr(int(m[1]))
+	return out
+
+
 ## 장 제목 (ESC 메뉴·타이틀의 조작법 목록용)
 func page_title(id: String) -> String:
 	return String(_pages()[id]["title"])
@@ -167,7 +212,8 @@ func _open_next(first: bool) -> void:
 	var lines: PackedStringArray = PackedStringArray()
 	for l in pg["lines"]:
 		lines.append("• " + String(l))
-	desc_l.text = "\n".join(lines)
+	desc_plain = "\n".join(lines)
+	desc_l.text = _colorize(desc_plain)
 	_fit_desc()
 	page_l.text = "" if queue.is_empty() else Loc.t("다음 장 %d개 남음") % queue.size()
 	btn.text = Loc.t("다음 (Enter)") if not queue.is_empty() else Loc.t("계속하기 (Enter)")
@@ -182,7 +228,7 @@ func _open_next(first: bool) -> void:
 func _fit_desc() -> void:
 	var vp := get_viewport().get_visible_rect().size
 	var w := minf(860.0, vp.x - 120.0)
-	var text := desc_l.text
+	var text := desc_plain
 	var chosen := [160.0, 13]
 	for opt in [[260.0, 17], [260.0, 16], [240.0, 15], [220.0, 15], [200.0, 14], [180.0, 14], [160.0, 13]]:
 		var avail: float = vp.y - 36.0 - float(opt[0]) - 54.0 - 36.0 - 40.0
@@ -191,7 +237,7 @@ func _fit_desc() -> void:
 			chosen = opt
 			break
 	stage.custom_minimum_size = Vector2(w, chosen[0])
-	desc_l.add_theme_font_size_override("font_size", int(chosen[1]))
+	desc_l.add_theme_font_size_override("normal_font_size", int(chosen[1]))
 	desc_l.custom_minimum_size = Vector2(w, 0)
 
 
@@ -255,9 +301,13 @@ func _build_ui() -> void:
 	stage.set_process(false)
 	box.add_child(stage)
 
-	desc_l = Label.new()
-	desc_l.add_theme_font_override("font", font)
-	desc_l.add_theme_font_size_override("font_size", 17)
+	desc_l = RichTextLabel.new()                 # 개념어는 색으로 (_colorize): 게임의 색 규칙을 글에서도
+	desc_l.bbcode_enabled = true
+	desc_l.fit_content = true
+	desc_l.scroll_active = false
+	desc_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	desc_l.add_theme_font_override("normal_font", font)
+	desc_l.add_theme_font_size_override("normal_font_size", 17)
 	desc_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	desc_l.custom_minimum_size = Vector2(700, 130)
 	box.add_child(desc_l)
