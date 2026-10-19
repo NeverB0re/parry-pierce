@@ -1828,6 +1828,12 @@ func _kraken_shield_test() -> void:
 	var a2: int = b.core.armor_hp
 	b.damage(sh, 12)
 	_check("fewer panels let more through (pass %.2f, core %d -> %d)" % [b.shield_pass(), a2, b.core.armor_hp], a2 - b.core.armor_hp > int(round(12 * b.SHIELD_PASS_MIN)))
+	_check("each cut tentacle adds 25%%p: two cuts = full damage through the shield (pass %.2f, took %d of 12)" % [b.shield_pass(), a2 - b.core.armor_hp], absf(b.shield_pass() - 1.0) < 0.01 and a2 - b.core.armor_hp == 12)
+	b.phase = 3
+	var a3: int = b.core.armor_hp
+	b._feed_core(8)
+	_check("the shattered core takes SHIELD_PASS_MAX (x%.1f) damage (%d -> %d)" % [b.SHIELD_PASS_MAX, a3, b.core.armor_hp], a3 - b.core.armor_hp == int(round(8 * b.SHIELD_PASS_MAX)))
+	b.phase = 1
 	for k in 600:
 		b.next_t = 99.0
 		b.step(DT, Vector2(0, -700))

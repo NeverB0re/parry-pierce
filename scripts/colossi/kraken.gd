@@ -5,7 +5,8 @@ extends "res://scripts/colossus_base.gd"
 ## 핵심: 촉수 공격(근접, 회피 불가)이 위치를 잡고 멈춘 순간을 차지 강습으로 요격하면, 그 촉수(구동부, 2번 요격이면 끊어짐)와 코어에 함께 피해가 들어간다.
 ## 페이즈: 1) 방어막 — 코어가 방어막에 싸여 있다. 돌진·차지 강습은 튕겨 나오고(피해 없음), 리버스 드라이브·반사탄·요격은 뚫고 코어에 피해.
 ##            방어막 = 판 여섯 장. 판마다 촉수 하나의 뿌리에서 동력선이 이어져 있어, 그 촉수를 끊으면 판이 꺼져 떨어져 나간다 (처음 한 번만).
-##            판이 남아 있을수록 뚫고 들어가는 피해가 적다 (SHIELD_PASS_MIN ~ 100%). 플레이어의 일격은 판을 깎지 못한다.
+##            판이 남아 있을수록 뚫고 들어가는 피해가 적다 (SHIELD_PASS_MIN ~ SHIELD_PASS_MAX, 판 하나에 25%p씩 — 촉수를 끊을 때마다 눈에 띄게 세진다).
+##            방어막이 깨진 코어(페이즈 3)는 SHIELD_PASS_MAX 배로 맞는다. 플레이어의 일격은 판을 깎지 못한다.
 ##            판이 다 떨어지거나, 코어가 CORE_FLOOR 까지 깎이면(피해 누적) 산산조각 난다
 ##         2) 방어막이 깨지는 연출
 ##         3) 동력 코어 — 직접 노릴 수 있다
@@ -37,7 +38,8 @@ const EyeSweep := preload("res://scripts/attacks/eye_sweep.gd")
 const DROP := 640.0                          # 몸을 천장에서 이만큼 내려 걸었다 (튕겨 올라가도 천장에 붙지 않게)
 const CORE_POS := Vector2(0, -2520.0 + DROP)          # 외눈 = 동력 코어 중심 (외투막 한가운데)
 const ARMOR_HP := 470                        # 코어 체력 (v0.96: 클리어 2:05 목표, 초당 3.6쯤) (장갑판 없이 균열로 보인다). 다 깎이면 한 발 더 맞아야 부서진다 (armored_core.gd)
-const SHIELD_PASS_MIN := 0.5                 # 방어막이 온전할 때 코어까지 뚫고 들어가는 피해 비율 (집게로 깎일수록 1.0 으로)
+const SHIELD_PASS_MIN := 0.5                 # 방어막이 온전할 때 코어까지 뚫고 들어가는 피해 비율
+const SHIELD_PASS_MAX := 2.0                 # 판이 다 떨어지면 (= 깨진 코어): 판 하나에 (MAX - MIN) / 6 = 25%p씩 세진다 (v0.99: 1.0 → 2.0, 끊은 게 체감되게)
 const CORE_FLOOR := 100                      # 방어막이 남은 채 코어가 여기까지 깎이면 방어막이 깨진다 (집게 없이 피해 누적으로 여는 길)
 const SHIELD_R := 240.0                      # 방어막 반지름
 const SHIELD_SHATTER := 1.6                  # 방어막이 깨지는 연출 시간 (페이즈 2)
@@ -209,6 +211,8 @@ func damage(hit: Dictionary, dmg: int) -> bool:
 		shield_hit_n = hit["n"]
 		_feed_core(dmg)
 		return false
+	if phase == 3 and dmg > 0:                       # 방어막이 깨진 코어: 가장 약하다 (판이 줄 때마다 세지던 흐름이 끊기지 않게)
+		dmg = int(round(dmg * SHIELD_PASS_MAX))
 	return super(hit, dmg)
 
 
@@ -223,14 +227,14 @@ func shield_frac() -> float:
 
 ## 지금 방어막을 뚫고 코어까지 들어가는 피해 비율: 판이 떨어져 나갈수록 커진다
 func shield_pass() -> float:
-	return lerpf(1.0, SHIELD_PASS_MIN, shield_frac())
+	return lerpf(SHIELD_PASS_MAX, SHIELD_PASS_MIN, shield_frac())
 
 
 ## 방어막 너머 코어에 피해를 준다 (페이즈 1): 뚫는 비율만큼 코어에만 (방어막은 그대로).
 ## 코어가 CORE_FLOOR 까지 깎이면 방어막이 깨진다. 페이즈 3이면 그대로 코어에
 func _feed_core(dmg: int) -> void:
 	if phase != 1:
-		core.damage(dmg)
+		core.damage(int(round(dmg * SHIELD_PASS_MAX)) if phase == 3 else dmg)
 		return
 	var k := shield_pass()
 	pierce = 1.0
@@ -1101,7 +1105,7 @@ func _draw_shield() -> void:
 		draw_arc(hc, SHIELD_R - 20.0, a - half, a + half, 10, Color(c, 0.35 * k), 2.0)
 	if pierce > 0.0 and phase == 1:                           # 방금 뚫은 일격: 방어막이 약할수록 창이 코어 깊이까지 들어간다
 		var from := hc + pierce_n * (SHIELD_R + 30.0)
-		var depth := lerpf(0.25, 1.0, (pierce_k - SHIELD_PASS_MIN) / (1.0 - SHIELD_PASS_MIN))
+		var depth := lerpf(0.25, 1.0, (pierce_k - SHIELD_PASS_MIN) / (SHIELD_PASS_MAX - SHIELD_PASS_MIN))
 		var to := from.lerp(hc, depth)
 		draw_line(from, to, Color(1.0, 0.85, 0.5, 0.5 * pierce), 10.0 + 22.0 * pierce_k)
 		draw_line(from, to, Color(1, 1, 1, pierce), 3.0 + 6.0 * pierce_k)
