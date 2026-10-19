@@ -4,7 +4,8 @@ extends "res://scripts/attacks/attack.gd"
 ##   net   : 플레이어 밖에서 셋이 삼각형 그물을 먼저 완성하고(엮이는 예고선, 무해) 그물째 플레이어를 따라가며 조여 든다 (빠져나가려면 선을 뚫어야 한다).
 ##           둘만 남으면 둘 사이 한 줄, 하나면 그 기체의 한 줄이 플레이어를 가로질러 쓸고 지나간다.
 ##   cross : 한 기씩 차례로 플레이어를 겨눠(따라오는 가는 예고선) 멈춘 뒤, 플레이어 자리를 꿰뚫는 보라 창을 쏜다. 다음 기체는 앞 기체가 멈출 때 겨누기 시작
-##   pulse : 편대장이 한 자리에 다가서서 멈춘 채, 그 자리에서 보라 고리 파동을 두 번 터뜨린다 (여러 곳에서 몰려오지 않게, v0.108)
+##   pulse : 편대장이 한 자리에 다가서서 멈춘 채, 그 자리에서 보라 고리 파동을 두 번 터뜨린다 (여러 곳에서 몰려오지 않게, v0.108). 혼자 남으면 세 번, 조금 더 촘촘히
+##   (그물은 두 기 이상일 때만 — 한 기로는 줄을 잇지 못한다. carrier.squad_modes)
 ## boss 에 필요한 것: squad_alive(s), squad_center(s), leader_of(s), want_drone, hold_drone, drone_pos, set_drone_glow, aim_drone, seg_closest, emit
 
 const FORM := 1.2                    # net: 그물을 엮는 시간 (예고)
@@ -40,6 +41,8 @@ var lances: Array = []               # cross: {i, phase, t, from, to, dodged}
 var pulses: Array = []               # pulse: {o, t0, dodged}
 var pulse_n := 0
 var pulse_at := Vector2.INF          # pulse: 편대장이 멈춰 서서 고리를 터뜨리는 자리 (한 번 정하면 그대로)
+var pulse_max := 2                   # pulse: 터뜨릴 횟수 (편대장 혼자면 3)
+var pulse_gap := PULSE_GAP
 
 
 func _init(s: int, m := "net") -> void:
@@ -189,6 +192,9 @@ func _cross(dt: float, ppos: Vector2) -> void:
 # ── pulse ──────────────────────────────────────────────
 func _pulse(ppos: Vector2) -> void:
 	var l: int = boss.leader_of(squad)
+	if pulse_at == Vector2.INF and boss.squad_solo(squad):
+		pulse_max = 3
+		pulse_gap = PULSE_GAP * 0.8
 	if boss.part_alive(l):
 		if pulse_at == Vector2.INF or t < PULSE_WIND * 0.5:      # 모으는 앞쪽 절반 동안만 자리를 잡고, 그 뒤로는 그 자리에 멈춘다
 			var d: Vector2 = (boss.drone_pos(l) - ppos).normalized()
@@ -197,8 +203,8 @@ func _pulse(ppos: Vector2) -> void:
 			pulse_at = ppos + d * PULSE_STAND
 		boss.want_drone(l, pulse_at)
 		boss.aim_drone(l, (ppos - boss.drone_pos(l)).angle())
-		var next_at := PULSE_WIND + pulse_n * PULSE_GAP
-		if pulse_n < 2:
+		var next_at := PULSE_WIND + pulse_n * pulse_gap
+		if pulse_n < pulse_max:
 			boss.set_drone_glow(l, clampf(1.0 - (next_at - t) / PULSE_WIND, 0.0, 1.0))
 			if t >= next_at:
 				pulses.append({"o": pulse_at, "t0": t, "dodged": false})
@@ -207,7 +213,7 @@ func _pulse(ppos: Vector2) -> void:
 	elif pulses.is_empty():
 		boss.finish_attack()
 		return
-	if pulses.size() >= 2 or not boss.part_alive(l):
+	if pulses.size() >= pulse_max or not boss.part_alive(l):
 		var done := true
 		for p in pulses:
 			done = done and (t - float(p["t0"])) * PULSE_SPEED > PULSE_MAX

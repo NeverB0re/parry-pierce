@@ -43,7 +43,7 @@ func _setup() -> void:
 	if mode == "lance":
 		var l: int = boss.leader_of(squad)
 		if boss.part_alive(l):
-			for k in 2:
+			for k in (3 if boss.squad_solo(squad) else 2):          # 혼자 남으면 한 번 더 되돌아 꿰뚫는다
 				runs.append({"i": l, "phase": "wait", "t": 0.0, "half": LANCE_HALF, "stand": LANCE_STAND, "reach": LANCE_REACH, "pierce": not runs.is_empty()})
 	else:
 		var order: Array = boss.squad_alive(squad).duplicate()

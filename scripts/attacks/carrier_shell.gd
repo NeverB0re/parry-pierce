@@ -2,7 +2,7 @@ extends "res://scripts/attacks/attack.gd"
 ## 함포 대형 포탄 (모함 본체, 배경에서): 뱃머리 포대가 플레이어를 겨눠 커다란 포탄 한 발을 쏜다. 포탄은 원근으로 커지며 날아와,
 ## 쏠 때의 플레이어 자리(금빛 표적 고리)에서 터져 잔탄 고리 두 겹 + 금색 주탄 몇 발을 사방으로 뿌린다.
 ## 떨어질 자리가 미리 보이므로 터지기 전에 비켜서고, 뿌려지는 금색 주탄은 패리 → 리버스 드라이브로 편대를 친다.
-## boss 에 필요한 것: cannon_world(), set_cannon_aim(a), set_cannon_glow(v), cannon_kick(), shots, bolt_mult(), emit
+## boss 에 필요한 것: cannon_world(), aim_cannon(p), set_cannon_glow(v), cannon_kick(), shots, bolt_mult(), emit
 
 const Projectiles := preload("res://scripts/projectiles.gd")
 const AIM := 0.9                     # 포대가 플레이어를 겨눈다 (표적 고리가 따라온다)
@@ -31,9 +31,9 @@ func step(_dt: float, ppos: Vector2) -> void:
 		return
 	match phase:
 		"aim":
-			origin = boss.cannon_world()
 			target = ppos
-			boss.set_cannon_aim((target - origin).angle())
+			boss.aim_cannon(target)
+			origin = boss.cannon_world()
 			boss.set_cannon_glow(t / AIM)
 			if t >= AIM:
 				set_phase("fly")

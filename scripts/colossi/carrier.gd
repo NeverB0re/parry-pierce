@@ -375,6 +375,12 @@ func set_cannon_aim(a: float) -> void:
 	cannon_aim = a
 
 
+## 주포를 at 쪽으로 돌린다: 포가(회전축)에서 잰 방향 — 포구에서 재면 포신이 돌 때마다 포구가 옮겨 가
+## 가까운 표적에서 각도가 프레임마다 두 값 사이를 오간다 (포신이 둘로 갈라져 X 자로 보이던 원인, v0.118)
+func aim_cannon(at: Vector2) -> void:
+	cannon_aim = (at - ship_to_world(CANNON_BASE)).angle()
+
+
 func set_cannon_glow(v: float) -> void:
 	cannon_glow = maxf(cannon_glow, clampf(v, 0.0, 1.0))
 
@@ -416,8 +422,8 @@ const FLING_KNOCK_D := 240.0
 
 
 ## 날아가는 드론의 지금 위치와 크기 배율
-func fling_state(f: Dictionary) -> Array:
-	var tt := float(f["t"])
+func fling_state(f: Dictionary, at := -1.0) -> Array:
+	var tt := float(f["t"]) if at < 0.0 else at
 	var from: Vector2 = f["from"]
 	var dir: Vector2 = f["dir"]
 	var knock := from + dir * FLING_KNOCK_D
@@ -610,11 +616,31 @@ func _fits_lingering(squad_kind: String) -> bool:
 	return true
 
 
-## 편대 s 의 패턴: 편대 패턴 둘 + 편대장 패턴 (편대장이 살아 있을 때만). 직전 패턴은 피한다
+## 편대 s 가 지금 쓸 수 있는 패턴: 편대 패턴 둘은 편대원이 남아 있을 때만 (그물은 두 기 이상), 편대장 패턴은 편대장이 살아 있을 때만.
+## 편대장 혼자 남으면 편대장 패턴만 — 대신 강화된다 (공격 모듈이 squad_solo 로 안다)
+func squad_modes(s: int) -> Array:
+	var all: Array = SQUAD_MODES[SQUAD_KIND[s]]
+	var n := squad_alive(s).size()
+	var lead := part_alive(leader_of(s))
+	var out := []
+	if n - (1 if lead else 0) > 0:
+		for m in all.slice(0, 2):
+			if m == "net" and n < 2:                 # 그물은 두 기 이상이 줄을 이어야 한다
+				continue
+			out.append(m)
+	if lead:
+		out.append(all[2])
+	return out
+
+
+## 편대장 혼자 남았는가 (편대장 패턴 강화)
+func squad_solo(s: int) -> bool:
+	return part_alive(leader_of(s)) and squad_alive(s).size() == 1
+
+
+## 편대 s 의 패턴: squad_modes 중 직전 패턴은 피한다
 func _pick_mode(s: int) -> String:
-	var modes: Array = SQUAD_MODES[SQUAD_KIND[s]].duplicate()
-	if not part_alive(leader_of(s)):
-		modes.pop_back()
+	var modes := squad_modes(s)
 	if modes.size() > 1:
 		modes.erase(last_mode[s])
 	return modes[randi() % modes.size()]
@@ -646,9 +672,7 @@ func _draw_fling_trail(f: Dictionary) -> void:
 		var back := k * 0.018
 		if tt - back < 0.0:
 			break
-		var g := f.duplicate()
-		g["t"] = tt - back
-		var st := fling_state(g)
+		var st := fling_state(f, tt - back)
 		var u := float(k) / n
 		pts.append(Vector2(st[0]) + Vector2(sin(t * 23.0 + k * 0.9), cos(t * 19.0 + k * 1.3)) * 9.0 * u * float(st[1]))
 		scs.append(st[1])

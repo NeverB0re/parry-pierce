@@ -3,7 +3,7 @@ extends "res://scripts/attacks/attack.gd"
 ## 모드 — 편대 패턴 둘 + 편대장 패턴 하나
 ##   fan      : 셋이 동시에 플레이어 쪽으로 잔탄 부채 (가운데 한 발은 금색 주탄 → 패리 → 리버스 드라이브) × 3
 ##   stream   : 한 기씩 차례로 플레이어를 따라가며 연사 (세 발마다 금색 주탄)
-##   missiles : 편대장만 나서서 금색 유도탄을 두 발씩 두 번 (편대원은 고리를 지킨다)
+##   missiles : 편대장만 나서서 금색 유도탄을 두 발씩 두 번 (편대원은 고리를 지킨다). 혼자 남으면 세 발씩 세 번
 ## boss 에 필요한 것: squad_alive(s), leader_of(s), want_drone(i, pos), drone_pos(i), is_leader(i), set_drone_glow(i, v), aim_drone(i, a), shots, bolt_mult()
 
 const Projectiles := preload("res://scripts/projectiles.gd")
@@ -25,6 +25,7 @@ const LIFE := 6.0
 var squad := 0
 var mode := "fan"
 var fired := 0                       # 지금까지 쏜 차례 수 (모드마다 뜻이 다르다)
+var solo := -1                       # 편대장 혼자 남았는가 (-1 = 아직 모름. 시작할 때 한 번 정한다)
 
 
 func _init(s: int, m := "fan") -> void:
@@ -46,6 +47,8 @@ func step(_dt: float, ppos: Vector2) -> void:
 	if ids.is_empty():
 		boss.finish_attack()
 		return
+	if solo < 0:
+		solo = 1 if boss.squad_solo(squad) else 0
 	for i in ids:                                       # 플레이어 쪽으로 다가서서 플레이어를 겨눈다
 		var d: Vector2 = (boss.drone_pos(i) - ppos).normalized()
 		boss.want_drone(i, ppos + d * STAND)
@@ -79,17 +82,18 @@ func step(_dt: float, ppos: Vector2) -> void:
 					if fired >= total and t >= _stream_time(total - 1) + 0.5:
 						boss.finish_attack()
 				"missiles":
-					while fired < 2 and t >= fired * 0.9:
+					var volleys := 3 if solo == 1 else 2
+					while fired < volleys and t >= fired * 0.9:
 						var i: int = ids[0]
 						var o: Vector2 = boss.drone_pos(i)
 						var base := (ppos - o).angle()
-						for sd in [-1.0, 1.0]:
+						for sd in ([-1.0, 0.0, 1.0] if solo == 1 else [-1.0, 1.0]):
 							var d := Vector2.from_angle(base + sd * 0.55)
 							boss.shots.spawn(o + d * 50.0, d * MISSILE_SPEED * boss.bolt_mult(), LIFE, 0.0, 0.0, Projectiles.Kind.HOMING, 0, 0.0, 0.0, MISSILE_STEER)
 						boss.set_drone_glow(i, 1.0)
 						boss.emit(Ev.BOLT, o)
 						fired += 1
-					if fired >= 2 and t >= 1.6:
+					if fired >= volleys and t >= (volleys - 1) * 0.9 + 0.7:
 						boss.finish_attack()
 
 

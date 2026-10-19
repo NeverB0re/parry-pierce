@@ -1,7 +1,7 @@
 extends "res://scripts/attacks/attack.gd"
 ## 주포 (모함 본체, 패리 불가 = 보라): 뱃머리 아래 거대한 주포가 플레이어를 겨눈다 — 가는 조준선이 플레이어를 따라오다(aim) 멈추고 깜빡인 뒤(lock),
 ## 아주 굵은 광선 한 줄기를 한 번 쏘고 지나간다(fire). 굵어서 회피 무적으로 뚫기 어렵다 — 멈춘 줄 밖으로 빠져나가야 한다 (퍼펙트 회피면 빨아들인다).
-## boss 에 필요한 것: cannon_world(), set_cannon_aim(a), set_cannon_glow(v), cannon_kick(), emit
+## boss 에 필요한 것: cannon_world(), aim_cannon(p), cannon_aim, set_cannon_aim(a), set_cannon_glow(v), cannon_kick(), emit
 
 const AIM := 1.8
 const TRACK := 3.0                   # 조준점이 플레이어를 따라가는 빠르기
@@ -28,12 +28,12 @@ func step(dt: float, ppos: Vector2) -> void:
 		return
 	match phase:
 		"aim":
-			origin = boss.cannon_world()
 			if aim_pt == Vector2.INF:
 				aim_pt = ppos
 			aim_pt = aim_pt.lerp(ppos, 1.0 - exp(-TRACK * dt))
-			dir = (aim_pt - origin).normalized()
-			boss.set_cannon_aim(dir.angle())
+			boss.aim_cannon(aim_pt)                      # 포가에서 겨눈다 (포구에서 재면 가까운 표적에서 각도가 떨린다)
+			origin = boss.cannon_world()
+			dir = Vector2.from_angle(boss.cannon_aim)
 			boss.set_cannon_glow(t / AIM * 0.6)
 			if t >= AIM:
 				set_phase("lock")

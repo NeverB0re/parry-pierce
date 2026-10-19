@@ -40,6 +40,7 @@ func _process(_d: float) -> bool:
 	_telemetry_test()
 	_satellite_test()
 	_carrier_test()
+	_carrier_combo_test()
 	print("FAILS ", fails)
 	quit(fails)
 	return false
@@ -2993,3 +2994,78 @@ func _carrier_test() -> void:
 	main.wingman_t = 0.0
 	main.debug.god = false
 	main.start_stage(0)
+
+
+## 모함: 살아남은 드론 조합마다 (대장기만·편대원만·한 편대 전멸·한 기만 등) 패턴이 멈추거나 하나만 되풀이되지 않고,
+## 편대원이 필요한 패턴(편대 패턴·그물)은 편대원이 없을 때 나오지 않으며, 겹침 규칙(돌격+다른 패턴, 보라 둘)을 지킨다
+func _carrier_combo_test() -> void:
+	main.start_stage(4)
+	var b = main.boss
+	main.debug.god = true
+	var combos := {
+		"all": [0, 1, 2, 3, 4, 5, 6, 7, 8], "leaders": [0, 3, 6], "wings": [1, 2, 4, 5, 7, 8],
+		"no veil": [0, 1, 2, 3, 4, 5], "gun+rush leaders": [0, 3], "veil leader+wing": [6, 7],
+		"gun leader": [0], "rush leader": [3], "veil leader": [6], "gun wing": [1], "rush wing": [4], "veil wing": [7],
+		"rush squad": [3, 4, 5], "veil wings": [7, 8],
+	}
+	seed(11)
+	for name in combos:
+		var keep: Array = combos[name]
+		b.reset()
+		b.hold_attacks = false
+		for i in 9:
+			if not keep.has(i):
+				b.damage_part(i, 999)
+		var gap := 0.0
+		var max_gap := 0.0
+		var seen := {}
+		var bad := ""
+		var prev = null
+		for k in int(50.0 / DT):
+			var tt := k * DT
+			var pp := Vector2(150 + 500.0 * sin(tt * 0.7), -1450 + 300.0 * cos(tt * 0.5))
+			b.step(DT, pp)
+			var kinds := {}
+			for a in b.active_attacks():
+				kinds[a.kind] = int(kinds.get(a.kind, 0)) + 1
+				if not a.kind.begins_with("squad_"):
+					seen[a.kind] = true
+			if kinds.is_empty():
+				gap += DT
+				max_gap = maxf(max_gap, gap)
+			else:
+				gap = 0.0
+			if kinds.has("squad_rush") and kinds.size() > 1:
+				bad = "rush overlaps " + str(kinds.keys())
+			if int(kinds.get("cannon", 0)) > 1 or (kinds.has("cannon") and kinds.has("squad_veil")):
+				bad = "two purple " + str(kinds)
+			if b.atk != null and b.atk != prev:
+				var m = b.atk.get("mode")
+				var label: String = b.atk.kind + ("" if m == null else ":" + str(m))
+				seen[label] = true
+				if b.atk.kind.begins_with("squad_"):
+					var s: int = b.atk.squad
+					var n: int = b.squad_alive(s).size()
+					var lead: bool = b.part_alive(b.leader_of(s))
+					if not b.squad_modes(s).has(m) or (m == "net" and n < 2) or (not lead and m == b.SQUAD_MODES[b.SQUAD_KIND[s]][2]) or (lead and n == 1 and m != b.SQUAD_MODES[b.SQUAD_KIND[s]][2]):
+						bad = "mode %s with %d alive (leader %s)" % [m, n, lead]
+			prev = b.atk
+		_check("carrier combo [%s]: keeps attacking with variety (%s, longest quiet %.1fs) %s" % [name, ",".join(seen.keys()), max_gap, bad],
+			bad == "" and max_gap < 3.5 and seen.size() >= 3)
+	# 주포는 포가에서 겨눈다: 플레이어가 포구 가까이 있어도 포신 각도가 프레임마다 오가지 않는다 (X 자로 갈라져 보이던 버그)
+	b.reset()
+	for i in 9:
+		if i != 0:
+			b.damage_part(i, 999)
+	b.next_t = 99.0
+	b.start_attack(b.CarrierCannon.new())
+	var near: Vector2 = b.cannon_world() + Vector2(0, 260)
+	var jump := 0.0
+	var prev_a: float = b.cannon_aim
+	for k in int(1.5 / DT):
+		b.step(DT, near + Vector2(sin(k * 0.05) * 120.0, 0))
+		if k > 3:
+			jump = maxf(jump, absf(angle_difference(prev_a, b.cannon_aim)))
+		prev_a = b.cannon_aim
+	_check("carrier: the main cannon turns smoothly even with the player at its muzzle (largest step %.3f rad)" % jump, jump < 0.08)
+	b.reset()

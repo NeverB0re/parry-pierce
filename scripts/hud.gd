@@ -112,9 +112,7 @@ func _draw() -> void:
 			_unparry_edge(s, (main.get_viewport().get_canvas_transform() * q) / ui_k)
 
 	# 상태 정보
-	var left: String = (Loc.t("외부 시스템 %d") % boss.parts_left()) if boss.phase == 1 else Loc.t("동력 코어")
-	left = "%s  ·  %s" % [Loc.t(main.Stages.LIST[main.stage_idx]["name"]), left]
-	_text(Vector2(28, 100), "%s   %.1fs" % [left, main.run_time], 15, Color(0.75, 0.77, 0.82, 0.7))
+	_text(Vector2(28, 100), "%s   %.1fs" % [Loc.t(main.Stages.LIST[main.stage_idx]["name"]), main.run_time], 15, Color(0.75, 0.77, 0.82, 0.7))
 
 	# 배너
 	if banner_title != "":
