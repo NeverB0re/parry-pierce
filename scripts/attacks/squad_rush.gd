@@ -11,6 +11,8 @@ extends "res://scripts/attacks/attack.gd"
 const MeleeWarn := preload("res://scripts/melee_warn.gd")
 const AIM := 0.7
 const WARN := 0.45
+const AIM_FIRST := 1.15              # 첫 돌진(과 나란히 돌진)은 예고를 길게: 보고 준비할 시간 (v0.106)
+const WARN_FIRST := 0.6
 const STRIKE := 0.3
 const RECOVER := 0.3
 const STAND := 520.0                 # 겨누는 자리 = 플레이어에서 이만큼
@@ -101,12 +103,12 @@ func _run(r: Dictionary, k: int, ppos: Vector2) -> void:
 			_place(r, k, ppos)
 			boss.want_drone(i, r["from"])
 			boss.aim_drone(i, (Vector2(r["to"]) - Vector2(r["from"])).angle())
-			if tt >= AIM:
+			if tt >= _aim_time(k):
 				boss.hold_drone(i, r["from"])
 				_go(r, "warn")
 		"warn":
 			boss.hold_drone(i, r["from"])
-			if tt >= WARN:
+			if tt >= (WARN_FIRST if k == 0 or mode == "line" else WARN):
 				r["prev"] = r["from"]
 				dodged = false                             # 기체마다 새 공격
 				_go(r, "strike")
@@ -128,9 +130,13 @@ func _run(r: Dictionary, k: int, ppos: Vector2) -> void:
 				_go(r, "done")
 
 
+func _aim_time(k: int) -> float:
+	return AIM_FIRST if k == 0 or mode == "line" else AIM
+
+
 ## 겨누는 자리 (겨누기 앞쪽 80% 동안 플레이어를 따라간다). line 은 셋이 같은 쪽에서 나란히
 func _place(r: Dictionary, k: int, ppos: Vector2) -> void:
-	if float(r["t"]) > AIM * 0.8 and r.has("from"):
+	if float(r["t"]) > _aim_time(k) * 0.8 and r.has("from"):
 		return
 	var stand: float = r["stand"]
 	var reach: float = r["reach"]

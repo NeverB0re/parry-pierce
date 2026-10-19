@@ -7,7 +7,7 @@ extends "res://scripts/attacks/attack.gd"
 ## boss 에 필요한 것: squad_alive(s), leader_of(s), want_drone(i, pos), drone_pos(i), is_leader(i), set_drone_glow(i, v), aim_drone(i, a), shots, bolt_mult()
 
 const Projectiles := preload("res://scripts/projectiles.gd")
-const WIND := 0.6
+const WIND := 0.45
 const STAND := 540.0                 # 쏘는 동안 플레이어에서 이만큼 (고리보다 가깝게)
 const FAN_ROUNDS := 3
 const FAN_GAP := 0.65

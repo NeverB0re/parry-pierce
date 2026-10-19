@@ -7,7 +7,7 @@ extends "res://scripts/attacks/attack.gd"
 const Projectiles := preload("res://scripts/projectiles.gd")
 const AIM := 0.9                     # 포대가 플레이어를 겨눈다 (표적 고리가 따라온다)
 const FLY := 1.25                    # 쏜 뒤 터지기까지
-const AFTER := 0.6
+const AFTER := 0.3
 const RING_A := 24                   # 바깥 고리 잔탄
 const RING_B := 16                   # 안쪽 고리 잔탄 (느리게, 반 칸 어긋나게)
 const MAINS := 4                     # 금색 주탄

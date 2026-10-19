@@ -42,7 +42,9 @@ const LEADER_R := 74.0
 const RING_R := 690.0
 const RING_BREATHE := 70.0                   # 숨 쉬듯 좁혀졌다 넓어진다
 const RING_SPIN := 0.25                      # 포위망 회전 (rad/s)
-const WING_SPREAD := 0.28                    # 편대장 양옆 편대원 간격 (라디안)
+const SHIELD_FRONT := 40.0                   # 편대원은 포위망보다 이만큼 안쪽(플레이어 쪽)에 나란히 서서
+const SHIELD_GAP := 62.0                     # 편대장을 가린다 (두 기 사이 간격의 절반: 리버스 드라이브가 빠져나갈 틈이 없게)
+const LEADER_BACK := 170.0                   # 편대장은 편대원 뒤 (플레이어에서 멀리)
 const MOVE_K := 4.0                          # 드론이 원하는 자리로 미끄러지는 빠르기
 const ARENA := Rect2(-1150, -3000, 2300, 2780)
 
@@ -59,7 +61,7 @@ const CANNON_LEN := 330.0
 const BARRIER_R := 120.0                     # (open_barrage) 코어 둘레에서 탄이 나오는 반지름의 두 배
 
 # ── 공격 고르기 ────────────────────────────────────────
-const GAP := Vector2(0.25, 0.5)
+const GAP := Vector2(0.1, 0.2)               # 차례 사이 (짧게: 화면이 비지 않게, v0.106)
 const RUSH_WAIT := 2.5                       # 돌격 차례에 탄이 걷히길 기다리는 최대 시간 (넘으면 다른 편대)
 
 # ── 색 ─────────────────────────────────────────────────
@@ -226,13 +228,19 @@ func _in_arena(p: Vector2) -> Vector2:
 	return Vector2(clampf(p.x, ARENA.position.x, ARENA.end.x), clampf(p.y, ARENA.position.y, ARENA.end.y))
 
 
-## 포위망 위 드론 i 의 자리: 플레이어를 가운데 두고 편대마다 120°씩, 편대장이 가운데·편대원이 양옆. 돌고 숨 쉬고, 기체마다 조금씩 흔들린다
+## 포위망 위 드론 i 의 자리: 플레이어를 가운데 두고 편대마다 120°씩. 편대원 둘이 플레이어 쪽에 나란히 서서 뒤의 편대장을 가린다
+## (리버스 드라이브 사선이 편대원에 막힌다 — 편대장부터 노리기 어렵게. 편대원이 부서지면 편대장이 드러난다). 돌고 숨 쉬고, 조금씩 흔들린다
 func ring_slot(i: int) -> Vector2:
 	var s := squad_of(i)
 	var k := i % PER
-	var a := ring_a + s * TAU / SQUADS + (0.0 if k == 0 else (WING_SPREAD if k == 1 else -WING_SPREAD))
-	var r := RING_R + RING_BREATHE * sin(t * 0.7) + 25.0 * sin(t * 1.7 + i * 1.3)
-	return ring_c + Vector2.from_angle(a) * r + Vector2(sin(t * 2.1 + i), cos(t * 1.8 + i * 0.7)) * 16.0
+	var d := Vector2.from_angle(ring_a + s * TAU / SQUADS)
+	var r := RING_R + RING_BREATHE * sin(t * 0.7)
+	var p: Vector2
+	if k == 0:
+		p = ring_c + d * (r + LEADER_BACK)
+	else:
+		p = ring_c + d * (r - SHIELD_FRONT) + d.orthogonal() * SHIELD_GAP * (1.0 if k == 1 else -1.0)
+	return p + Vector2(sin(t * 2.1 + i), cos(t * 1.8 + i * 0.7)) * 10.0
 
 
 ## 약한 일격은 흠집만. 드론이 부서질 때마다 게이지·기록용 코어 값을 맞춘다

@@ -2789,16 +2789,33 @@ func _carrier_test() -> void:
 		if b.part_alive(i) and absf(b.part_pos(i).distance_to(pp2) - b.RING_R) < 260.0:
 			around += 1
 	_check("carrier: the encirclement stays centred on the player after it moves (%d of 8 around)" % around, around >= 6)
+	# 편대장은 편대원 뒤에 숨는다: 플레이어 → 편대장 사선(리버스 드라이브)이 편대원에 막힌다
+	b.reset()
+	b.next_t = 99.0
+	for k in int(3.0 / DT):
+		b.step(DT, pp)
+	var blocked := 0
+	for s2 in 3:
+		var ld: Vector2 = b.part_pos(b.leader_of(s2))
+		for w in [1, 2]:
+			var wp: Vector2 = b.part_pos(s2 * 3 + w)
+			if b.seg_closest(wp, pp, ld).distance_to(wp) < b.WING_R + 20.0:
+				blocked += 1
+				break
+	_check("carrier: each leader hides behind its wingmen on the drive line from the player (%d of 3)" % blocked, blocked == 3)
 	# 차례: 편대 ↔ 모함 번갈아, 같은 편대가 연달아 오지 않는다, 편대마다 패턴 셋 (편대장 패턴 포함)
 	b.reset()
 	var turns: Array[String] = []
 	var squads: Array[int] = []
 	var modes := {}
 	var prev := ""
+	var idle := 0.0
 	seed(5)
 	for k in int(240.0 / DT):
 		b.step(DT, pp)
 		var kd: String = b.attack_kind()
+		if kd == "":
+			idle += DT
 		if kd != "" and kd != prev:
 			turns.append(kd)
 			if kd.begins_with("squad_"):
@@ -2814,6 +2831,7 @@ func _carrier_test() -> void:
 	_check("carrier: squad turns alternate with carrier turns (shell / main cannon), never the same squad twice in a row (%s)" % str(turns.slice(0, 8)),
 		turns.has("squad_gun") and turns.has("squad_rush") and turns.has("squad_veil") and turns.has("big_shell") and turns.has("cannon") and not repeat and alt)
 	_check("carrier: each squad has three patterns incl. a leader pattern (%s)" % str(modes.keys()), modes.size() == 9)
+	_check("carrier: little dead time between patterns (%.0f%% idle)" % (100.0 * idle / 240.0), idle / 240.0 < 0.1)
 	# 탄막 편대는 플레이어를 노린다: 부채의 가운데 탄이 플레이어 쪽으로
 	b.reset()
 	b.next_t = 99.0

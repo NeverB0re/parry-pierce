@@ -9,7 +9,7 @@ extends "res://scripts/attacks/attack.gd"
 
 const FORM := 1.2                    # net: 그물을 엮는 시간 (예고)
 const ACTIVE := 3.0                  # net: 조여 드는 시간 (판정)
-const FADE := 0.4
+const FADE := 0.3
 const R0 := 860.0
 const R1 := 60.0
 const SPIN := 0.4
