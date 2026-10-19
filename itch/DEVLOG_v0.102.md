@@ -1,4 +1,4 @@
-# Devlog — v0.101 (v0.62 이후 변경점)
+# Devlog — v0.102 (v0.62 이후 변경점)
 
 > 붙여 넣는 법: itch 대시보드 → *Edit game* → **Devlog** → *Create new post*. 제목과 본문을 붙여 넣고,
 > 본문 중간의 `[이미지: ...]` 자리에 `screenshots/` 의 해당 PNG 를 *Insert image* 로 넣는다 (그 줄은 지운다).
@@ -8,7 +8,7 @@
 
 ## English
 
-**Title:** v0.101 — Four colossi remade, a new pixel font, and a route map you can actually read
+**Title:** v0.102 — Four colossi remade, a new pixel font, and a route map you can actually read
 
 It's been a while since v0.62. Almost everything you look at has been redrawn: the first three colossi got new bodies and new tricks, the whole UI moved to a pixel font, and the route map and core system got their own screens.
 
@@ -73,7 +73,7 @@ It's been a while since v0.62. Almost everything you look at has been redrawn: t
 [이미지: 08_power_cores.png]
 
 ### Controls
-- **Mouse only.** Left-click to dash (hold for Charge Strike), right-click (hold) to parry and Reverse Drive. R restarts, Esc opens the menu.
+- **Mouse only.** Left-click to dash (hold for Charge Strike), right-click (hold) to parry and Reverse Drive. R restarts, Esc opens the menu. The hint at the bottom of the screen is now just the basics; the full list is under **Esc → How to Play**.
 
 Thanks for playing. Tell me which colossus felt best and which felt unfair!
 
@@ -81,7 +81,7 @@ Thanks for playing. Tell me which colossus felt best and which felt unfair!
 
 ## 한국어
 
-**제목:** v0.101 — 콜로서스 리메이크, 도트 글꼴, 새 항로도
+**제목:** v0.102 — 콜로서스 리메이크, 도트 글꼴, 새 항로도
 
 v0.62 이후 화면에 보이는 거의 모든 것을 다시 만들었습니다. 앞의 세 콜로서스는 몸과 기술이 새로 바뀌었고, UI 전체가 도트 글꼴로 바뀌었고, 항로도와 동력 코어는 각자 화면이 생겼습니다.
 
@@ -146,6 +146,6 @@ v0.62 이후 화면에 보이는 거의 모든 것을 다시 만들었습니다.
 [이미지: 08_power_cores.png]
 
 ### 조작
-- **마우스만 씁니다.** 좌클릭 = 돌진 / 꾹 = 차지 강습, 우클릭 꾹 = 패리 → 리버스 드라이브. R 재시작, Esc 메뉴.
+- **마우스만 씁니다.** 좌클릭 = 돌진 / 꾹 = 차지 강습, 우클릭 꾹 = 패리 → 리버스 드라이브. R 재시작, Esc 메뉴. 화면 아래 조작 안내는 기본만 짧게 남겼고, 전체 조작은 **Esc → 조작법**에서 볼 수 있습니다.
 
 플레이해 주셔서 고맙습니다. 어느 콜로서스가 제일 재미있었는지, 어디가 억울했는지 댓글로 알려 주세요!

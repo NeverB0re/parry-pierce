@@ -1,4 +1,4 @@
-# itch.io 페이지 내용 (복사해서 붙여 넣기) — v0.101
+# itch.io 페이지 내용 (복사해서 붙여 넣기) — v0.102
 
 ## 설정 값
 - **Title**: Parry Pierce
@@ -85,4 +85,4 @@ Language: pick **English / 한국어** with the flag buttons at the bottom-right
 ---
 
 ## 개발 로그 (Devlog)
-v0.101 소식은 `DEVLOG_v0.101.md` 참고.
+v0.102 소식은 `DEVLOG_v0.102.md` 참고.

@@ -80,7 +80,7 @@ const EN := {
 	"완전 동조!": "Full Sync!",
 	"외부 시스템 %d": "External systems %d",
 	"동력 코어": "Power Core",
-	"마우스: 방향(위=활공)   좌클릭: 돌진 / 꾹: 차지 강습 (근접 공격이 멈춰 있거나 휘두를 때 부딪히면 요격)   우클릭 꾹: 패리 → 슬로우 조준 → 리버스 드라이브   R: 재시작   Esc: 메뉴": "Mouse: aim (up = glide)   Left-click: dash / hold: Charge Strike   Right-click (hold): parry → Reverse Drive   R: restart   Esc: menu",
+	"좌클릭: 회피·돌진   우클릭 꾹: 패리   Esc: 메뉴 (조작법 보기)": "Left-click: dodge / dash   Right-click (hold): parry   Esc: menu (How to Play)",
 	"%s — 콜로서스 「%s」": "%s — Colossus \"%s\"",
 	"코어 에너지 확보": "Core Energy Secured",
 	"%.1f초 · 남은 실드 셀 %d%s · 클릭: 월드 맵 → FTL 도약 · R: 다시": "%.1f s · Shield cells left %d%s · Click: route map → FTL jump · R: retry",
