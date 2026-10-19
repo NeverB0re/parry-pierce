@@ -13,6 +13,7 @@ var cleared: Array[String] = []      # 처음 처리한 콜로서스 id
 var cores: Array[String] = []        # 얻은 코어
 var equipped: Array[String] = []     # 장착한 코어 (작동하는 것은 이것뿐, slots() 개까지)
 var open_all := false                # 숨은 개발자 명령: 모든 스테이지를 고를 수 있다
+var best := {}                       # 콜로서스 id → 최단 클리어 시간(초)
 const SLOT_BONUS_AFTER := 4          # 이 번호의 스테이지(5스테이지)를 깨면 장착 칸이 하나 늘어난다
 
 
@@ -25,6 +26,7 @@ func load_from_disk() -> void:
 	stage = clampi(int(cf.get_value("run", "stage", 0)), 0, Stages.LIST.size() - 1)
 	cleared.assign(cf.get_value("run", "cleared", []))
 	open_all = bool(cf.get_value("run", "open_all", false))
+	best = cf.get_value("run", "best", {})
 	cores.clear()
 	for id in cf.get_value("upgrade", "cores", []):  # 없어진 코어(기동·파동 등)는 버린다
 		if Upgrades.CORES.has(id):
@@ -48,6 +50,7 @@ func save() -> void:
 	cf.set_value("run", "stage", stage)
 	cf.set_value("run", "cleared", Array(cleared))
 	cf.set_value("run", "open_all", open_all)
+	cf.set_value("run", "best", best)
 	cf.set_value("upgrade", "cores", Array(cores))
 	cf.set_value("upgrade", "equip", Array(equipped))
 	cf.save(path)
@@ -61,11 +64,15 @@ func reset() -> void:
 	open_all = false
 
 
-## 스테이지 클리어: 처음이면 그 콜로서스의 코어를 얻는다 (빈 장착 칸이 있으면 바로 장착). 다음 스테이지로 넘어간다 (마지막이면 그대로). 보상 내용을 돌려준다
-func record_clear(stage_idx: int) -> Dictionary:
+## 스테이지 클리어: 처음이면 그 콜로서스의 코어를 얻는다 (빈 장착 칸이 있으면 바로 장착). 다음 스테이지로 넘어간다 (마지막이면 그대로).
+## time(초)이 그 스테이지의 최단 기록보다 짧으면 기록을 바꾼다. 보상 내용을 돌려준다
+func record_clear(stage_idx: int, time := -1.0) -> Dictionary:
 	var st: Dictionary = Stages.LIST[stage_idx]
 	var id: String = st["id"]
-	var got := {"first": false, "core": ""}
+	var got := {"first": false, "core": "", "record": false}
+	if time > 0.0 and (not best.has(id) or time < float(best[id])):
+		best[id] = time
+		got["record"] = true
 	if not cleared.has(id):
 		cleared.append(id)
 		got["first"] = true
@@ -108,6 +115,13 @@ func can_play(i: int) -> bool:
 	if i < 0 or i >= Stages.LIST.size():
 		return false
 	return i == 0 or open_all or cleared.has(Stages.LIST[i - 1]["id"])
+
+
+## 최단 클리어 시간 (초, 기록이 없으면 -1)
+func best_time(i: int) -> float:
+	if i < 0 or i >= Stages.LIST.size():
+		return -1.0
+	return float(best.get(Stages.LIST[i]["id"], -1.0))
 
 
 func is_cleared(i: int) -> bool:

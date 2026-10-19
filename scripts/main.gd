@@ -1340,10 +1340,12 @@ func _core_destroyed(pos: Vector2) -> void:
 	fx.ring(pos, Color(1, 0.9, 0.7), 500.0, 0.8, 10.0)
 	sfx.play("perfect", 4.0, 0.0)
 	sfx.play("win", 0.0, 0.0)
-	var got: Dictionary = profile.record_clear(stage_idx)
+	var got: Dictionary = profile.record_clear(stage_idx, run_time)
 	var reward := ""
 	if got["core"] != "":
-		reward = Loc.t(" · 획득: %s (항로도에서 장착)") % Loc.t(Upgrades.CORES[got["core"]]["name"])
+		reward = Loc.t(" · 획득: %s (항로도 → 동력 코어 장착)") % Loc.t(Upgrades.CORES[got["core"]]["name"])
+	if got["record"] and not got["first"]:
+		reward += Loc.t(" · 최단 기록 갱신")
 	hud.banner(Loc.t("코어 에너지 확보"), Loc.t("%.1f초 · 남은 실드 셀 %d%s · 클릭: 월드 맵 → FTL 도약 · R: 다시") % [run_time, lives, reward])
 
 

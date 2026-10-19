@@ -109,7 +109,7 @@ func _run() -> void:
 	main.touch_ui = FakeStick.new()
 
 	_check("numbers (cd %.2f, dmg %d/%d/%d/%d, part %d, core %d)" % [p.stats.dash_cooldown, p.DASH_DAMAGE, p.stats.charge_damage, p.stats.power_damage, p.stats.clash_damage, b.PART_HP, b.core.CORE_HP],
-		absf(p.stats.dash_cooldown - 0.9) < 0.001 and p.DASH_DAMAGE == 1 and p.stats.charge_damage == 3 and p.stats.power_damage == 8 and p.stats.power_damage_perfect == 16 and p.stats.clash_damage == 8 and b.PART_HP == 30 and b.ARMOR_HP == 229 and b.core.CORE_HP == 1)
+		absf(p.stats.dash_cooldown - 0.9) < 0.001 and p.DASH_DAMAGE == 1 and p.stats.charge_damage == 3 and p.stats.power_damage == 8 and p.stats.power_damage_perfect == 16 and p.stats.clash_damage == 8 and b.PART_HP == 30 and b.ARMOR_HP == 309 and b.core.CORE_HP == 1)
 
 	# ── 돌진: 짧게 = 돌진, 쿨다운 ──
 	_air(Vector2(-900, -1500))
@@ -544,6 +544,12 @@ func _meta_test() -> void:
 	_check("profile saved and loaded (cores %s, stage %d)" % [pr2.cores, pr2.stage], pr2.cores == pr.cores and pr2.cleared == pr.cleared and pr2.stage == 1)
 	_check("one equip slot; the first core is equipped on pickup (%s)" % [pr.equipped], pr.slots() == 1 and pr.equipped == ["counter"] and pr2.equipped == ["counter"])
 	pr.record_clear(1)
+	var prb = main.Profile.new()
+	prb.persist = false
+	var r1: Dictionary = prb.record_clear(0, 100.0)
+	var r2: Dictionary = prb.record_clear(0, 120.0)
+	var r3: Dictionary = prb.record_clear(0, 90.0)
+	_check("best clear time only improves (%.1f, no record for stage 2: %.1f)" % [prb.best_time(0), prb.best_time(1)], r1["record"] and not r2["record"] and r3["record"] and absf(prb.best_time(0) - 90.0) < 0.01 and prb.best_time(1) < 0.0)
 	_check("a new core is owned but not equipped while the slot is full (%s / %s)" % [pr.cores, pr.equipped], pr.cores.has("reflect") and pr.equipped == ["counter"])
 	pr.toggle_equip("reflect")
 	_check("equipping another core swaps it in (%s)" % [pr.equipped], pr.equipped == ["reflect"])
@@ -580,10 +586,20 @@ func _meta_test() -> void:
 	var p = main.player
 	_check("no core yet", not p.stats.counter)
 	_check("before any clear only stage 1 is open", mp.can_play(0) and not mp.can_play(1))
+	main.run_time = 77.0
 	main._core_destroyed(main.boss.core.center)
 	_check("win records clear and core (state %d, cores %s)" % [main.state, mp.cores], main.state == main.State.WON and mp.cleared.has("observer") and mp.cores.has("counter"))
+	_check("win records the clear time as the best time (%.2f)" % mp.best_time(0), mp.best_time(0) > 0.0 and absf(mp.best_time(0) - main.run_time) < 0.01)
 	main.open_world()
 	_check("world map opens and pauses, ship on the next stage (%d)" % mp.stage, main.world.visible and paused and mp.stage == 1)
+	# 동력 코어 장착은 따로 화면: 열고, 코어를 눌러 빼고 다시 끼우고, 닫는다
+	main.world.open_cores()
+	var cv_open: bool = main.world.cores_view.visible
+	main.world.core_tiles["counter"].pressed.emit()
+	var off: bool = mp.equipped.is_empty()
+	main.world.core_tiles["counter"].pressed.emit()
+	main.world.close_cores()
+	_check("cores screen opens over the map, a core tile toggles equip (open %s, off %s, now %s)" % [cv_open, off, mp.equipped], cv_open and off and mp.equipped == ["counter"] and not main.world.cores_view.visible and main.world.visible)
 	main.world.jump()
 	_check("FTL starts", main.ftl.is_playing() and not main.world.visible)
 	main.ftl.skip()
@@ -695,7 +711,7 @@ func _fortress_test() -> void:
 	main.profile = mp
 	b.next_t = 99.0
 	for i in b.part_count():
-		b.damage_part(i, 999)
+		b.damage_part(i, 9999)
 	_step(int((b.OPEN_TIME + 1.0) / DT))
 	_check("fortress core phase", b.phase == 3)
 	b.damage_core(999)
@@ -975,7 +991,7 @@ func _v035_test() -> void:
 		b = main.boss
 		if ph == 3:
 			for i in b.part_count():
-				b.damage_part(i, 999)
+				b.damage_part(i, 9999)
 			_step(int((b.OPEN_TIME + 0.2) / DT))
 		p.reset(Vector2(-500, -1500), false)
 		var quiet := 0.0
@@ -1034,7 +1050,7 @@ func _v035_test() -> void:
 		b.gun_exposed = true
 		b.damage_part(b.BIG, 16)
 		more += 1
-	_check("the big gun has hit points: about fifteen PERFECT drives break it and open the core (%d, phase %d, other parts alive %d)" % [more, b.phase, b.parts_left()], more >= 14 and more <= 16 and b.phase == 2 and b.parts_left() == 4)
+	_check("the big gun has hit points: about twenty-two PERFECT drives break it and open the core (%d, phase %d, other parts alive %d)" % [more, b.phase, b.parts_left()], more >= 21 and more <= 23 and b.phase == 2 and b.parts_left() == 4)
 	main.start_stage(1)
 	b = main.boss
 	b.gun_exposed = true
@@ -1052,6 +1068,21 @@ func _v035_test() -> void:
 		else:
 			b.shots.reflect_one(0, Vector2(0, -1600))
 		_check("%s of the heavy shell clears its escort ring (%d left)" % [how, b.shots.size()], b.shots.size() == (0 if how == "parry" else 1))
+	b.shots.clear()
+	# 주포 탄은 바닥·벽에 닿아도 사라지지 않고 튕긴다 (수명 16초로만 사라진다), 동조 코어로도 지워지지 않는다
+	var gf: int = b.shots.new_group()
+	b.shots.spawn(Vector2(0, -60), Vector2(0, 250), 16.0, 1.0, 0.0, b.shots.Kind.SHELL, gf)
+	for k in 6:
+		b.shots.spawn(Vector2(0, -60) + Vector2.from_angle(k) * 120.0, Vector2(0, 250), 16.0, 1.0, 0.0, b.shots.Kind.SMALL, gf, k, 120.0)
+	b.shots.spawn(Vector2(1240, -800), Vector2(300, 0), 16.0, 1.0, 0.0, b.shots.Kind.SHELL)
+	for k in 60:
+		b.shots.step(1.0 / 60.0, Vector2(0, -40), Vector2.ZERO)
+	_check("heavy shells bounce off the floor and walls instead of vanishing (%d left)" % b.shots.size(), b.shots.size() == 8 and b.shots.vel[0].y < 0.0)
+	b.shots.clear_near(Vector2(0, -100), 400.0)
+	var sh_left := 0
+	for k in b.shots.size():
+		sh_left += 1 if b.shots.kind[k] == b.shots.Kind.SHELL else 0
+	_check("sync clear leaves heavy shells (%d)" % sh_left, sh_left == 2)
 	b.shots.clear()
 	# 반격 코어로 되돌린 주포 탄: 열린 코어에 크게 (닫혀 있으면 보통 규칙)
 	var hp_s: int = b.part_hp[b.BIG]
@@ -1106,7 +1137,7 @@ func _v035_test() -> void:
 	main.start_stage(1)
 	b = main.boss
 	for i in b.part_count():
-		b.damage_part(i, 999)
+		b.damage_part(i, 9999)
 	_step(int((b.OPEN_TIME + 1.2) / DT))
 	b.next_t = 99.0
 	b.atk = null
@@ -2252,7 +2283,7 @@ func _v047_test() -> void:
 	p = main.player
 	b.next_t = 99.0
 	for i in b.part_count():
-		b.damage_part(i, 999)
+		b.damage_part(i, 9999)
 	_check("fortress opening (phase 2)", b.phase == 2)
 	main.debug.god = true
 	main.hitstop = 0

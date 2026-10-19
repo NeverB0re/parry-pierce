@@ -137,7 +137,16 @@ func step(dt: float, player: Vector2, boss_target: Vector2) -> PackedVector2Arra
 			v = v.rotated(clampf(da2, -SHELL_TURN * dt, SHELL_TURN * dt))
 		var p := pos[i] + v * lerpf(WARMUP_FLOOR, 1.0, minf(1.0, a / WARMUP)) * dt
 		var lf := life[i] - dt
-		if lf <= 0.0 or p.y > KILL_FLOOR or p.x < -KILL_X or p.x > KILL_X or p.y < KILL_TOP:
+		var bounded := mine[i] == 0 and (kind[i] == Kind.SHELL or orb_r[i] > 0.0)   # 주포 탄과 호위탄은 바닥·벽에 닿아도 사라지지 않는다 (수명으로만 사라진다)
+		if bounded and kind[i] == Kind.SHELL:            # 주포 탄은 튕긴다 (호위탄은 _follow_groups 로 따라온다)
+			var rr: float = RADII[kind[i]]
+			if p.y > KILL_FLOOR - rr:
+				p.y = KILL_FLOOR - rr
+				v.y = -absf(v.y)
+			if absf(p.x) > KILL_X - rr:
+				p.x = signf(p.x) * (KILL_X - rr)
+				v.x = -signf(p.x) * absf(v.x)
+		if lf <= 0.0 or p.y < KILL_TOP or (not bounded and (p.y > KILL_FLOOR or p.x < -KILL_X or p.x > KILL_X)):
 			popped.append(p)
 			continue
 		pos[w] = p
@@ -202,7 +211,7 @@ func hitboxes_near(p: Vector2, reach: float, out: Array[Dictionary]) -> void:
 func clear_near(p: Vector2, r: float) -> int:
 	var n := 0
 	for i in range(pos.size() - 1, -1, -1):
-		if mine[i] == 0 and pos[i].distance_to(p) < r:
+		if mine[i] == 0 and kind[i] != Kind.SHELL and pos[i].distance_to(p) < r:   # 주포 탄은 받아칠 기회라 남긴다
 			remove(i)
 			n += 1
 	return n
