@@ -89,6 +89,9 @@ const C_CORE := Color(1.0, 0.5, 0.25)
 const C_DRONE := Color(0.22, 0.24, 0.3)
 const C_DRONE_DARK := Color(0.1, 0.11, 0.15)
 
+var deployed := false                        # 편대가 격납고에서 출격했는가 (스테이지 시작: 플레이어가 날아오르면 출격. 부활 땐 이미 나와 있다)
+var deploy_t := 0.0
+const DEPLOY_TIME := 0.9
 var dpos: Array[Vector2] = []                # 드론 위치
 var dwant: Array[Vector2] = []               # 드론이 가려는 자리
 var dcmd: Array[bool] = []                   # 이번 프레임에 공격이 자리를 정해 주었나 (아니면 포위망)
@@ -149,6 +152,8 @@ func reset() -> void:
 		dglow.append(0.0)
 	ring_c = look_at
 	ring_a = 0.0
+	deployed = false
+	deploy_t = 0.0
 	active = -1
 	last_squad = -1
 	last_mode = ["", "", ""]
@@ -451,6 +456,14 @@ func _step_phase(dt: float) -> void:
 		core.armor_hp = 0
 		core.broken = true
 		core.guard = 0.0
+	if not deployed:                             # 출격 전: 격납고에 숨어 있다가 플레이어가 날아오르면 쏟아져 나온다
+		if hold_attacks:
+			for i in part_count():
+				dpos[i] = ship_to_world(HANGARS[squad_of(i)]) + Vector2((i % PER - 1) * 50.0, 0)
+				dwant[i] = dpos[i]
+			return
+		deployed = true
+	deploy_t = minf(DEPLOY_TIME, deploy_t + dt)
 	ring_a += RING_SPIN * dt
 	ring_c = look_at                             # 포위망은 늘 플레이어를 가운데 둔다 (look_at = 부드럽게 따라가는 플레이어 위치)
 	var lead_cmd: Array[bool] = []               # 편대장이 공격에 불려 나갔는가 (편대장 패턴): 편대원이 좌우로 비켜 따라붙는다
@@ -469,7 +482,7 @@ func _step_phase(dt: float) -> void:
 		dpos[i] = dpos[i].lerp(dwant[i], 1.0 - exp(-MOVE_K * dt))
 		daim[i] = lerp_angle(daim[i], daim_want[i], 1.0 - exp(-8.0 * dt))
 		dcmd[i] = false
-	if phase == 1:
+	if phase == 1 and not hold_attacks:
 		_harass(dt)
 
 
@@ -534,12 +547,15 @@ func _choose(ppos: Vector2) -> void:
 			"veil":
 				start_attack(SquadVeil.new(s, mode))
 		var ship := _next_ship()                 # 겹쳐도 되는 조합이면 모함 패턴이 함께 (조금 늦게), 아니면 다음 차례에 따로
-		if OVERLAP[ship].has(SQUAD_KIND[s]):
+		if OVERLAP[ship].has(SQUAD_KIND[s]) and not _ship_lingering():
 			last_ship = ship
 			var a = _ship_attack(ship)
 			a.t = -OVERLAP_DELAY
 			start_side(a)
 			squad_turn = true
+		return
+	if not lingering.is_empty():                 # 모함 패턴이 아직 도는 중이면 겹쳐 쏘지 않고 기다린다
+		next_t = 0.15
 		return
 	squad_turn = true                            # 모함 차례: 대형 포탄 ↔ 주포 번갈아
 	last_ship = _next_ship()
@@ -577,6 +593,11 @@ func _pick_squad(ppos: Vector2) -> int:
 		if _fits_lingering(SQUAD_KIND[s]):
 			return s
 	return -1
+
+
+## 모함 패턴(대형 포탄·주포)이 아직 도는가 — 같은 모함 패턴이 둘 겹쳐 나오지 않게
+func _ship_lingering() -> bool:
+	return is_lingering("cannon") or is_lingering("big_shell")
 
 
 ## 지금 도는 모함 패턴들이 이 편대 종류와 함께 나와도 되는가
@@ -893,7 +914,10 @@ func _draw_drones() -> void:
 		if not part_alive(i):
 			continue
 		var on := squad_of(i) == active
-		_draw_drone(dpos[i], i, 1.0, 1.0 if on or active < 0 else 0.7, 0.0, true)
+		if not deployed:
+			continue
+		var emerge := smoothstep(0.0, 1.0, deploy_t / DEPLOY_TIME)
+		_draw_drone(dpos[i], i, lerpf(0.35, 1.0, emerge), 1.0 if on or active < 0 else 0.7, 0.0, true)
 
 
 ## target = 살아 있는 드론: 차지·조준 중이거나 막 맞았으면 기체 외곽이 붉게 빛난다 (평소엔 강철색 테두리).

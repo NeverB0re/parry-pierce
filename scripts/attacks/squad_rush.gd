@@ -202,6 +202,10 @@ func on_parried(hb: Dictionary) -> void:
 	var r: Dictionary = hb.get("run", {})
 	if r.is_empty() or (r["phase"] != "warn" and r["phase"] != "strike"):
 		return
+	if mode != "line":                                   # 연속 돌진·돌격: 한 기체를 요격하면 아직 달려들지 않은 나머지 돌진은 끊긴다
+		for o in runs:
+			if o != r and (o["phase"] == "wait" or o["phase"] == "aim" or o["phase"] == "warn"):
+				o["phase"] = "done"
 	r["knock_from"] = boss.drone_pos(int(r["i"]))
 	var d: Vector2 = hb.get("dir", Vector2.UP)
 	r["knock_dir"] = d.normalized() if d.length() > 0.1 else Vector2.UP
