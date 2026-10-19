@@ -51,14 +51,15 @@ func _process(_d: float) -> bool:
 	if k % 89 == 30:
 		main._parry_input(false)
 	if k == 1500:
-		for i in 4:
+		for i in b.part_count():
 			b.damage_part(i, 99)
 	if k % 97 == 50 and main.state == main.State.PLAY and p.dash_t <= 0.0 and not p.aim_phase:   # 표적 쪽으로 옮겨 직접 친다 (피해·손상 단계·장갑 판 검사)
 		var tgt: Vector2 = b.HEART_POS
 		if b.phase == 1:
-			for i in 4:
-				if b.part_hp[(k / 97 + i) % 4] > 0:
-					tgt = b.part_pos((k / 97 + i) % 4)
+			var pc: int = b.part_count()
+			for i in pc:
+				if b.part_hp[(k / 97 + i) % pc] > 0:
+					tgt = b.part_pos((k / 97 + i) % pc)
 					break
 		p.position = tgt + Vector2(-170, 30)
 		p.aim = Vector2(1, -0.15).normalized()
