@@ -19,8 +19,8 @@ Parry the barrage, ride the energy back, and pierce the colossus.
 Run:      double-click ParryPierce.exe (Windows 64-bit, mouse required)
 Language: choose English / Korean with the flag buttons at the bottom-right of the main menu
 Controls: Mouse = aim (up = glide) / Left-click = dash, hold = Charge Strike /
-          Right-click or Space (hold) = parry -> slow-mo aim -> release = Reverse Drive /
-          R = restart / Esc = menu / F11 = fullscreen
+          Right-click (hold) = parry -> slow-mo aim -> release = Reverse Drive /
+          Esc = menu / F11 = fullscreen
 Saves:    %APPDATA%\\Godot\\app_userdata\\Parry Pierce (prototype)\\   (delete the folder to reset)
 Note:     the exe is not code-signed, so Windows SmartScreen may warn ("More info" -> "Run anyway").
           The game uses no network and collects no data.
@@ -31,8 +31,8 @@ Note:     the exe is not code-signed, so Windows SmartScreen may warn ("More inf
 실행:    ParryPierce.exe 더블클릭 (Windows 64비트, 마우스 필요)
 언어:    메인 화면 우하단의 국기 버튼으로 영어/한국어 선택
 조작:    마우스 = 조준(위 = 활공) / 좌클릭 = 돌진, 꾹 = 차지 강습 /
-         우클릭 또는 Space 꾹 = 패리 -> 슬로우 조준 -> 놓으면 리버스 드라이브 /
-         R 재시작 / Esc 메뉴 / F11 전체 화면
+         우클릭 꾹 = 패리 -> 슬로우 조준 -> 놓으면 리버스 드라이브 /
+         Esc 메뉴 / F11 전체 화면
 저장:    %APPDATA%\\Godot\\app_userdata\\Parry Pierce (prototype)\\   (폴더를 지우면 처음부터)
 참고:    코드 서명이 없어 Windows SmartScreen 경고가 뜰 수 있습니다 ("추가 정보" -> "실행").
          네트워크를 쓰지 않고 데이터를 수집하지 않습니다.

@@ -40,7 +40,7 @@ func _ready() -> void:
 func _pages() -> Dictionary:
 	var dash := Loc.t("화면의 큰 버튼 탭") if touch else Loc.t("좌클릭")
 	var hold := Loc.t("큰 버튼 꾹") if touch else Loc.t("좌클릭 꾹")
-	var par := Loc.t("작은 금색 버튼 꾹") if touch else Loc.t("우클릭(또는 Space) 꾹")
+	var par := Loc.t("작은 금색 버튼 꾹") if touch else Loc.t("우클릭 꾹")
 	return {
 		"dodge": {
 			"title": Loc.t("회피 — 돌진"),
@@ -66,7 +66,7 @@ func _pages() -> Dictionary:
 		"charge": {
 			"title": Loc.t("차지 강습 — 모아서 강한 일격"),
 			"lines": [
-				Loc.t("%s(으)로 모았다 떼면 차지 강습 — 일반 돌진보다 훨씬 강합니다. 쓰면 잠시 다시 모을 수 없습니다 (주황 링).") % hold,
+				Loc.t("%s(으)로 모았다 떼면 차지 강습 — 일반 돌진보다 훨씬 강한 일격입니다.") % hold,
 			],
 		},
 		"intercept": {
@@ -79,17 +79,14 @@ func _pages() -> Dictionary:
 		"barrage": {
 			"title": Loc.t("탄막 — 주탄과 잔탄"),
 			"lines": [
-				Loc.t("작은 주황 별(잔탄)에 맞으면 실드 셀이 바로 깨지지 않고 기체가 달아오릅니다. 세 번 맞으면 셀이 깨지고, 한동안 안 맞으면 식습니다."),
-				Loc.t("잔탄은 패리하면 흡수만 됩니다. 연달아 막을 수 있습니다."),
-				Loc.t("크고 둥근 금색 탄(주탄)과 붉은 불길의 유도탄은 패리하면 리버스 드라이브가 열립니다."),
+				Loc.t("작은 주황 별(잔탄)에 맞으면 기체가 달아오르고, 세 번 맞으면 실드 셀이 깨집니다. 잔탄은 패리하면 흡수됩니다."),
+				Loc.t("크고 둥근 금색 탄과 유도탄은 패리하면 리버스 드라이브로 되돌려 줄 수 있습니다."),
 			],
 		},
 		"tentacle": {
 			"title": Loc.t("연속 요격 — 요격하고 바로 다음 타로"),
 			"lines": [
-				Loc.t("요격하면 차지 쿨다운이 돌아오고 다음 차지가 빨라집니다. 연타는 첫 타를 요격해 이어 가세요."),
-				Loc.t("크라켄의 표적은 방어막 속 외눈입니다. 돌진과 차지 강습은 방어막에 막히고, 리버스 드라이브와 요격만 외눈에 피해를 줍니다."),
-				Loc.t("촉수가 멈춰 붉게 점멸할 때 차지 강습으로 요격하면 외눈에 피해가 들어가고 촉수가 끊어집니다. 끊긴 촉수는 잠시 뒤 다시 자랍니다."),
+				Loc.t("요격에 성공하면 차지를 바로 다시 모을 수 있습니다. 연달아 오는 공격은 하나씩 이어서 요격하세요."),
 			],
 		},
 		"barrier": {
@@ -564,7 +561,6 @@ class Stage extends Control:
 					var f := u / 1.1
 					shake = Vector2(randf_range(-1, 1), randf_range(-1, 1)) * (0.6 + 1.6 * f)
 					pos = sp + shake
-					draw_arc(sp, 44.0, -PI * 0.5, -PI * 0.5 + TAU * f, 40, Color(1.0, 0.6, 0.2), 4.0)
 					if f >= 1.0 - 0.001:
 						col = "r"
 				elif u < 1.4:
@@ -616,18 +612,17 @@ class Stage extends Control:
 			elif phase == "set":
 				_txt(Loc.t("자세 고정 · 붉게 점멸 = 지금!"), Vector2(250, 250), 16, Color(1.0, 0.6, 0.5))
 			var mid := Vector2(250, 30) + Vector2.from_angle(0.45) * 120.0
-			var spx := Vector2(520, 205)
+			var spx := Vector2(250, 30) + Vector2.from_angle(1.05) * 175.0   # 기체는 대검이 쓸고 지나갈 띠 한가운데 (검이 기체를 노린다)
 			var pos := spx
 			var dashing := false
-			if u >= 1.9 and u < 2.4:
-				pos = spx.lerp(mid + Vector2(20, 26), _smooth(1.9, 2.4, u) * 0.999)
+			if u >= 1.9 and u < 2.2:
+				pos = spx.lerp(mid + Vector2(14, 22), _smooth(1.9, 2.2, u) * 0.999)
 				dashing = true
-			elif u >= 2.4:
-				pos = mid + Vector2(20, 26) + Vector2(60.0, -60.0) * _smooth(2.4, 3.2, u)
+			elif u >= 2.2:
+				pos = mid + Vector2(14, 22) + Vector2(60.0, 30.0) * _smooth(2.4, 3.2, u)
 			if u >= 1.6 and u < 1.9:
 				pos += Vector2(randf_range(-1, 1), randf_range(-1, 1)) * 2.0
-				draw_arc(pos, 44.0, -PI * 0.5, -PI * 0.5 + TAU * _smooth(1.6, 1.9, u), 32, Color(1.0, 0.6, 0.2), 3.0)
-			_ship(pos, (mid - spx).angle() if u < 2.4 else -PI * 0.5, 1.0, "r" if u >= 1.6 else "b")
+			_ship(pos, (mid - spx).angle() if u < 2.4 else (mid - spx).angle(), 1.0, "r" if u >= 1.6 else "b")
 			if dashing:
 				_ring(pos, 40.0, Color(1.0, 0.6, 0.2, 0.6), 2.0)
 			if u >= 2.4 and u < 3.6:
@@ -693,7 +688,6 @@ class Stage extends Control:
 		var pos := sp
 		if tt >= 1.4 and tt < 2.6:
 			pos += Vector2(randf_range(-1, 1), randf_range(-1, 1)) * 2.0
-			draw_arc(pos, 44.0, -PI * 0.5, -PI * 0.5 + TAU * _smooth(1.4, 2.4, tt), 32, Color(1.0, 0.6, 0.2), 3.0)
 		elif tt >= 2.6 and tt < 3.0:
 			pos = sp.lerp(tip + Vector2(14, 10), _smooth(2.6, 3.0, tt) * 0.999)
 		elif tt >= 3.0:
@@ -718,64 +712,45 @@ class Stage extends Control:
 		var T := 7.0
 		var tt := fmod(t, T)
 		_caption(Loc.t("보라색 = 패리 불가 → 돌진으로 통과"), UNP_C)
-		var eye := Vector2(330, 34)
-		draw_circle(eye, 24.0, Color(0.1, 0.1, 0.14))
-		draw_circle(eye, 8.0 + 4.0 * _smooth(0.0, 1.4, tt), UNP_C)
-		var ship := Vector2(450, 148)
-		var th_from := PI + 0.2
-		var th_to := -0.2
-		var fan_a := _smooth(0.2, 1.6, tt)
-		var sweep := tt >= 1.6 and tt < 3.4
-		var th := th_from
-		if sweep:
-			var k := (tt - 1.6) / 1.8
-			th = lerpf(th_from, th_to, k * k * (3.0 - 2.0 * k) * 0.3 + k * 0.7)
-		elif tt >= 3.4:
-			th = th_to
-		if tt < 3.4:
-			var blink := 0.65 + 0.35 * sin(t * 20.0)
-			var pts := PackedVector2Array([eye])
-			var a0 := th if sweep else th_from
-			for j in 17:
-				var a := lerpf(a0, th_to, j / 16.0)
-				pts.append(eye + Vector2.from_angle(a) * 460.0)
-			if pts.size() >= 3:
-				draw_colored_polygon(pts, Color(UNP, (0.12 + 0.22 * fan_a) * (blink if not sweep else 1.0)))
-		if sweep:
-			var e := eye + Vector2.from_angle(th) * 470.0
-			draw_line(eye, e, Color(UNP, 0.5), 18.0)
-			draw_line(eye, e, Color(UNP, 0.9), 8.0)
-			draw_line(eye, e, UNP_C, 3.0)
-		# 플레이어: 레이저가 지나가기 직전에 돌진
-		var hit_a := (ship - eye).angle()
-		var kh := (th_from - hit_a) / (th_from - th_to)             # 레이저가 기체 각도를 지나는 진행도
-		var dash_t0 := 1.6 + 1.8 * 0.5                              # 근사: 아래 보정식으로 시각 계산
-		dash_t0 = _beam_time(kh) - 0.09
+		var gem := Vector2(80, 150)                                  # 보라 수정: 모았다가(0~1.2초) 동심원을 쏜다
+		var charge := _smooth(0.0, 1.2, tt) * (1.0 - _smooth(1.2, 1.5, tt))
+		draw_colored_polygon(PackedVector2Array([gem + Vector2(0, -34), gem + Vector2(22, 0), gem + Vector2(0, 34), gem + Vector2(-22, 0)]), UNP.lerp(UNP_C, charge))
+		if charge > 0.0:
+			draw_circle(gem, 30.0 + 40.0 * charge, Color(UNP, 0.25 * charge))
+		var ship := Vector2(450, 150)
+		var SPEED := 260.0
+		var reach := 1.2 + (ship.x - gem.x) / SPEED                  # 고리가 기체에 닿는 시각
+		var r := (tt - 1.2) * SPEED
+		if tt >= 1.2 and r < 620.0:
+			draw_arc(gem, r, -1.1, 1.1, 48, Color(UNP, 0.45), 22.0)
+			draw_arc(gem, r, -1.1, 1.1, 48, Color(UNP, 0.95), 9.0)
+			draw_arc(gem, r, -1.1, 1.1, 48, UNP_C, 3.0)
+		var dash_t0 := reach - 0.14                                   # 닿기 직전, 고리가 오는 쪽(왼쪽)으로 달려든다
 		var dashing := tt >= dash_t0 and tt < dash_t0 + 0.28
 		var pos := ship
 		if tt >= dash_t0:
-			pos = ship + Vector2(70.0, 0.0) * _smooth(dash_t0, dash_t0 + 0.28, tt)
+			pos = ship + Vector2(-90.0, 0.0) * _smooth(dash_t0, dash_t0 + 0.28, tt)
 		if dashing:
 			for k in 3:
-				_ship(pos - Vector2(22.0 * (k + 1), 0), 0.0, 0.18, "b")
+				_ship(pos + Vector2(22.0 * (k + 1), 0), PI, 0.18, "b")
 		var strong := tt >= dash_t0 + 0.15
-		_ship(pos, 0.0)
+		_ship(pos, PI)
 		if dashing:
 			HexShield.draw(self, pos, 34.0, 1.0, t)
-		if tt >= dash_t0 - 0.5 and tt < dash_t0:
+		if tt >= dash_t0 - 0.6 and tt < dash_t0:
 			_txt(Loc.t("돌진!"), Vector2(pos.x - 20.0, pos.y + 54.0), 17, GOLD)
 			_mouse(Vector2(size.x - 40.0, 70.0), tt >= dash_t0 - 0.1, false)
 		if strong and tt < 6.6:
 			var f := _smooth(dash_t0 + 0.15, dash_t0 + 0.6, tt)
-			var tl := 90.0 + 6.0 * sin(t * 30.0)          # 금빛 꼬리 (기체 뒤)
-			var b0 := pos + Vector2(-16, 0)
+			var tl := 90.0 + 6.0 * sin(t * 30.0)          # 금빛 꼬리 (기체 뒤 = 오른쪽)
+			var b0 := pos + Vector2(16, 0)
 			for L in [[16.0, 1.0, Color(1.0, 0.72, 0.2)], [10.0, 0.75, Color(1.0, 0.86, 0.38)], [5.0, 0.5, Color(1.0, 0.97, 0.78)]]:
 				var w: float = L[0]
 				var c0: Color = L[2]
-				draw_polygon(PackedVector2Array([b0 + Vector2(0, w), b0 + Vector2(0, -w), b0 + Vector2(-tl * float(L[1]), 0)]),
+				draw_polygon(PackedVector2Array([b0 + Vector2(0, w), b0 + Vector2(0, -w), b0 + Vector2(tl * float(L[1]), 0)]),
 					PackedColorArray([Color(c0, 0.85), Color(c0, 0.85), Color(c0, 0.0)]))
-			_txt(Loc.t("완전 동조!"), Vector2(pos.x - 70.0, pos.y - 70.0 - 6.0 * f), 20, GOLD)
-			_txt(Loc.t("다음 차지 크게 강화 · 무적"), Vector2(pos.x - 100.0, pos.y + 78.0), 16, Color(1.0, 0.95, 0.75))
+			_txt(Loc.t("완전 동조!"), Vector2(pos.x - 50.0, pos.y - 70.0 - 6.0 * f), 20, GOLD)
+			_txt(Loc.t("다음 차지 크게 강화 · 무적"), Vector2(pos.x - 90.0, pos.y + 78.0), 16, Color(1.0, 0.95, 0.75))
 
 	## 잔탄: 작고 뾰족한 주황 별 (게임과 같은 모양)
 	func _small(p: Vector2, v := Vector2.LEFT) -> void:
@@ -845,16 +820,3 @@ class Stage extends Control:
 			if u >= 3.05 and u < 4.0:
 				_txt(Loc.t("적중!"), Vector2(tgt.x - 30.0, tgt.y - 50.0), 20, GOLD)
 			_mouse(Vector2(size.x - 40.0, 60.0), false, holding)
-
-	## 레이저 진행도 k(0~1)가 되는 시각 (sweep 가속 곡선을 이분법으로 역산)
-	func _beam_time(target_k: float) -> float:
-		var lo := 0.0
-		var hi := 1.0
-		for i in 20:
-			var m := (lo + hi) * 0.5
-			var f := m * m * (3.0 - 2.0 * m) * 0.3 + m * 0.7
-			if f < target_k:
-				lo = m
-			else:
-				hi = m
-		return 1.6 + 1.8 * lo

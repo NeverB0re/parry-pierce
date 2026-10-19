@@ -1355,36 +1355,24 @@ func _v037_test() -> void:
 	b.shots.clear()
 	b.atk = null
 
-	# 관측자: 주탄 일부를 잔탄으로
+	# 관측자: 어깨포마다 큰 유도탄 한 발 (둘 다 부서지면 방패 보석에서)
 	main.start_stage(0)
 	b = main.boss
+	b.wake()
 	b.next_t = 99.0
 	p.reset(Vector2(-700, -1500), false)
-	var vo = b.Volley.new(-1, b.shield_center(), p.position)
-	b.start_attack(vo)
+	b.start_attack(b.Homing.new())
 	for k in int(2.0 / DT):
 		p.invuln = 999.0
 		main._physics_process(DT)
 		if b.shots.size() > 0:
 			break
-	var vs := 0
-	for j in b.shots.size():
-		if b.shots.kind[j] == K.SMALL:
-			vs += 1
-	_check("observer volley: 3 main + 2 small per wave (%d small of %d)" % [vs, b.shots.size()], b.shots.size() == 5 and vs == 2)
+	_check("observer missile: one big homing missile per shoulder cannon (%d)" % b.shots.size(), b.shots.size() == 2 and b.shots.kind[0] == K.HOMING)
 	b.shots.clear()
 	b.atk = null
-	b.start_attack(b.Burst.new(-1, b.shield_center()))
-	for k in int(2.0 / DT):
-		p.invuln = 999.0
-		main._physics_process(DT)
-		if b.shots.size() > 0:
-			break
-	vs = 0
-	for j in b.shots.size():
-		if b.shots.kind[j] == K.SMALL:
-			vs += 1
-	_check("observer burst: 12 main + 6 small (%d small of %d)" % [vs, b.shots.size()], b.shots.size() == 18 and vs == 6)
+	b.damage_part(0, 999)
+	b.damage_part(1, 999)
+	_check("observer missile: with both cannons broken it comes from the shield gem", b.homing_origins().size() == 1 and b.homing_origins()[0][1] == b.shield_center())
 	main.start_stage(0)
 
 
@@ -2382,7 +2370,7 @@ func _zone_test() -> void:
 		o.lingering.clear()
 		o._choose(pp)
 		order.append(o.attack_kind())
-	_check("observer: after waking it shows barrage, halo, rings, then the greatsword (%s)" % str(order), order == ["volley", "halo", "rings", "sword"])
+	_check("observer: after waking it shows missile, halo, rings, then the greatsword (%s)" % str(order), order == ["homing", "halo", "rings", "sword"])
 	o.atk = null
 	o.lingering.clear()
 	o.shots.clear()
@@ -2400,17 +2388,19 @@ func _zone_test() -> void:
 	swung = 0
 	var seen := {}
 	o.bag.clear()
-	for i in 10:                                                     # 한 바퀴씩: 두 바퀴(10번)면 패턴마다 꼭 두 번
+	for i in 8:                                                      # 한 바퀴씩: 두 바퀴(8번)면 패턴마다 꼭 두 번
 		o.atk = null
+		o.shots.clear()
+		o.lingering.clear()
 		o._choose(pp)
 		if o.atk != null:
 			seen[o.atk.kind] = int(seen.get(o.atk.kind, 0)) + 1
-	_check("observer: every pattern comes round once per cycle (%s)" % str(seen), seen.size() == 5 and seen.values().all(func(v): return v == 2))
+	_check("observer: every pattern comes round once per cycle (%s)" % str(seen), seen.size() == 4 and seen.values().all(func(v): return v == 2))
 	# 대검만 남았는데 탄이 계속 오면: 잠깐 기다렸다가 그래도 긋는다 (탄막으로 바퀴를 채우지 않는다)
 	o.bag.assign(["sword"])
 	o.sword_hold = 0.0
 	var waited := 0
-	for i in 30:
+	for i in 80:
 		o.atk = null
 		o.shots.clear()
 		o.shots.spawn(pp + Vector2(-400, 0), Vector2(300, 0), 5.0)

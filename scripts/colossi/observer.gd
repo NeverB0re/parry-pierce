@@ -4,10 +4,11 @@ extends "res://scripts/colossus_base.gd"
 ##   금빛 탄 패리 → 리버스 드라이브로 되꽂기 · 떠다니는 대검 요격 → 쳐낸 검이 코어에 꽂힘 · 방패 동심원(패리 불가) 완전 동조 → 강한 일격
 ## 부위는 어깨포 둘뿐 (부목표: 부수면 그쪽 탄이 멎는다). 코어 장갑(3×3 판)이 다 떨어지면 맨 결정 — 직접 한 대면 터진다.
 ## 페이즈는 1 그대로 (개방 연출 없음): 부위와 코어를 함께 노린다.
-## 공격: 조준 연사 · 흩뿌리기(어깨포, 둘 다 부서지면 방패 보석) · 헤일로 사격 · 대검 긋기(요격) · 방패 동심원(패리 불가)
+## 공격: 유도탄(어깨포마다 큰 유도탄 한 발, 둘 다 부서지면 방패 보석) · 헤일로 사격 · 대검 긋기(요격) · 방패 동심원(패리 불가)
+## 다음 패턴은 필드(적 탄·자리를 내준 공격)가 빌 때까지 기다렸다가 나온다 (초보자가 정신없지 않게, CLEAR_WAIT 까지)
 ## 고르기는 한 바퀴씩 (PATTERNS 를 섞어 차례로 다 쓴 뒤 다시 섞는다): 고르게, 그러나 순서는 매번 다르게
 ## 튜토리얼 보스 (docs/BOSS_observer.md 4.1): 처음엔 잠들어 있다 (패턴 없음, 눈·헤일로가 꺼져 있음) — 플레이어가 둘러보며
-## 심장을 자유롭게 때린다. 심장에 WAKE_DMG 가 쌓이면 깨어나 INTRO 순서(탄막 → 헤일로 → 동심원 → 대검)로 한 번씩 보여 준 뒤 바퀴로 돈다
+## 심장을 자유롭게 때린다. 심장에 WAKE_DMG 가 쌓이면 깨어나 INTRO 순서(유도탄 → 헤일로 → 동심원 → 대검)로 한 번씩 보여 준 뒤 바퀴로 돈다
 ## 바닥 y=0, 위쪽이 음수. 몸 중심 x=0.
 
 const ArmoredCore := preload("res://scripts/armored_core.gd")
@@ -15,8 +16,7 @@ const MeleeWarn := preload("res://scripts/melee_warn.gd")
 const HaloShot := preload("res://scripts/attacks/halo_shot.gd")
 const Greatsword := preload("res://scripts/attacks/greatsword.gd")
 const Rings := preload("res://scripts/attacks/rings.gd")
-const Volley := preload("res://scripts/attacks/volley.gd")
-const Burst := preload("res://scripts/attacks/burst.gd")
+const Homing := preload("res://scripts/attacks/homing.gd")
 
 # ── 구조 ───────────────────────────────────────────────
 const HEART_POS := Vector2(0, -1790)        # 동력 코어 중심 (가슴 갑옷에 박힌 하트 컷 보석)
@@ -62,9 +62,10 @@ const HALO_R := 860.0
 const LENSES := 16
 
 # ── 공격 고르기 ────────────────────────────────────────
-const PATTERNS := ["volley", "burst", "halo", "sword", "rings"]   # 한 바퀴에 하나씩
+const PATTERNS := ["homing", "halo", "sword", "rings"]   # 한 바퀴에 하나씩
+const CLEAR_WAIT := 5.0              # 필드가 비길 기다리는 최대 시간 (오래 남는 탄 때문에 멈추지 않게)
 const SWORD_HOLD := 2.5              # 대검 차례에 탄이 걷히길 기다리는 최대 시간
-const INTRO := ["volley", "halo", "rings", "sword"]   # 깨어난 뒤 한 번씩 보여 주는 순서 (패리 → 패리 → 패리 불가 → 요격)
+const INTRO := ["homing", "halo", "rings", "sword"]   # 깨어난 뒤 한 번씩 보여 주는 순서 (패리 → 패리 → 패리 불가 → 요격)
 const WAKE_DMG := 20                 # 심장에 이만큼 쌓이면 깨어난다
 const WAKE_FALLBACK := 40.0          # 아무것도 안 해도 이만큼 지나면 깨어난다 (막힘 방지)
 const WAKE_TIME := 1.4               # 깨어나는 연출 (눈·헤일로가 켜지고 대검이 떠오른다)
@@ -91,6 +92,7 @@ var sword_ang := PI * 0.5            # 대검 방향 (회전축 → 칼끝)
 var halo_glow: Array[float] = []     # 렌즈별 발사 전 발광
 var bag: Array[String] = []          # 이번 바퀴에 남은 패턴
 var sword_hold := 0.0
+var clear_wait := 0.0
 var awake := false
 var wake_k := 0.0                    # 깨어난 정도 (그림: 눈·헤일로 밝기, 대검 높이)
 var sleep_t := 0.0
@@ -128,6 +130,7 @@ func reset() -> void:
 		halo_glow.append(0.0)
 	bag.clear()
 	sword_hold = 0.0
+	clear_wait = 0.0
 	awake = false
 	wake_k = 0.0
 	sleep_t = 0.0
@@ -368,6 +371,10 @@ func _choose(ppos: Vector2) -> void:
 	if not awake:                                        # 잠든 동안은 공격하지 않는다
 		next_t = 0.3
 		return
+	if _field_busy() and clear_wait < CLEAR_WAIT:       # 앞 패턴의 탄이 다 사라질 때까지 기다린다
+		clear_wait += 0.2
+		next_t = 0.2
+		return
 	var list: Array[String] = intro if not intro.is_empty() else bag   # 깨어난 직후엔 INTRO 순서대로
 	if list.is_empty():
 		bag.assign(PATTERNS)
@@ -384,6 +391,7 @@ func _choose(ppos: Vector2) -> void:
 		if list.size() > 1:                             # 그래도 안 걷히면 다음 패턴 먼저 (대검은 이번 바퀴에 남는다)
 			kind = list[1]
 	sword_hold = 0.0
+	clear_wait = 0.0
 	list.erase(kind)
 	last = kind
 	match kind:
@@ -397,22 +405,32 @@ func _choose(ppos: Vector2) -> void:
 			var gs := Greatsword.new()
 			start_attack(gs)
 			gs.aim_at(ppos)
-		_:
-			var c := _shooter(ppos)
-			var org: Vector2 = shield_center() if c < 0 else MUZZLES[c]   # 어깨포가 다 부서지면 방패 보석이 쏜다
-			start_attack(Volley.new(c, org, ppos) if kind == "volley" else Burst.new(c, org))
+		"homing":
+			start_attack(Homing.new())
 
 
-## 탄 발사점: 플레이어에게서 더 먼(살아있는) 어깨포, 둘 다 부서지면 방패 보석(-1)
-func _shooter(ppos: Vector2) -> int:
-	if part_alive(0) and part_alive(1):
-		return 0 if ppos.distance_to(MUZZLES[0]) >= ppos.distance_to(MUZZLES[1]) else 1
-	if part_alive(0):
-		return 0
-	return 1 if part_alive(1) else -1
+## 필드에 적 탄이나 자리를 내준 공격(퍼지는 동심원)이 남아 있는가
+func _field_busy() -> bool:
+	if not lingering.is_empty():
+		return true
+	for i in shots.size():
+		if shots.mine[i] == 0:
+			return true
+	return false
 
 
-## 발사 전 발광: -1 = 방패 보석 금빛(탄막, 눈도 같이), -4 = 방패 보석 보라(동심원), 0·1 = 포구
+## 유도탄 발사점 (homing.gd): 살아 있는 어깨포의 포구마다 한 발, 둘 다 부서지면 방패 보석(-1)
+func homing_origins() -> Array:
+	var out := []
+	for i in 2:
+		if part_alive(i):
+			out.append([i, MUZZLES[i]])
+	if out.is_empty():
+		out.append([-1, shield_center()])
+	return out
+
+
+## 발사 전 발광: -1 = 방패 보석 금빛(유도탄, 눈도 같이), -4 = 방패 보석 보라(동심원), 0·1 = 포구
 func set_glow(c: int, v: float) -> void:
 	if c == -4:
 		shield_glow = v
