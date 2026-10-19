@@ -1040,6 +1040,19 @@ func _v035_test() -> void:
 	b.gun_exposed = true
 	b.damage_part(b.BIG, 1)
 	_check("small hits (reflected bullets) on the exposed gun only chip it, no stagger", b.part_hp[b.BIG] == b.BIG_HP - 1 and b.gun_shake == 0.0)
+	# 주포 탄을 막거나 되돌리면 호위탄 고리는 사라진다
+	for how in ["parry", "return"]:
+		b.shots.clear()
+		var g: int = b.shots.new_group()
+		b.shots.spawn(Vector2(0, -1200), Vector2(0, 200), 5.0, 0.0, 0.0, b.shots.Kind.SHELL, g)
+		for k in 6:
+			b.shots.spawn(Vector2(0, -1200) + Vector2.from_angle(k) * 120.0, Vector2(0, 200), 5.0, 0.0, 0.0, b.shots.Kind.SMALL, g, k, 120.0)
+		if how == "parry":
+			b.on_parried({"id": "bolt", "idx": 0})
+		else:
+			b.shots.reflect_one(0, Vector2(0, -1600))
+		_check("%s of the heavy shell clears its escort ring (%d left)" % [how, b.shots.size()], b.shots.size() == (0 if how == "parry" else 1))
+	b.shots.clear()
 	# 반격 코어로 되돌린 주포 탄: 열린 코어에 크게 (닫혀 있으면 보통 규칙)
 	var hp_s: int = b.part_hp[b.BIG]
 	var sh_hit: Dictionary = b.strike_hit(b.gun_center(), 40.0)

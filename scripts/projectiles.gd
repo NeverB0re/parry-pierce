@@ -28,6 +28,7 @@ const KILL_TOP := -3100.0
 const C_BOLT := Color(1.0, 0.88, 0.35)
 const C_LAVA := Color(1.0, 0.35, 0.12)
 const C_MINE := Color(0.7, 0.95, 1.0)  # 반사된(플레이어) 탄
+const C_RETURN := Color(0.4, 0.75, 1.0)   # 되돌린 대구경 포탄 (플레이어 색, 푸르게)
 const C_HOMING := Color(1.0, 0.3, 0.12)  # 유도탄: 금색 몸에 붉은 불길 (쫓아오는 위험한 주탄)
 const C_SMALL := Color(1.0, 0.58, 0.12)  # 잔탄: 붉은 기가 도는 노랑(주황) — 패리 가능 = 금색 계열, 주탄 금색보다 붉게
 
@@ -220,11 +221,25 @@ func reflect_near(p: Vector2, reach: float, target: Vector2) -> int:
 
 ## 탄 하나를 플레이어 것으로 바꿔 target 쪽으로 빠르게 되돌린다 (반사 코어·반격 코어)
 func reflect_one(i: int, target: Vector2) -> void:
+	var g := grp[i]                              # 묶음의 우두머리(주포 탄)를 되돌리면 호위탄은 사라진다
+	grp[i] = 0
 	mine[i] = 1
 	vel[i] = (target - pos[i]).normalized() * REFLECT_SPEED
 	grav[i] = 0.0
 	age[i] = WARMUP
 	life[i] = 4.0
+	remove_group(g)
+
+
+## 묶음 g 의 탄을 모두 지운다 (주탄이 패리되면 호위탄 고리는 사라진다). g = 0 이면 아무것도 안 한다
+func remove_group(g: int) -> void:
+	if g == 0:
+		return
+	var k := pos.size() - 1
+	while k >= 0:
+		if grp[k] == g:
+			remove(k)
+		k -= 1
 
 
 ## 플레이어 것(반사된 탄)이 표적에 닿으면 지우고 [{pos, hit, dmg}] 로 돌려준다
@@ -301,6 +316,16 @@ func draw(ci: CanvasItem) -> void:
 				fade = 1.0 if fmod(sqrt(life[i]) * 10.0, 1.0) > 0.4 else 0.22
 				mod = Color(1, 1, 1, fade)
 		var tex: Texture2D = _tex_lava if k == Kind.LAVA else (_tex_homing if hot else _tex_bolt)
+		if k == Kind.SHELL and mine[i] == 1:        # 되돌린 대구경 포탄: 플레이어 색(푸른빛)으로 크고 무겁게
+			ci.draw_circle(pos[i], RADII[k] * 3.0 + 10.0 * pulse, Color(C_RETURN, 0.12))
+			ci.draw_circle(pos[i], RADII[k] * 2.0 + 6.0 * pulse, Color(C_RETURN, 0.22))
+			ci.draw_arc(pos[i], RADII[k] + 12.0 + 5.0 * pulse, 0.0, TAU, 28, Color(0.85, 0.97, 1.0, 0.9), 4.0)
+			for j in 6:
+				var a0 := spin * 0.9 + j * TAU / 6.0
+				ci.draw_arc(pos[i], RADII[k] + 26.0, a0, a0 + 0.5, 6, Color(C_RETURN, 0.8), 5.0)
+			ci.draw_circle(pos[i], RADII[k], C_RETURN)                       # 몸도 푸르게 (금색 그림을 물들이면 초록빛이 된다)
+			ci.draw_circle(pos[i], RADII[k] * 0.55, Color(0.9, 0.97, 1.0))
+			continue
 		if k == Kind.SHELL and mine[i] == 0:        # 대구경 포탄: 크고 무겁게 — 번지는 열기, 맥동하는 금빛 고리 둘, 도는 날
 			ci.draw_circle(pos[i], RADII[k] * 3.0 + 10.0 * pulse, Color(1.0, 0.6, 0.2, 0.08))
 			ci.draw_circle(pos[i], RADII[k] * 2.0 + 6.0 * pulse, Color(C_BOLT, 0.16))

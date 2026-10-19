@@ -1066,6 +1066,16 @@ func _drain_boss_events() -> void:
 				sfx.play("hit_light", -2.0)
 				fx.burst(pos, int(10 + rd * 4), Color(0.75, 1.0, 1.0), 600.0, 0.3, 2.5)
 				fx.sprite(pos, 1, 90.0 + rd * 40.0, 0.3)
+				if ev["hit"].get("shell", false):        # 되돌린 주포 탄: 크게 폭발한다 (푸른빛)
+					hitstop = maxf(hitstop, 0.14)
+					shake = maxf(shake, 30.0)
+					sfx.play("break", 4.0)
+					sfx.play("stomp", 0.0)
+					fx.rays_burst(pos, 18, Color(0.55, 0.85, 1.0), 900.0, 0.6, 9.0)
+					fx.ring(pos, Color(0.6, 0.9, 1.0), 520.0, 0.55, 12.0)
+					fx.burst(pos, 50, Color(0.6, 0.9, 1.0), 1300.0, 0.7, 5.0)
+					fx.sprite(pos, 1, 480.0, 0.6)
+					hud.flash(0.14, Color(0.7, 0.9, 1.0))
 				if dmg <= 0 or not boss.takes_reflect(ev["hit"]):
 					continue
 				tele.hit("reflect", dmg)
