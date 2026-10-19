@@ -216,10 +216,14 @@ func assist_targets(from := Vector2.ZERO) -> Array[Dictionary]:
 	return out
 
 
-## 잠든 동안은 어깨포 표적 테두리를 그리지 않는다 (처음엔 심장만 노리게)
+## 표적 테두리는 어깨포 그림에 박혀 있다 (_draw_cannon 의 외곽선이 붉게 빛난다, v0.110). 여기서는 손상 단계만. 잠든 동안은 표적이 아니다
 func _draw_part_marks() -> void:
-	if awake:
-		super()
+	if not awake or dead:
+		return
+	var pulse := 0.5 + 0.5 * sin(t * 5.0)
+	for i in part_count():
+		if part_alive(i):
+			_draw_part_damage(i, part_pos(i), part_radius(i), pulse)
 
 
 ## 체력 게이지: 코어 장갑만 (청록 보호 몫 없음)
@@ -791,20 +795,25 @@ func _draw_cannon(a: int) -> void:
 	var d := (mz - b).normalized()
 	var n := d.orthogonal()
 	var box := PackedVector2Array([b - d * 64.0 + n * 58.0, b + d * 30.0 + n * 58.0, b + d * 30.0 - n * 58.0, b - d * 64.0 - n * 58.0])
+	var target := part_alive(a) and awake and not dead           # 깨어 있는 동안 어깨포 = 표적: 외곽선이 붉게 빛난다 (부서지거나 잠든 동안은 강철색)
 	draw_colored_polygon(box, C_BODY_DARK)
-	draw_polyline(_closed(box), Color(C_RIM, 0.6), 4.0)
 	if part_alive(a):
 		var bar := PackedVector2Array([b + d * 30.0 + n * 24.0, mz - d * 18.0 + n * 24.0, mz - d * 18.0 - n * 24.0, b + d * 30.0 - n * 24.0])
 		draw_colored_polygon(bar, C_BODY)
 		draw_line(b + d * 30.0 + n * 18.0, mz - d * 18.0 + n * 18.0, Color(C_RIM, 0.5), 3.0)
 		var brake := PackedVector2Array([mz - d * 22.0 + n * 36.0, mz + d * 20.0 + n * 36.0, mz + d * 20.0 - n * 36.0, mz - d * 22.0 - n * 36.0])
 		draw_colored_polygon(brake, C_BODY_DARK)
-		draw_polyline(_closed(brake), Color(C_RIM, 0.7), 3.0)
+		if target:
+			rim_poly(part_outline(a), rim_color(a), 5.0)              # 포좌 + 포신 + 제퇴기를 한 줄로 두른 외곽선
+		else:
+			draw_polyline(_closed(box), Color(C_RIM, 0.6), 4.0)
+			draw_polyline(_closed(brake), Color(C_RIM, 0.7), 3.0)
 		var g := cannon_glow[a]
 		var on := 0.1 + 0.9 * wake_k                                   # 잠든 동안은 포구 불이 꺼져 있다
 		draw_circle(mz + d * 20.0, 18.0 + 22.0 * g, Color(C_EYE, (0.12 + 0.5 * g) * on))
 		draw_circle(mz + d * 20.0, 8.0 + 6.0 * g, Color(C_EYE, (0.55 + 0.45 * g) * on))
 	else:
+		draw_polyline(_closed(box), Color(C_RIM, 0.6), 4.0)
 		_draw_stump(b + d * 40.0, d, 30.0)
 
 

@@ -719,6 +719,9 @@ func _draw_part_marks() -> void:
 			continue
 		var p := part_pos(i)
 		var r := part_radius(i)
+		if _rim_part(i):                           # 표적 테두리가 그림에 박힌 부위: 손상 단계만 (덧씌우는 원 없음)
+			_draw_part_damage(i, p, r, pulse)
+			continue
 		if focus_glow > 0.0:
 			var in_reach := p.distance_to(focus_from) <= focus_reach
 			draw_circle(p, r * 1.7, Color(C_HEART, focus_glow * (0.3 if in_reach else 0.12) * (0.6 + 0.4 * pulse)))
@@ -774,6 +777,29 @@ func _draw_part_outline(i: int, p: Vector2, r: float, flick: float) -> void:
 			draw_line(a1.lerp(b1, 0.12), a1.lerp(b1, 0.7), col, w)
 	else:
 		draw_polyline(closed, col, w)
+
+
+## 그림에 박힌 표적 테두리 (v0.110): 따로 덧씌우는 원 대신, 부위 그림의 외곽선 자체를 이 색으로 그린다.
+## 붉게 숨쉬듯 빛나고, 겨누면(조준 방향·차지·패리 조준 중 사거리 안) 더 밝고, 맞으면 하얗게 번쩍. 거의 부서지면 깜빡인다
+func rim_color(i: int) -> Color:
+	var breathe := 0.5 + 0.5 * sin(t * 2.2 + i * 1.3)
+	var p := part_pos(i)
+	var to := p - aim_from
+	var aimed := to.length() < 1600.0 and to.normalized().dot(aim_dir) > cos(0.22)
+	var reach := 1.0 if p.distance_to(focus_from) <= focus_reach else 0.35
+	var a := 0.6 + 0.25 * breathe + (0.15 if aimed else 0.0) + 0.35 * focus_glow * reach
+	if i < part_stage.size() and part_stage[i] >= 3 and int(t * 9.0 + i) % 3 == 0:
+		a *= 0.4
+	var fl: float = part_flash[i] if i < part_flash.size() else 0.0
+	return Color(C_TARGET, minf(1.0, a)).lerp(Color.WHITE, fl)
+
+
+## 표적 외곽선 한 줄 (닫힌 다각형): 바깥 번짐 + 선. w = 선 굵기
+func rim_poly(pts: PackedVector2Array, col: Color, w: float) -> void:
+	var ol := pts.duplicate()
+	ol.append(pts[0])
+	draw_polyline(ol, Color(col, col.a * 0.22), w * 3.5)
+	draw_polyline(ol, col, w)
 
 
 ## 외부 시스템 손상: 1 긁힘 → 2 빛나는 균열 + 불꽃 → 3 떨어져 나간 자리 + 연기
@@ -837,6 +863,11 @@ func part_radius(_i: int) -> float:
 ## 부위가 부서지는 순간 (떨어져 나가는 잔해 등)
 func _on_part_broken(_i: int) -> void:
 	pass
+
+
+## 표적 테두리를 부위 그림의 외곽선으로 직접 그리는 부위인가 (rim_color). true 면 _draw_part_marks 는 원을 씌우지 않는다
+func _rim_part(_i: int) -> bool:
+	return false
 
 
 ## 약점 표시를 크게 빛낼 부위인가 (예: 요격으로 멈춘 팔의 관절)

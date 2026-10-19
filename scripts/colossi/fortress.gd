@@ -292,6 +292,11 @@ func part_outline(i: int) -> PackedVector2Array:
 
 
 ## 코어 포대 표적: 코어 둘레의 붉은 원 하나 (다른 표적 테두리와 같은 굵기). 드러나면 굵고 밝게 맥동한다
+## 보조 포탑·사일로는 그림의 외곽선이 표적 테두리다 (v0.110). 코어 포대는 따로 코어 둘레 고리
+func _rim_part(i: int) -> bool:
+	return i != BIG
+
+
 func _draw_part_outline(i: int, p: Vector2, r: float, flick: float) -> void:
 	if i != BIG:
 		super(i, p, r, flick)
@@ -993,7 +998,11 @@ func _draw_batteries() -> void:
 		var tip: Vector2 = battery_tip(i)
 		var d := (tip - b).normalized()
 		var n := d.orthogonal()
+		var rim := rim_color(i)
 		if part_alive(i):
+			for k in [-1.0, 1.0]:                                     # 표적: 포신 둘레가 붉게 빛난다
+				_cap(b + n * 14.0 * k, tip + n * 14.0 * k, 30.0, Color(rim, rim.a * 0.22))
+				_cap(b + n * 14.0 * k, tip + n * 14.0 * k, 24.0, rim)
 			for k in [-1.0, 1.0]:
 				_cap(b + n * 14.0 * k, tip + n * 14.0 * k, 18.0, C_HULL_DARK)
 			var g := glow[i]
@@ -1002,7 +1011,11 @@ func _draw_batteries() -> void:
 			_cap(b, b + d * 40.0, 26.0, C_HULL_DARK)
 			draw_circle(b + d * 40.0, 10.0, Color(C_HEART, 0.25 + 0.15 * sin(t * 4.0)))
 		draw_circle(b, 48.0, C_TOP)
-		draw_arc(b, 48.0, PI, TAU, 20, C_RIM, 4.0)
+		if part_alive(i):                                             # 표적: 포탑 둘레가 붉게 빛난다
+			draw_arc(b, 50.0, 0.0, TAU, 40, Color(rim, rim.a * 0.22), 16.0)
+			draw_arc(b, 50.0, 0.0, TAU, 40, rim, 4.5)
+		else:
+			draw_arc(b, 48.0, PI, TAU, 20, C_RIM, 4.0)
 		draw_rect(Rect2(b.x - 56.0, b.y + 20.0, 112.0, 28.0), C_HULL_DARK)
 
 
@@ -1012,7 +1025,10 @@ func _draw_silos() -> void:
 		var p: Vector2 = SILOS[k]
 		var rc := Rect2(p.x - 52.0, p.y - 62.0, 104.0, 124.0)
 		draw_rect(rc, C_HULL_DARK)
-		draw_rect(rc, Color(C_RIM, 0.6), false, 3.0)
+		if part_alive(2 + k):                                         # 표적: 상자 외곽선이 붉게 빛난다
+			rim_poly(PackedVector2Array([rc.position, Vector2(rc.end.x, rc.position.y), rc.end, Vector2(rc.position.x, rc.end.y)]), rim_color(2 + k), 4.5)
+		else:
+			draw_rect(rc, Color(C_RIM, 0.6), false, 3.0)
 		draw_line(Vector2(rc.position.x, p.y + 10.0), Vector2(rc.end.x, p.y + 10.0), Color(C_RIM, 0.25), 3.0)
 		var hatch := p + Vector2(0, -36)
 		if part_alive(2 + k):
