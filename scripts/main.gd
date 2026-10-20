@@ -11,6 +11,7 @@ const Background := preload("res://scripts/background.gd")
 const Hud := preload("res://scripts/hud.gd")
 const Sfx := preload("res://scripts/sfx.gd")
 const Music := preload("res://scripts/music.gd")
+const AudioSettings := preload("res://scripts/audio_settings.gd")
 const PauseMenu := preload("res://scripts/pause_menu.gd")
 const TitleMenu := preload("res://scripts/title_menu.gd")
 const Tutorial := preload("res://scripts/tutorial.gd")
@@ -102,6 +103,7 @@ var heat_t := 0.0                  # 다음에 한 칸 식을 때까지
 func _ready() -> void:
 	randomize()
 	Loc.init()                                    # 저장된 언어 (없으면 OS 언어)
+	AudioSettings.init()                          # 음량 버스 (Music·SFX) + 저장된 음량 (처음엔 전체 절반)
 	get_window().title = "Parry Pierce"           # 프로젝트 이름은 그대로 둔다 (저장 폴더 이름이 이 이름을 따르므로 바꾸면 기존 진행이 사라진다)
 	var touch_mode := OS.has_feature("mobile")
 	Quality.low = touch_mode                      # 모바일: 연출 일부를 줄여 프레임을 지킨다

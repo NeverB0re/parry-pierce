@@ -17,7 +17,7 @@ var next := 0
 func _ready() -> void:
 	for i in 12:
 		var p := AudioStreamPlayer.new()
-		p.bus = "Master"
+		p.bus = "SFX"
 		add_child(p)
 		players.append(p)
 	# ── 보상: 크고 선명하고 높게 ──
