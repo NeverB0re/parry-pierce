@@ -2,6 +2,7 @@ extends CanvasLayer
 ## ESC 메뉴. 플레이 중에는 마우스가 창 밖으로 못 나가고, 메뉴를 열어야 풀린다. 열 때마다(그리고 언어를 바꿀 때) 글자를 새로 만든다.
 const UiFont := preload("res://scripts/ui_font.gd")
 const UiStyle := preload("res://scripts/ui_style.gd")
+const AudioSettings := preload("res://scripts/audio_settings.gd")
 
 const Loc := preload("res://scripts/loc.gd")
 
@@ -16,6 +17,7 @@ var title                            # main.gd 가 연결: 타이틀이 열려 �
 var center: CenterContainer
 var main_box: Control
 var help_box: Control
+var sound_box: Control
 
 
 func _ready() -> void:
@@ -62,6 +64,7 @@ func _build() -> void:
 		visible = false
 		world_requested.emit())
 	_button(box, Loc.t("조작법"), func() -> void: _show_help(true))
+	_button(box, Loc.t("옵션"), func() -> void: _show_sound(true))
 	_button(box, Loc.t("타이틀 화면"), func() -> void:
 		visible = false
 		get_tree().paused = false
@@ -83,6 +86,19 @@ func _build() -> void:
 			var sid: String = id
 			_button(hbox, tutorial.page_title(sid), func() -> void: tutorial.replay(sid))
 	_button(hbox, Loc.t("뒤로"), func() -> void: _show_help(false))
+
+	var sbox := VBoxContainer.new()
+	sbox.add_theme_constant_override("separation", 14)
+	sound_box = _panel(sbox)
+	sound_box.visible = false
+	var st := Label.new()
+	st.text = Loc.t("옵션")
+	st.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	UiStyle.title(st, int(36 * ui_scale))
+	sbox.add_child(st)
+	sbox.add_child(AudioSettings.section_label(font, ui_scale))
+	AudioSettings.build_rows(sbox, font, ui_scale)
+	_button(sbox, Loc.t("뒤로"), func() -> void: _show_sound(false))
 
 
 ## 가운데 판 (UiStyle.panel) 안에 content 를 넣고 판을 돌려준다
@@ -117,6 +133,15 @@ func _unhandled_input(e: InputEvent) -> void:
 func _show_help(on: bool) -> void:
 	main_box.visible = not on
 	help_box.visible = on
+	sound_box.visible = false
+
+
+func _show_sound(on: bool) -> void:
+	main_box.visible = not on
+	help_box.visible = false
+	sound_box.visible = on
+	if not on:
+		AudioSettings.save()
 
 
 func open() -> void:

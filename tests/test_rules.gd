@@ -2422,7 +2422,7 @@ func _title_test() -> void:
 	var texts := []
 	for b in t.root.find_children("*", "Button", true, false):
 		texts.append(b.text)
-	_check("fresh title: Start / Continue / How to Play / Quit (%s)" % str(texts), texts.size() == 4 and texts[0] == "시작")
+	_check("fresh title: Start / Continue / How to Play / Options / Quit (%s)" % str(texts), texts.size() == 5 and texts[0] == "시작" and texts[3] == "옵션")
 	var cb: Button = t.root.find_children("*", "Button", true, false)[1]
 	_check("Continue is disabled without progress", cb.disabled)
 	t.can_resume = true                                       # ESC 메뉴에서 왔을 때: 이어하기(멈춘 판으로) + 스테이지 선택이 따로
@@ -2430,14 +2430,14 @@ func _title_test() -> void:
 	var rt := []
 	for bb in t.root.find_children("*", "Button", true, false):
 		rt.append(bb.text)
-	_check("from the pause menu: Continue (resume) and Stage Select are separate (%s)" % str(rt), rt.size() == 5 and rt[1] == "이어하기" and rt[2] == "스테이지 선택 (항로도)")
+	_check("from the pause menu: Continue (resume) and Stage Select are separate (%s)" % str(rt), rt.size() == 6 and rt[1] == "이어하기" and rt[2] == "스테이지 선택 (항로도)")
 	t.can_resume = false
 	t._build()
 	t._on_flag("en")
 	var en_texts := []
 	for b in t.root.find_children("*", "Button", true, false):
 		en_texts.append(b.text)
-	_check("flag switches the language and rebuilds (%s)" % str(en_texts), Loc.lang == "en" and en_texts[0] == "Start" and en_texts[3] == "Quit")
+	_check("flag switches the language and rebuilds (%s)" % str(en_texts), Loc.lang == "en" and en_texts[0] == "Start" and en_texts[3] == "Options" and en_texts[4] == "Quit")
 	var flags: Array = t.root.find_children("*", "Control", true, false).filter(func(c): return c.get_script() != null and c.get("lang") != null)
 	_check("two flag buttons, English one selected", flags.size() == 2 and flags[0].lang == "en" and flags[0].selected and not flags[1].selected)
 	t._on_new()

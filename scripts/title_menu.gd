@@ -5,6 +5,7 @@ extends CanvasLayer
 ## 새 게임은 저장된 진행이 있으면 한 번 더 눌러야 시작한다 (확인).
 const UiFont := preload("res://scripts/ui_font.gd")
 const UiStyle := preload("res://scripts/ui_style.gd")
+const AudioSettings := preload("res://scripts/audio_settings.gd")
 
 const Loc := preload("res://scripts/loc.gd")
 
@@ -20,6 +21,7 @@ var font: Font
 var root: Control
 var _confirm_new := false
 var _help := false
+var _sound := false
 var can_resume := false              # ESC 메뉴에서 왔다 = 멈춰 둔 판이 있다 (main.gd 가 정한다)
 
 
@@ -37,6 +39,7 @@ func _ready() -> void:
 func open() -> void:
 	_confirm_new = false
 	_help = false
+	_sound = false
 	visible = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_build()
@@ -77,7 +80,17 @@ func _build() -> void:
 	box.add_theme_constant_override("separation", int(14 * ui_scale))
 	center.add_child(box)
 
-	if _help and tutorial != null:                    # 조작법 목록: 제목 대신 목록만 (화면에 다 들어오게 촘촘히)
+	if _sound:                                        # 옵션: 소리(음량 슬라이더 셋)
+		var stl := _label(Loc.t("옵션"), 36, UiStyle.C_TITLE)
+		UiStyle.title(stl, int(36 * ui_scale))
+		box.add_child(stl)
+		box.add_child(AudioSettings.section_label(font, ui_scale))
+		AudioSettings.build_rows(box, font, ui_scale)
+		_button(box, Loc.t("뒤로"), func() -> void:
+			AudioSettings.save()
+			_sound = false
+			_build())
+	elif _help and tutorial != null:                    # 조작법 목록: 제목 대신 목록만 (화면에 다 들어오게 촘촘히)
 		box.add_theme_constant_override("separation", int(8 * ui_scale))
 		var ht := _label(Loc.t("조작법"), 36, UiStyle.C_TITLE)
 		UiStyle.title(ht, int(36 * ui_scale))
@@ -119,10 +132,20 @@ func _build() -> void:
 			close()
 			continue_requested.emit())
 		b_cont.disabled = not _has_progress()
-		_button(box, Loc.t("조작법"), func() -> void:
+		var pair := HBoxContainer.new()                        # 조작법 · 옵션 은 반씩 나란히 (이어하기까지 있어도 화면에 들어오게)
+		pair.add_theme_constant_override("separation", int(14 * ui_scale))
+		box.add_child(pair)
+		var b_help := _button(pair, Loc.t("조작법"), func() -> void:
 			_confirm_new = false
 			_help = true
 			_build())
+		var b_sound := _button(pair, Loc.t("옵션"), func() -> void:
+			_confirm_new = false
+			_sound = true
+			_build())
+		for hb in [b_help, b_sound]:
+			hb.custom_minimum_size = Vector2(160, 56) * ui_scale
+			hb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		if not OS.has_feature("web"):                          # 브라우저에서는 창을 닫을 수 없다
 			_button(box, Loc.t("종료"), func() -> void: quit_requested.emit())
 		if b_res != null:

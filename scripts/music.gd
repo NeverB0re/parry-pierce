@@ -9,6 +9,7 @@ const VOLUME_DB := -16.0
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	volume_db = VOLUME_DB
+	bus = "Music"
 	if DisplayServer.get_name() == "headless" or not ResourceLoader.exists(PATH):
 		return
 	stream = load(PATH)
