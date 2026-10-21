@@ -1,5 +1,5 @@
 extends RefCounted
-## 음량 설정: 전체 · 음악 · 효과음 (0~1). 버스 Music·SFX 를 만들고 Master 로 보낸다. user://settings.cfg 의 [audio] 에 저장된다.
+## 음량 설정: 전체 · 음악 · 효과음 (0~1). 버스 Music·SFX (default_bus_layout.tres) 는 Master 로 보낸다. user://settings.cfg 의 [audio] 에 저장된다.
 ## 슬라이더 값은 귀에 들리는 크기에 맞춰 제곱해서 쓴다 (0.5 = -12dB ≈ 체감 절반).
 ## 처음 실행은 전체 0.7 (-6dB): 100% 에서 실제 플레이 소리를 재면 약 -14 LUFS(음악 스트리밍 수준, 겹치면 0dBFS 까지 닿음) →
 ## 0.7 이면 약 -20 LUFS (PC 게임에서 흔한 -18~-23 사이). Master 끝에 리미터를 걸어 효과음이 겹쳐도 깨지지 않게 한다 (v0.119 측정)
@@ -15,18 +15,13 @@ static var vol := DEFAULT.duplicate()
 static var persist := true           # 헤드리스(테스트)에서는 읽고 쓰지 않는다
 
 
-## 시작할 때 한 번: 버스를 만들고 저장된 음량을 적용한다
+## 시작할 때 한 번: 저장된 음량을 적용한다. 버스 Music·SFX 는 default_bus_layout.tres 에 있다
+## (실행 중에 add_bus 로 만들면 웹판(샘플 재생 방식)에서 그 버스로 가는 소리가 전부 무음이 된다, v0.120)
 static func init() -> void:
-	for b in ["Music", "SFX"]:
-		if AudioServer.get_bus_index(b) < 0:
-			AudioServer.add_bus()
-			var i := AudioServer.bus_count - 1
-			AudioServer.set_bus_name(i, b)
-			AudioServer.set_bus_send(i, "Master")
 	var has_limiter := false
 	for k in AudioServer.get_bus_effect_count(0):
 		has_limiter = has_limiter or AudioServer.get_bus_effect(0, k) is AudioEffectHardLimiter
-	if not has_limiter:
+	if not has_limiter and not OS.has_feature("web"):     # 웹 샘플 재생은 버스 효과를 쓰지 않는다
 		var lim := AudioEffectHardLimiter.new()
 		lim.ceiling_db = -1.0
 		AudioServer.add_bus_effect(0, lim)
