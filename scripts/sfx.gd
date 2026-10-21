@@ -88,13 +88,25 @@ func _ready() -> void:
 			+ sin(TAU * (60.0 - 20.0 * t) * t) * exp(-t * 3.0) * 0.7)
 
 
+## 소리마다 크기 맞춤 (dB): 합성한 소리의 순간 최대 음량(K 가중, 400ms)을 재서 등급별 목표에 맞춘 값 (v0.121 측정).
+##   큰 보상·사건(퍼펙트·파괴·개방·승리) -16 / 보통 보상(패리·드라이브 적중) -18 / 피격 -17 / 적의 큰 소리 -19 /
+##   돌진 -19~-21 / 잔잔한 것(작은 탄·스침·가벼운 타격) -22  — 음악(-24 LUFS)보다 4~8dB 위에 오게
+const TRIM := {
+	"beam": -0.2, "bolt": -1.8, "break": -6.4, "charged": -3.6, "crack": -4.4, "dash": -4.3, "dash_big": -7.3,
+	"deflect": -3.7, "graze": 0.5, "heal": -0.3, "hit_charge": -4.3, "hit_drive": -5.4, "hit_light": 0.3,
+	"hit_perfect": -10.2, "hurt": -0.5, "land": -5.6, "open": -7.1, "parry": -3.3, "perfect": -6.6,
+	"stomp": -9.1, "sync": -6.3, "win": -7.2,
+}
+const CALL_K := 0.5                  # 부르는 쪽이 더한 강조(db)는 반만 쓴다 (+6 이 겹쳐 튀지 않게)
+
+
 func play(name: String, db := 0.0, pitch_jitter := 0.06) -> void:
 	if not streams.has(name):
 		return
 	var p := players[next]
 	next = (next + 1) % players.size()
 	p.stream = streams[name]
-	p.volume_db = db
+	p.volume_db = float(TRIM.get(name, 0.0)) + db * CALL_K
 	p.pitch_scale = 1.0 + randf_range(-pitch_jitter, pitch_jitter)
 	p.play()
 

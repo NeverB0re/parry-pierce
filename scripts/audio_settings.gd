@@ -1,15 +1,15 @@
 extends RefCounted
 ## 음량 설정: 전체 · 음악 · 효과음 (0~1). 버스 Music·SFX (default_bus_layout.tres) 는 Master 로 보낸다. user://settings.cfg 의 [audio] 에 저장된다.
 ## 슬라이더 값은 귀에 들리는 크기에 맞춰 제곱해서 쓴다 (0.5 = -12dB ≈ 체감 절반).
-## 처음 실행은 전체 0.7 (-6dB): 100% 에서 실제 플레이 소리를 재면 약 -14 LUFS(음악 스트리밍 수준, 겹치면 0dBFS 까지 닿음) →
-## 0.7 이면 약 -20 LUFS (PC 게임에서 흔한 -18~-23 사이). Master 끝에 리미터를 걸어 효과음이 겹쳐도 깨지지 않게 한다 (v0.119 측정)
+## 처음 실행은 전체 0.8 (-3.9dB): 소리마다 크기를 맞춘 뒤(sfx.TRIM, v0.121) 100% 에서 실제 플레이 소리를 재면 약 -17 LUFS →
+## 0.8 이면 약 -21 LUFS (PC 게임에서 흔한 -18~-23 사이). Master 끝에 리미터를 걸어 효과음이 겹쳐도 깨지지 않게 한다 (웹 제외)
 
 const Loc := preload("res://scripts/loc.gd")
 const UiStyle := preload("res://scripts/ui_style.gd")
 const PATH := "user://settings.cfg"
 const BUSES := ["Master", "Music", "SFX"]
 const NAMES := {"Master": "전체 음량", "Music": "음악", "SFX": "효과음"}
-const DEFAULT := {"Master": 0.7, "Music": 1.0, "SFX": 1.0}
+const DEFAULT := {"Master": 0.8, "Music": 1.0, "SFX": 1.0}
 
 static var vol := DEFAULT.duplicate()
 static var persist := true           # 헤드리스(테스트)에서는 읽고 쓰지 않는다

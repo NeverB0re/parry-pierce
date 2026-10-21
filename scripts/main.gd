@@ -324,8 +324,8 @@ func _on_title_continue() -> void:
 func _on_jump() -> void:
 	title.close()
 	var st: Dictionary = Stages.LIST[profile.stage]
-	sfx.play("dash_big", 4.0, 0.0)
-	sfx.play("perfect", 0.0, 0.0)
+	sfx.play("dash_big", -4.0, 0.0)               # 도약: 게임을 시작하는 첫 소리라 놀라지 않게 작게
+	sfx.play("perfect", -6.0, 0.0)
 	ftl.play(Loc.t("%s — 콜로서스 「%s」") % [Loc.t(st["coord"]), Loc.t(st["name"])], func() -> void: start_stage(profile.stage))
 
 
@@ -1160,7 +1160,7 @@ func on_launch(pos: Vector2) -> void:
 	plat_on = false
 	plat_dir = 1.0
 	shake = maxf(shake, 14.0)
-	sfx.play("dash_big", 4.0, 0.0)
+	sfx.play("dash_big", 0.0, 0.0)
 	fx.burst(pos + Vector2(0, 20), 40, Color(1.0, 0.6, 0.3), 900.0, 0.6, 4.0, 900.0, Vector2.DOWN, 0.9)
 	fx.ring(pos, Color(0.85, 0.95, 1.0), 200.0, 0.35, 6.0)
 
