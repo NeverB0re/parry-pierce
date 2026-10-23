@@ -3084,6 +3084,26 @@ func _carrier_combo_test() -> void:
 			if rs.runs[j]["phase"] == "warn":
 				warn_t[j] += DT
 	_check("carrier: chain rush — every drone stops ready before striking (warn %s)" % str(warn_t), rs.runs.size() == 3 and warn_t[1] > 0.3 and warn_t[2] > 0.3)
+	# 앞선 보스들과 같은 규칙: 돌진 예고가 뜨면(겨누는 중부터) 그 기체를 요격할 수 있고, 요격된 기체만 튕겨 나간다
+	b.reset()
+	b.hold_attacks = false
+	b.next_t = 99.0
+	var rs2 = b.SquadRush.new(1, "line")
+	b.start_attack(rs2)
+	for k in 6:
+		b.step(DT, pp0)
+	var aim_ok: bool = not rs2.runs.is_empty() and rs2.runs[0]["phase"] == "aim" and b.melee_warning()
+	var dp: Vector2 = b.part_pos(int(rs2.runs[0]["i"]))
+	var hbx: Dictionary = b.clash_box(dp)
+	if not hbx.is_empty():
+		hbx["dir"] = Vector2.UP
+		b.on_parried(hbx)
+	var knocked := 0
+	for r in rs2.runs:
+		if r["phase"] == "knocked":
+			knocked += 1
+	_check("carrier rush: a drone can be intercepted as soon as the warning shows (aiming %s, clash %s, knocked %d)" % [aim_ok, not hbx.is_empty(), knocked],
+		aim_ok and not hbx.is_empty() and knocked == 1)
 	# 출격 전(발판 위)에는 격납고의 드론을 노리거나 칠 수 없다
 	b.reset()
 	b.hold_attacks = true

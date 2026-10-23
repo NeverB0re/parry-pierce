@@ -5,7 +5,7 @@ extends "res://scripts/attacks/attack.gd"
 ##   line  : 셋이 나란히 한 줄로 늘어서서 플레이어를 겨누고, 다 함께 돌진한다 (줄 끝 밖으로 빠지거나 하나를 요격해 틈을 연다)
 ##   chain : 셋이 차례로 연달아 돌진한다 (앞 기체가 들이받기 시작하면 다음 기체가 겨눈다. 예고는 겨누는 기체만, 기다리는 기체는 순번만)
 ##   lance : 편대장이 굵은 몸통으로 관통 돌격 — 플레이어를 꿰뚫고 반대편 끝까지 달려간 뒤, 곧바로 그 자리에서 몸을 돌려 되돌아 꿰뚫는다 (첫 돌격을 쳐내면 두 번째는 끊긴다)
-## 겨누는 동안(aim)은 플레이어를 따라간다. 멈춘 뒤(warn)엔 그 줄로.
+## 겨누는 동안(aim)은 플레이어를 따라간다. 멈춘 뒤(warn)엔 그 줄로. 예고가 떠 있는 동안(aim·warn·strike)은 언제든 요격된다.
 ## boss 에 필요한 것: squad_alive(s), squad_center(s), leader_of(s), want_drone, hold_drone, drone_pos, aim_drone, seg_closest, emit
 
 const MeleeWarn := preload("res://scripts/melee_warn.gd")
@@ -216,9 +216,10 @@ func clash_box(ppos: Vector2) -> Dictionary:
 	return best
 
 
-## 멈춰 겨눈(warn) 기체와 들이받는(strike) 기체만 요격된다
+## 요격: 돌진 예고(진홍 띠·화면 ⚠)가 떠 있는 동안 — 겨누기(aim)·멈춤(warn)·들이받기(strike) — 언제든 그 기체를 쳐낼 수 있다.
+## 앞선 보스들(팔·대검·프레스)과 같은 규칙: 경고가 보이면 요격된다 (v0.123. 전에는 aim 중엔 안 돼서, 경고를 보고 달려들면 그냥 부딪혀 튕겼다)
 func _can_clash(r: Dictionary) -> bool:
-	return r["phase"] == "warn" or r["phase"] == "strike"
+	return r["phase"] == "aim" or r["phase"] == "warn" or r["phase"] == "strike"
 
 
 func assist_targets(_from: Vector2, out: Array[Dictionary]) -> void:
