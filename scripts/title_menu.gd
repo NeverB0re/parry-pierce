@@ -109,7 +109,6 @@ func _build() -> void:
 		t1.add_theme_color_override("font_outline_color", Color(0.85, 0.45, 0.12, 0.9))
 		t1.add_theme_constant_override("outline_size", 14)
 		box.add_child(t1)
-		box.add_child(_label(Loc.t("막고, 되돌리고, 꿰뚫어라"), 24, Color(1.0, 0.82, 0.55)))
 		var ver := str(ProjectSettings.get_setting("application/config/version", ""))
 		box.add_child(_label("v" + ver, 12, Color(0.7, 0.75, 0.85, 0.8)))
 		var gap := Control.new()

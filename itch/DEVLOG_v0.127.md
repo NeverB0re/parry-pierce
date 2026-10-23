@@ -1,4 +1,4 @@
-# Devlog — v0.126 (v0.102 이후 변경점)
+# Devlog — v0.127 (v0.102 이후 변경점)
 
 > 붙여 넣는 법: itch 대시보드 → *Edit game* → **Devlog** → *Create new post*. 제목과 본문을 붙여 넣고,
 > 본문 중간의 `[이미지: ...]` 자리에 `screenshots/` 의 해당 PNG 를 *Insert image* 로 넣는다 (그 줄은 지운다).
@@ -9,7 +9,7 @@
 
 ## English
 
-**Title:** v0.126 — Stage 5: the Carrier, a volume menu, and one rule for every melee attack
+**Title:** v0.127 — Stage 5: the Carrier, a volume menu, and one rule for every melee attack
 
 A new colossus joins the route: a carrier that never comes close itself and sends its squadrons after you instead. This update also adds a proper Options menu with volume sliders, and makes every boss follow the same rules for melee warnings and unparryable attacks.
 
@@ -55,13 +55,16 @@ Some bosses showed the melee warning while the attack couldn't be intercepted ye
 - The whole mix was rebalanced. Sound effects were much louder than the music, so loud effects are now quieter and the music is louder. The game also starts at a lower default volume.
 - Fixed the browser version having no sound after the volume update.
 
+### Title screen
+- The tagline under the logo is gone. The title screen is just the logo now.
+
 Thanks for playing! The Carrier is the first boss built around a swarm instead of one big body. Tell me how the squadrons feel.
 
 ---
 
 ## 한국어
 
-**제목:** v0.126 — 5스테이지 모함, 음량 메뉴, 그리고 모든 근접공격에 같은 규칙
+**제목:** v0.127 — 5스테이지 모함, 음량 메뉴, 그리고 모든 근접공격에 같은 규칙
 
 항로에 새 콜로서스가 더해졌습니다. 직접 다가오지 않고 편대를 띄워 보내는 항공모함입니다. 음량을 조절하는 옵션 메뉴가 생겼고, 근접공격 경고와 패리 불가 공격이 모든 보스에서 같은 규칙으로 움직이게 정리했습니다.
 
@@ -106,5 +109,8 @@ Thanks for playing! The Carrier is the first boss built around a swarm instead o
 - 새 **옵션** 메뉴(메인 화면·Esc 메뉴)에서 **전체 음량, 음악, 효과음**을 따로 조절할 수 있고, 설정은 저장됩니다.
 - 전체 믹스를 다시 맞췄습니다. 효과음이 음악보다 너무 컸기 때문에 큰 효과음은 줄이고 음악은 키웠습니다. 처음 시작하는 기본 음량도 낮췄습니다.
 - 음량 업데이트 뒤 브라우저판에서 소리가 안 나던 문제를 고쳤습니다.
+
+### 메인 화면
+- 로고 아래 부제를 뺐습니다. 이제 로고만 남았습니다.
 
 플레이해 주셔서 고맙습니다! 모함은 거대한 몸 하나가 아니라 무리와 싸우는 첫 보스입니다. 편대전이 어땠는지 알려 주세요.
