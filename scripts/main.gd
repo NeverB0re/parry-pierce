@@ -42,6 +42,7 @@ const PLAT_SINK_TIME := 1.0        # 발사 후 발판이 가라앉는 시간
 const PLAT_RISE_TIME := 0.6
 const SYNC_CLEAR_R := 280.0          # 동조 코어: 퍼펙트 회피 때 이 반경의 적 탄을 지운다
 const HEAT_MAX := 3                # 잔탄에 이만큼 맞으면 실드 셀 1개가 깨진다 (과열 게이지)
+const DRIVE_CLEAR_R := 80.0         # 리버스 드라이브가 지형 탄을 지우는 반지름 (지형 탄을 쓰는 보스만)
 const HEAT_COOL := 4.0             # 이 시간 동안 잔탄에 안 맞으면 게이지가 한 칸 식는다
 const GRAZE_INVULN := 0.35         # 잔탄에 맞은 직후 무적
 const GRAZE_BREAK_INVULN := 0.8    # 게이지가 차서 셀이 깨진 직후 무적
@@ -549,6 +550,8 @@ func _physics_body(delta: float) -> void:
 	boss.aim_dir = player.aim
 	boss.focus_reach = player.parry_dash_reach() \
 		if player.aim_phase else Player.CHARGE_SPEED * Player.CHARGE_DASH_TIME
+	if player.dash_kind == "power" and player.dash_t > 0.0 and boss.drive_clears_terrain():   # 리버스 드라이브가 지형 탄을 뚫고 지나간다 (RULES 7장)
+		boss.shots.clear_near(player.position, DRIVE_CLEAR_R)
 	boss.hold_attacks = player.on_platform or debug.freeze   # 시작·부활 직후 날아오르기 전에는 공격이 시작되지 않는다 (F3: 디버그 정지)
 	boss.step(dt, player.position)
 	var kd: String = boss.attack_kind()

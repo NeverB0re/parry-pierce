@@ -760,6 +760,11 @@ func takes_reflect(hit: Dictionary) -> bool:
 	return not (hit.get("kind", "") == "core" and core != null and core.broken)
 
 
+## 리버스 드라이브가 지나간 길의 지형 탄을 지우는가 (새 탄막 구조의 보스, RULES 7장. 기본 = 아니다)
+func drive_clears_terrain() -> bool:
+	return false
+
+
 ## 카메라를 끌어당기는 몫 (기본 = 없음). 반응로: 맵 위의 방벽이 보이게 위로
 func view_bias(_p: Vector2) -> Vector2:
 	return Vector2.ZERO

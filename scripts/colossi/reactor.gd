@@ -54,8 +54,7 @@ var pending_drive := false                   # 이번 적중이 리버스 드라
 var barrier_flash := 0.0
 var barrier_hit_x := 0.0
 var last_gap_x := 0.0                        # 미로: 직전 줄의 통로 (다음 패턴이 이어지게)
-var row_gap := 0.0                           # 배출구 예고: 다음 줄의 통로 가운데·폭·짙기
-var row_w := 0.0
+var row_holes: Array = []                    # 배출구 예고: 곧 나올 줄의 열린 구간(길)과 짙기
 var row_k := 0.0
 var squeeze_d: Array[float] = [0.0, 0.0]     # 양옆 격벽이 파고든 깊이 (음수 = 벽 너머에 숨음)
 var squeeze_hold_t: Array[float] = [0.0, 0.0]
@@ -125,9 +124,8 @@ func hold_squeeze(i: int, depth: float) -> void:
 
 
 # ── 배출구 예고 (미로 모듈이 부른다) ─────────────────
-func vent_glow_row(gap: float, w: float, k: float) -> void:
-	row_gap = gap
-	row_w = w
+func vent_open(holes: Array, k: float) -> void:
+	row_holes = holes
 	row_k = maxf(row_k, k)
 
 
@@ -198,6 +196,11 @@ func _panel_toward(x: float) -> int:
 			bd = d
 			best = i
 	return best if best >= 0 else 0
+
+
+## 리버스 드라이브가 지나간 길의 지형 탄(잔탄)은 지워진다 (RULES 7장: 새 보스부터)
+func drive_clears_terrain() -> bool:
+	return true
 
 
 ## 반사탄·호위기 탄은 방벽에 막힌다 (리버스 드라이브만 뚫는다)
@@ -275,7 +278,10 @@ func _choose(_ppos: Vector2) -> void:
 		last = "divide"
 		start_attack(Divide.new())
 		return
-	var mode := weighted_pick({"zigzag": 1.0, "snake": 1.0, "funnel": 0.7}, last_maze)
+	var w := {}
+	for m in Maze.MODES:
+		w[m] = 1.0
+	var mode := weighted_pick(w, last_maze)
 	last_maze = mode
 	last = "maze"
 	start_attack(Maze.new(mode, true))
@@ -401,7 +407,10 @@ func _draw_vents() -> void:
 		var p := Vector2(x, SPAWN_Y - 6.0)
 		draw_rect(Rect2(p - Vector2(34, 18), Vector2(68, 36)), C_HULL)
 		draw_rect(Rect2(p - Vector2(34, 18), Vector2(68, 36)), Color(C_RIM, 0.5), false, 2.0)
-		var open := row_k > 0.0 and absf(x - row_gap) <= row_w * 0.5
+		var open := false
+		if row_k > 0.0:
+			for h in row_holes:
+				open = open or (x > float(h[0]) and x < float(h[1]))
 		if open:
 			draw_rect(Rect2(p - Vector2(24, 8), Vector2(48, 16)), Color(C_COOL, 0.25 + 0.5 * row_k))
 		else:

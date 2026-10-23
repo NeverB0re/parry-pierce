@@ -6,8 +6,12 @@ var n := 0
 var out := ""
 # [이름, 장면, 찍을 프레임, 플레이어 자리]
 var plan := [
-	["maze", "maze", 300, Vector2(0, -1450)],
-	["maze_snake", "snake", 260, Vector2(-300, -1300)],
+	["maze_snake", "m:snake", 420, Vector2(0, -900)],
+	["maze_zigzag", "m:zigzag", 420, Vector2(0, -900)],
+	["maze_steps", "m:steps", 420, Vector2(0, -900)],
+	["maze_rooms", "m:rooms", 420, Vector2(0, -900)],
+	["maze_fork", "m:fork", 420, Vector2(0, -900)],
+	["maze_braid", "m:braid", 420, Vector2(0, -900)],
 	["divide", "divide", 200, Vector2(-500, -1350)],
 	["clamp_warn", "clamp", 60, Vector2(0, -1450)],
 	["clamp_held", "clamp", 160, Vector2(0, -1450)],
@@ -57,18 +61,16 @@ func _process(_d: float) -> bool:
 		b.next_t = 999.0
 		p.reset(pl[3], false)
 		p.on_platform = false
+		if sc.begins_with("m:"):
+			b.start_attack(b.Maze.new(sc.substr(2), true))
 		match sc:
-			"maze":
-				b.start_attack(b.Maze.new("zigzag", true))
-			"snake":
-				b.start_attack(b.Maze.new("snake", true))
 			"divide":
 				b.start_attack(b.Divide.new())
 			"clamp":
-				b.start_attack(b.Maze.new("funnel", true))
+				b.start_attack(b.Maze.new("rooms", true))
 				b.start_side(b.Clamp.new())
 			"aim":
-				b.start_attack(b.Maze.new("zigzag", true))
+				b.start_attack(b.Maze.new("snake", true))
 				for k in 200:
 					b.step(1.0 / 60.0, pl[3])
 				p.aim_phase = true

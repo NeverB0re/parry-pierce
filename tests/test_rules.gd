@@ -3201,7 +3201,7 @@ func _reactor_test() -> void:
 	b.drive_aim = false
 	# 리버스 드라이브: 꿰뚫어 과열 1 + 경직(패턴 끊김, 탄 걷힘) + 크게 밀려남(무적)
 	b.next_t = 0.0
-	b.start_attack(b.Maze.new("zigzag", true))
+	b.start_attack(b.Maze.new("snake", true))
 	_step(int(1.5 / DT))
 	var shots_before: int = b.shots.size()
 	p.reset(Vector2(450, b.BARRIER_Y + 150.0), false)
@@ -3244,22 +3244,34 @@ func _reactor_test() -> void:
 	b.next_t = 99.0
 	var ok_lanes := true
 	var worst := ""
-	for mode in ["zigzag", "snake", "funnel"]:
-		var mz = b.Maze.new(mode, true)
-		b.start_attack(mz)
-		b.step(DT, Vector2(0, -900))
-		var ln: Array = mz.lanes()
-		for k in ln.size():
-			if float(ln[k][1]) < 590.0 or (k > 0 and absf(float(ln[k][0]) - float(ln[k - 1][0])) > mz.MAX_SHIFT + 1.0):
-				ok_lanes = false
-				worst = "%s row %d" % [mode, k]
-		b.atk = null
-	_check("maze lanes are wider than one dash and never jump far between rows %s" % worst, ok_lanes)
+	for mode in b.Maze.MODES:
+		for rep in 3:
+			var mz = b.Maze.new(mode, true)
+			b.start_attack(mz)
+			b.step(DT, Vector2(0, -900))
+			var rows: Array = mz.lanes()
+			for k in rows.size():
+				for h in rows[k]:
+					if float(h[1]) - float(h[0]) < 270.0 or float(h[0]) < -1130.0 or float(h[1]) > 1130.0:
+						ok_lanes = false
+						worst = "%s row %d narrow/outside %s" % [mode, k, str(h)]
+				if k == 0:
+					continue
+				for h in rows[k]:                       # 이 줄의 길마다 앞 줄의 길과 넉넉히 겹친다 (끊긴 길·막다른 벽 없음)
+					var best := -INF
+					for q in rows[k - 1]:
+						best = maxf(best, minf(float(h[1]), float(q[1])) - maxf(float(h[0]), float(q[0])))
+					if best < 200.0:
+						ok_lanes = false
+						worst = "%s row %d jumps (overlap %.0f)" % [mode, k, best]
+			b.atk = null
+			b.shots.clear_near(Vector2(0, -1000), 99999.0)
+	_check("all six maze patterns: lanes at least 270 wide, inside the arena, and every row overlaps the last by 200+ %s" % worst, ok_lanes)
 	b.shots.clear_near(Vector2(0, -1000), 99999.0)
-	var mz2 = b.Maze.new("zigzag", true)
+	var mz2 = b.Maze.new("snake", true)
 	b.start_attack(mz2)
 	var gold := 0
-	for k in int(16.0 / DT):
+	for k in int(20.0 / DT):
 		b.step(DT, Vector2(0, -300))
 		if b.atk != mz2:
 			break
