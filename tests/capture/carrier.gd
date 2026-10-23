@@ -1,6 +1,6 @@
 extends SceneTree
 # 모함 캡처 (창 모드, 자동 종료): 포위망 → 편대 패턴 아홉(편대마다 셋) → 대형 포탄 → 주포 → 부서진 드론이 모함으로 → 최후의 발악.
-# 인자: -- --notutorial --out=<dir>. 진행 저장·플레이 기록은 끈다
+# 인자: -- --notutorial --out=<dir> [--en]. 진행 저장·플레이 기록은 끈다
 var main
 var n := 0
 var out := ""
@@ -48,6 +48,10 @@ func _process(_d: float) -> bool:
 		main.world.profile = pr
 		main.title.close()
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		if OS.get_cmdline_user_args().has("--en"):          # itch 데브로그용 영어 화면 (언어 저장은 끈다)
+			var Loc = load("res://scripts/loc.gd")
+			Loc.persist = false
+			Loc.lang = "en"
 	if n < 4:
 		return false
 	if idx >= plan.size():

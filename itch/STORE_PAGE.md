@@ -31,6 +31,7 @@ You are a tiny ship facing titanic war machines. Their weapons are huge, their b
 2. **The Barrage Fortress** — a screen-filling gun citadel. When its armoured shutter opens, a heavy shell wrapped in a ring of escort bullets comes for you: dash through the ring, parry the shell, and drive it back into the open core.
 3. **The Kraken** — a giant mechanical squid behind a six-panel shield. Intercept its tentacle combos one blow at a time; every tentacle you cut drops a panel and lets your hits through harder.
 4. **The Barrier Satellite** — an orbital fortress sealed inside an unparryable barrier. Slip through its purple storms with perfect evades, crack the barrier with synced strikes, then parry the flood that pours out when it opens.
+5. **The Carrier** — a screen-wide carrier docked in the background, and the nine fighters it launches to surround you: a gun squadron, a ramming squadron and a laser-net squadron. Every fighter you bring down is flung back into the hull in flames. Wipe out all three squadrons and the carrier splits open around its core.
 
 ### Controls (mouse only)
 | Input | Action |
@@ -69,6 +70,7 @@ Language: pick **English / 한국어** with the flag buttons at the bottom-right
 2. **탄막 요새** — 화면을 채우는 포격 성채. 포방패가 열리면 호위탄 고리에 싸인 대구경 포탄이 날아온다 — 고리를 돌진으로 뚫고 포탄을 패리해 열린 코어에 되꽂아라.
 3. **크라켄** — 판 여섯 장의 방어막 뒤에 숨은 거대 기계 오징어. 연속 촉수 공격을 한 타씩 요격하라. 촉수를 끊을 때마다 판이 떨어지고 공격이 더 깊이 박힌다.
 4. **결계 위성** — 패리 불가 결계에 싸인 궤도 요새. 보라 폭풍을 퍼펙트 회피로 넘기고, 동조 일격으로 결계를 깨뜨린 뒤 쏟아지는 탄막을 패리해 꽂아라.
+5. **모함** — 배경에 정박한 화면을 가로지르는 항공모함과, 그 모함이 띄워 당신을 에워싸는 전투기 아홉 기. 탄막 편대·돌격 편대·레이저 그물 편대를 차례로 상대하라. 격추한 기체는 불꽃을 끌며 모함 선체에 처박히고, 세 편대를 모두 잡으면 모함이 갈라지며 코어가 드러난다.
 
 ### 조작 (마우스만)
 마우스 = 조준(위 = 활공) · 좌클릭 = 돌진 / 꾹 = 차지 강습 · 우클릭 꾹 = 패리 → 슬로우 조준 → 놓으면 리버스 드라이브 · R 재시작 · Esc 메뉴 · F11 전체 화면

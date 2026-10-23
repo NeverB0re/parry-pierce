@@ -8,12 +8,12 @@ var rings: Array[Dictionary] = []
 var rays: Array[Dictionary] = []
 var sprites: Array[Dictionary] = []
 var streaks: Array[Dictionary] = []    # 잔상 궤적 {a, b, color, life, max}
-var absorbs: Array[Dictionary] = []    # 흡수 빛알 {from, delay, life, max, side} — 빨아들인 보라 줄기가 기체로 빨려 든다
+var absorbs: Array[Dictionary] = []    # 흡수 빛알 {from, delay, life, max} — 빨아들인 보라 줄기가 기체로 빨려 든다
 var absorb_target: Node2D              # 빨려 들 곳 (main 이 플레이어를 넣는다)
 const C_ABSORB_FROM := Color(0.85, 0.3, 0.7)
 const C_ABSORB_TO := Color(0.5, 1.0, 0.88)
-const ABSORB_FLY := 0.42               # 빛알이 기체까지 날아가는 시간
-const ABSORB_UNZIP := 2600.0           # 닿은 곳에서 멀어질수록 늦게 풀린다 (px/초)
+const ABSORB_FLY := 0.16               # 빛알이 기체까지 날아가는 시간 (짧게: 회피 직후 버프와 함께 끝나 있게, v0.126)
+const ABSORB_UNZIP := 9000.0           # 닿은 곳에서 멀어질수록 아주 조금 늦게 풀린다 (px/초)
 
 
 func _ready() -> void:
@@ -41,12 +41,10 @@ func streak(a: Vector2, b: Vector2, color: Color, life := 0.4) -> void:
 	streaks.append({"a": a, "b": b, "color": color, "life": life, "max": life})
 
 
-## 흡수: 퍼펙트 회피로 빨아들인 보라 줄기의 점들. 닿은 곳(at)부터 차례로 풀려 빛알이 되어 기체로 빨려 든다
-## (풀리기 전까지는 그 자리에서 보라로 빛나 줄기 모양이 남아 있다가, 닿은 곳에서 바깥으로 지퍼처럼 사라진다)
+## 흡수: 퍼펙트 회피로 빨아들인 보라 줄기의 점들이 빛알이 되어 기체로 곧장 빨려 든다 (닿은 곳 쪽이 아주 조금 먼저)
 func absorb(points: PackedVector2Array, at: Vector2) -> void:
 	for q in points:
-		absorbs.append({"from": q, "delay": minf(0.25, q.distance_to(at) / ABSORB_UNZIP), "life": ABSORB_FLY, "max": ABSORB_FLY,
-			"side": randf_range(-1.0, 1.0)})
+		absorbs.append({"from": q, "delay": minf(0.06, q.distance_to(at) / ABSORB_UNZIP), "life": ABSORB_FLY, "max": ABSORB_FLY})
 
 
 ## 중심에서 사방으로 뻗는 빛줄기
@@ -192,7 +190,7 @@ func _draw() -> void:
 		draw_arc(r["pos"], float(r["max_r"]) * ease(k, 0.35), 0.0, TAU, 48, c, float(r["width"]) * (1.0 - k) + 1.0)
 
 
-## 흡수 빛알: 풀리기 전엔 줄기 자리에서 보라로 깜빡이며 남아 있고, 풀리면 휘어지며 기체로 빨려 들면서 청록으로 바뀌고 작아진다
+## 흡수 빛알: 줄기 자리에서 곧바로 기체로 빨려 들며 청록으로 바뀌고 작아진다 (0.2초 남짓에 끝난다)
 func _draw_absorbs() -> void:
 	if absorbs.is_empty():
 		return
@@ -207,10 +205,7 @@ func _draw_absorbs() -> void:
 			continue
 		var u := 1.0 - float(ab["life"]) / float(ab["max"])
 		var e := u * u * (3.0 - 2.0 * u)
-		var d := tgt - from
-		var bend := d.orthogonal().normalized() * float(ab["side"]) * minf(140.0, d.length() * 0.3) * sin(u * PI)
-		var p := from.lerp(tgt, e) + bend
+		var p := from.lerp(tgt, e)
 		var c := C_ABSORB_FROM.lerp(C_ABSORB_TO, u)
-		var sz := lerpf(9.0, 3.0, u)
-		draw_circle(p, sz * 2.2, Color(c, 0.25 * (1.0 - u * 0.5)))
-		draw_circle(p, sz, Color(c.lightened(0.3), 0.95))
+		draw_line(p, from.lerp(tgt, maxf(0.0, e - 0.25)), Color(c, 0.5), 5.0)      # 짧은 꼬리 (빨려 드는 방향이 보이게)
+		draw_circle(p, lerpf(8.0, 3.0, u), Color(c.lightened(0.3), 0.95))
