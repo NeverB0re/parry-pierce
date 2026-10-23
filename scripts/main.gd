@@ -668,7 +668,7 @@ func _check_attacks() -> void:
 		if not boss.overlaps(hb, p, reach):
 			continue
 		if player.parry_active:
-			if hb.get("small", false):              # 잔탄: 패리하면 흡수되어 사라지기만 한다 (조준 없음, 패리 판정은 그대로, 쿨다운 없음)
+			if hb.get("small", false):              # 잔탄: 패리하면 흡수되어 사라지기만 한다 (조준 없음, 패리 판정은 그대로, 쿨다운은 평소대로 — v0.128)
 				_parried_bullet(hb)
 				player.on_absorb()
 				_absorb_feedback(hb["pos"])

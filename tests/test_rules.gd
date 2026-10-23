@@ -788,7 +788,7 @@ func _v034_test() -> void:
 		frames += 1
 	_check("PERFECT strike shield lasts about STRONG_SHIELD (%.2fs, %.2f)" % [frames * DT, p.STRONG_SHIELD], frames * DT <= p.STRONG_SHIELD + 0.35 and frames * DT >= p.STRONG_SHIELD - 0.05)   # (PERFECT 타격 히트스톱 0.3초 포함)
 
-	# 잔탄 흡수 → 판정이 끝나도 쿨다운 없음
+	# 잔탄 흡수 → 판정이 끝나면 쿨다운은 평소대로 (v0.128: 잔탄을 패리 연타로 버티지 못하게)
 	main.start_stage(1)
 	b = main.boss
 	b.next_t = 99.0
@@ -796,7 +796,7 @@ func _v034_test() -> void:
 	p.parry_press()
 	b.shots.spawn(p.position + Vector2(25, 0), Vector2.ZERO, 5.0, 0.0, 0.0, b.shots.Kind.SMALL)
 	_step(int(0.3 / DT))
-	_check("parry window that absorbed something ends with no cooldown (cd %.2f)" % p.parry_cd, not p.parry_active and p.parry_cd <= 0.0)
+	_check("a parry window that only absorbed small bullets still ends with the normal cooldown (cd %.2f)" % p.parry_cd, not p.parry_active and p.parry_cd > 0.0)
 	p.parry_release()
 	p.parry_press()
 	_step(int(0.3 / DT))
