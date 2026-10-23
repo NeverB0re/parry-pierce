@@ -5,9 +5,9 @@ extends "res://scripts/attacks/attack.gd"
 ## 흡수(dodged)는 선 하나 단위
 
 const ROUNDS := 4
-const WARN := 1.0                    # 새 선 예고 (옅게 나타나 짙어진다)
-const STEP_T := 1.35                 # 차례 간격
-const HOLD := 1.6                    # 마지막 선이 켜진 뒤 이만큼 더 남는다
+const WARN := 0.7                    # 새 선 예고 (옅게 나타나 짙어진다)
+const STEP_T := 0.8                  # 차례 간격 (v0.125: 1.35 → 0.8, 패턴 전체 6.65초 → 4초)
+const HOLD := 0.9                    # 마지막 선이 켜진 뒤 이만큼 더 남는다
 const STEP := 520.0                  # 마지막 칸 크기 (처음 두 차례는 그 두 배)
 const HALF := 14.0
 const WALL := 1150.0

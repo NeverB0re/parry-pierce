@@ -150,6 +150,7 @@ func _ready() -> void:
 	player.boss = boss
 	add_child(player)
 	fx = Fx.new()
+	fx.absorb_target = player
 	add_child(fx)
 	lava_front = Ground.new()
 	lava_front.front = true
@@ -642,7 +643,7 @@ func _check_attacks() -> void:
 	if player.can_evade_reward() and boss.beam_hit(p, graze) != Vector2.ZERO:
 		player.try_evade_reward(true)                   # 패리 불가 공격을 돌진 직후 스침 = 강한 퍼펙트 회피 (완전 동조, 4배)
 		_absorb_beam_fx(p)
-		boss.mark_beam_dodged(p, graze)                 # 그 공격(줄기)의 에너지를 빨아들인다 → 사라진다
+		fx.absorb(boss.mark_beam_dodged(p, graze), p)   # 그 공격(줄기)의 에너지를 빨아들인다: 줄기가 닿은 곳부터 풀려 보라 빛알이 기체로 빨려 든다
 	var beam_push: Vector2 = boss.beam_hit(p, Player.RADIUS)   # 패리 불가: 돌진 무적으로만 피한다
 	if beam_push != Vector2.ZERO and player.can_refresh_evade():
 		player.refresh_evade_invuln()
@@ -1307,6 +1308,9 @@ func _tele_after_strike() -> void:
 func on_strike(hit: Dictionary, dmg: int, pos: Vector2, dir: Vector2, kind := "dash", buffed := false, strong := false) -> void:
 	var contact := pos + dir * Player.RADIUS
 	last_strike_t = run_time
+	if hit.get("kind", "") == "core" and boss.core_sealed():   # 코어가 드러나는 중: 무적 (튕겨 나온다)
+		_parry_push_feedback(contact, -dir)
+		return
 	if boss.blocks_strike(hit, kind, player.perfect_dash, strong):   # 방어막·결계: 튕겨 나온다 (크라켄 = 리버스 드라이브만, 결계 위성 = 완전 동조 차지·PERFECT 드라이브만 뚫는다)
 		tele.add("shield_block")
 		boss.shield_flash = 1.0

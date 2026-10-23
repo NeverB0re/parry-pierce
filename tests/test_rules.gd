@@ -41,6 +41,7 @@ func _process(_d: float) -> bool:
 	_satellite_test()
 	_carrier_test()
 	_carrier_combo_test()
+	_v0125_test()
 	print("FAILS ", fails)
 	quit(fails)
 	return false
@@ -2326,7 +2327,7 @@ func _v047_test() -> void:
 	_check("all aux systems broken: the core battery stays open (before %s, after %s, after a gun turn %s)" % [shut_before, open_aux, b.gun_exposed],
 		shut_before and open_aux and b.gun_exposed and b.core_damageable())
 
-	# 코어가 열리는 중(페이즈 2)에도 돌진이 맞고, 아래에서 맞혀도 코어 안으로 솟구치지 않는다
+	# 코어가 열리는 중(페이즈 2)엔 무적이라 돌진이 튕기고(v0.125), 다 열린 뒤 한 번에 터진다. 아래에서 맞혀도 코어 안으로 솟구치지 않는다
 	main.start_stage(1)
 	b = main.boss
 	p = main.player
@@ -2343,8 +2344,17 @@ func _v047_test() -> void:
 	for k in 40:
 		main.hitstop = 0
 		main._physics_process(DT)
+	_check("v0.125: while the core is being revealed it is invulnerable — a dash bounces off (state %d, dead %s)" % [main.state, b.dead], main.state != main.State.WON and not b.dead)
+	for k in int((b.open_time + 0.2) / DT):
+		main.hitstop = 0
+		main._physics_process(DT)
+	p.reset(b.REACTOR_POS + Vector2(0, 520), false)
+	_dash_dir("dash", Vector2.UP)
+	for k in 40:
+		main.hitstop = 0
+		main._physics_process(DT)
 	main.debug.god = false
-	_check("one dash into the bare core destroys it (state %d)" % main.state, main.state == main.State.WON)
+	_check("after the reveal one dash into the bare core destroys it (phase %d, state %d)" % [b.phase, main.state], main.state == main.State.WON)
 
 	# 잔탄 체력 링: 평소엔 안 보이고, 잔탄 하나에 2칸, 5초 뒤 3칸으로 돌아오고 잠시 뒤 사라진다
 	main.reset_run()
@@ -3127,3 +3137,38 @@ func _carrier_combo_test() -> void:
 		parts_targeted == 0 and b.strike_hit(b.part_pos(0), 40.0).is_empty())
 	b.hold_attacks = false
 	b.reset()
+
+
+## v0.125: 코어가 드러나는 연출 동안 코어는 무적 / 퍼펙트 회피로 빨아들인 보라 줄기의 모양이 흡수 연출로 넘어간다 / 격자가 빨라졌다
+func _v0125_test() -> void:
+	main.start_stage(4)
+	var b = main.boss
+	b.hold_attacks = false
+	for i in b.part_count():
+		b.damage_part(i, 999)
+	var opening: bool = b.phase == 2
+	var died: bool = b.damage({"kind": "core"}, 999)
+	_check("core is invulnerable while it is being revealed (phase %d, broke %s, reflect %s)" % [b.phase, died, b.takes_reflect({"kind": "core"})],
+		opening and not died and not b.dead and not b.takes_reflect({"kind": "core"}))
+	for k in int((b.open_time + 0.2) / DT):
+		b.step(DT, Vector2(0, -1500))
+	_check("after the reveal one direct hit breaks the bare core", b.phase == 3 and b.damage({"kind": "core"}, 12))
+	main.start_stage(3)
+	b = main.boss
+	b.hold_attacks = false
+	b.next_t = 99.0
+	var lt = b.Lattice.new()
+	b.start_attack(lt)
+	for k in int((lt.WARN + 0.1) / DT):
+		b.step(DT, Vector2(0, -1500))
+	var x: float = 0.0
+	for ln in lt.lines:
+		if ln["vert"] and int(ln["round"]) == 0:
+			x = ln["at"]
+			break
+	var pts: PackedVector2Array = b.mark_beam_dodged(Vector2(x, -1500), 30.0)
+	var on_line := true
+	for q in pts:
+		on_line = on_line and absf(q.x - x) < 70.0
+	_check("absorbing a lattice line hands its shape to the absorb effect (%d points, all on that line %s)" % [pts.size(), on_line], pts.size() >= 8 and on_line)
+	_check("lattice runs its four rounds in about four seconds (%.2f s)" % lt._end_t(), lt._end_t() <= 4.2)

@@ -530,10 +530,64 @@ func beam_hit(p: Vector2, r: float) -> Vector2:
 
 
 ## 패리 불가 판정을 p 에서 퍼펙트 회피했다(완전 동조): 닿은 공격의 에너지를 빨아들여 사라진다 (여러 줄기 공격은 그 줄기만)
-func mark_beam_dodged(p: Vector2, r: float) -> void:
+## 돌려주는 값 = 빨아들인 줄기 위의 점들 (플레이어 둘레 ABSORB_REACH 안). 빨아들이기 전·후 판정을 비교해 그 줄기에만 있던 점을 고른다
+func mark_beam_dodged(p: Vector2, r: float) -> PackedVector2Array:
+	var out := PackedVector2Array()
 	for a in active_attacks():
 		if not a.dodged and a.beam_hit(p, r) != Vector2.ZERO:
+			var before := _strand_points(a, p)
 			a.mark_dodged(p, r)
+			for q in before:
+				if a.dodged or a.beam_hit(q, ABSORB_PROBE) == Vector2.ZERO:
+					out.append(q)
+	out = _merge_close(out, ABSORB_GRID * 1.15)  # 선 양쪽에 두 줄로 잡힌 점을 하나로 (줄기 한가운데로)
+	if out.size() > ABSORB_MAX:                  # 너무 많으면 고르게 솎는다
+		var thin := PackedVector2Array()
+		var k := float(out.size()) / ABSORB_MAX
+		for j in ABSORB_MAX:
+			thin.append(out[int(j * k)])
+		out = thin
+	return out
+
+
+const ABSORB_REACH := 720.0
+const ABSORB_GRID := 40.0
+const ABSORB_PROBE := 26.0
+const ABSORB_MAX := 80
+
+
+## 가까운 점끼리 평균내어 하나로
+static func _merge_close(pts: PackedVector2Array, d: float) -> PackedVector2Array:
+	var sums: Array[Vector2] = []
+	var cnt: Array[int] = []
+	for q in pts:
+		var hit := -1
+		for j in sums.size():
+			if (sums[j] / cnt[j]).distance_to(q) < d:
+				hit = j
+				break
+		if hit < 0:
+			sums.append(q)
+			cnt.append(1)
+		else:
+			sums[hit] += q
+			cnt[hit] += 1
+	var out := PackedVector2Array()
+	for j in sums.size():
+		out.append(sums[j] / cnt[j])
+	return out
+
+
+## 공격 a 의 보라 판정이 지나는 점들 (p 둘레를 격자로 훑는다. 흡수 순간에 한 번만 부른다)
+func _strand_points(a, p: Vector2) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	var n := int(ABSORB_REACH / ABSORB_GRID)
+	for gx in range(-n, n + 1):
+		for gy in range(-n, n + 1):
+			var q := p + Vector2(gx, gy) * ABSORB_GRID
+			if q.distance_squared_to(p) <= ABSORB_REACH * ABSORB_REACH and a.beam_hit(q, ABSORB_PROBE) != Vector2.ZERO:
+				out.append(q)
+	return out
 
 
 ## 이 판정은 이미 회피 무적으로 통과한 것인가 (탄 하나 / 공격 모듈)
@@ -675,6 +729,8 @@ func blocks_strike(hit: Dictionary, kind: String, _perfect: bool, strong: bool) 
 
 
 func damage(hit: Dictionary, dmg: int) -> bool:
+	if hit["kind"] == "core" and core_sealed():
+		return false
 	if flinch_on_hit and dmg >= FLINCH_DMG:
 		flinch()
 	if hit["kind"] == "core":
@@ -690,7 +746,14 @@ func core_damageable() -> bool:
 
 
 func takes_reflect(hit: Dictionary) -> bool:
+	if hit.get("kind", "") == "core" and core_sealed():
+		return false
 	return not (hit.get("kind", "") == "core" and core != null and core.broken)
+
+
+## 코어가 드러나는 연출(페이즈 2) 동안 코어는 무적이다: 날아오던 반사탄·보조탄이나 지나가던 돌진에 혼자 깨지지 않게 (v0.125, 모든 보스)
+func core_sealed() -> bool:
+	return phase == 2
 
 
 func damage_core(dmg: int) -> bool:

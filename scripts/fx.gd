@@ -8,6 +8,12 @@ var rings: Array[Dictionary] = []
 var rays: Array[Dictionary] = []
 var sprites: Array[Dictionary] = []
 var streaks: Array[Dictionary] = []    # 잔상 궤적 {a, b, color, life, max}
+var absorbs: Array[Dictionary] = []    # 흡수 빛알 {from, delay, life, max, side} — 빨아들인 보라 줄기가 기체로 빨려 든다
+var absorb_target: Node2D              # 빨려 들 곳 (main 이 플레이어를 넣는다)
+const C_ABSORB_FROM := Color(0.85, 0.3, 0.7)
+const C_ABSORB_TO := Color(0.5, 1.0, 0.88)
+const ABSORB_FLY := 0.42               # 빛알이 기체까지 날아가는 시간
+const ABSORB_UNZIP := 2600.0           # 닿은 곳에서 멀어질수록 늦게 풀린다 (px/초)
 
 
 func _ready() -> void:
@@ -21,6 +27,7 @@ func clear() -> void:
 	rays.clear()
 	sprites.clear()
 	streaks.clear()
+	absorbs.clear()
 
 
 ## 도트 폭발 애니메이션. kind 1(주황 불꽃)/2(주황 링)/3(청록 링), size = 화면에서 보이는 지름(px).
@@ -32,6 +39,14 @@ func sprite(pos: Vector2, kind: int, size: float, life := 0.45, reverse := false
 ## 잔상 궤적: a → b 직선에 굵은 빛줄기 + 일정 간격 잔상 원이 남았다가 끝(b) 쪽부터 사라진다 (PERFECT 리버스 드라이브)
 func streak(a: Vector2, b: Vector2, color: Color, life := 0.4) -> void:
 	streaks.append({"a": a, "b": b, "color": color, "life": life, "max": life})
+
+
+## 흡수: 퍼펙트 회피로 빨아들인 보라 줄기의 점들. 닿은 곳(at)부터 차례로 풀려 빛알이 되어 기체로 빨려 든다
+## (풀리기 전까지는 그 자리에서 보라로 빛나 줄기 모양이 남아 있다가, 닿은 곳에서 바깥으로 지퍼처럼 사라진다)
+func absorb(points: PackedVector2Array, at: Vector2) -> void:
+	for q in points:
+		absorbs.append({"from": q, "delay": minf(0.25, q.distance_to(at) / ABSORB_UNZIP), "life": ABSORB_FLY, "max": ABSORB_FLY,
+			"side": randf_range(-1.0, 1.0)})
 
 
 ## 중심에서 사방으로 뻗는 빛줄기
@@ -84,6 +99,17 @@ func step(dt: float) -> void:
 	_tick(rings, dt)
 	_tick(rays, dt)
 	_tick(streaks, dt)
+	i = absorbs.size() - 1
+	while i >= 0:
+		var ab: Dictionary = absorbs[i]
+		if float(ab["delay"]) > 0.0:
+			ab["delay"] = float(ab["delay"]) - dt
+		else:
+			ab["life"] = float(ab["life"]) - dt
+			if float(ab["life"]) <= 0.0:
+				absorbs[i] = absorbs[absorbs.size() - 1]
+				absorbs.pop_back()
+		i -= 1
 	i = sprites.size() - 1
 	while i >= 0:
 		var sp: Dictionary = sprites[i]
@@ -110,6 +136,7 @@ static func _tick(arr: Array[Dictionary], dt: float) -> void:
 
 
 func _draw() -> void:
+	_draw_absorbs()
 	for s in streaks:
 		var k := float(s["life"]) / float(s["max"])     # 1 → 0
 		var a: Vector2 = s["a"]
@@ -163,3 +190,27 @@ func _draw() -> void:
 			draw_arc(r["pos"], float(r["max_r"]) * (0.75 + 0.25 * ease(k, 0.35)), a0, a0 + float(r["span"]), 20, c, float(r["width"]) * (1.0 - k) + 1.0)
 			continue
 		draw_arc(r["pos"], float(r["max_r"]) * ease(k, 0.35), 0.0, TAU, 48, c, float(r["width"]) * (1.0 - k) + 1.0)
+
+
+## 흡수 빛알: 풀리기 전엔 줄기 자리에서 보라로 깜빡이며 남아 있고, 풀리면 휘어지며 기체로 빨려 들면서 청록으로 바뀌고 작아진다
+func _draw_absorbs() -> void:
+	if absorbs.is_empty():
+		return
+	var tgt := Vector2.ZERO
+	if absorb_target != null:
+		tgt = to_local(absorb_target.global_position)
+	for ab in absorbs:
+		var from: Vector2 = ab["from"]
+		if float(ab["delay"]) > 0.0:
+			draw_circle(from, 22.0, Color(C_ABSORB_FROM, 0.22))
+			draw_circle(from, 9.0, Color(1.0, 0.75, 0.95, 0.9))
+			continue
+		var u := 1.0 - float(ab["life"]) / float(ab["max"])
+		var e := u * u * (3.0 - 2.0 * u)
+		var d := tgt - from
+		var bend := d.orthogonal().normalized() * float(ab["side"]) * minf(140.0, d.length() * 0.3) * sin(u * PI)
+		var p := from.lerp(tgt, e) + bend
+		var c := C_ABSORB_FROM.lerp(C_ABSORB_TO, u)
+		var sz := lerpf(9.0, 3.0, u)
+		draw_circle(p, sz * 2.2, Color(c, 0.25 * (1.0 - u * 0.5)))
+		draw_circle(p, sz, Color(c.lightened(0.3), 0.95))
