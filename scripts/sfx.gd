@@ -97,7 +97,7 @@ const TRIM := {
 	"hit_perfect": -10.2, "hurt": -0.5, "land": -5.6, "open": -7.1, "parry": -3.3, "perfect": -6.6,
 	"stomp": -9.1, "sync": -6.3, "win": -7.2,
 }
-const CALL_K := 0.5                  # 부르는 쪽이 더한 강조(db)는 반만 쓴다 (+6 이 겹쳐 튀지 않게)
+const CALL_K := 0.5                  # 부르는 쪽이 더한 강조(+db)는 반만 쓴다 (+6 이 겹쳐 튀지 않게). 일부러 줄인 것(-db)은 그대로
 
 
 func play(name: String, db := 0.0, pitch_jitter := 0.06) -> void:
@@ -106,7 +106,7 @@ func play(name: String, db := 0.0, pitch_jitter := 0.06) -> void:
 	var p := players[next]
 	next = (next + 1) % players.size()
 	p.stream = streams[name]
-	p.volume_db = float(TRIM.get(name, 0.0)) + db * CALL_K
+	p.volume_db = float(TRIM.get(name, 0.0)) + (db * CALL_K if db > 0.0 else db)
 	p.pitch_scale = 1.0 + randf_range(-pitch_jitter, pitch_jitter)
 	p.play()
 

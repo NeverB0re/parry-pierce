@@ -106,7 +106,7 @@ func _run(r: Dictionary, k: int, ppos: Vector2) -> void:
 				_go(r, "warn")
 		"warn":
 			boss.hold_drone(i, r["from"])
-			var go: bool = _prev_done(k) if mode == "chain" and k > 0 else tt >= (WARN_BACK if mode == "lance" and k > 0 else WARN_FIRST if k == 0 or mode == "line" else WARN)   # chain 뒤 기체: 멈춰 겨눈 채로 앞 기체의 돌진이 끝나길 기다린다
+			var go: bool = _prev_done(k) if mode == "chain" and k > 0 else tt >= _warn_time(k)   # chain 뒤 기체: 멈춰 겨눈 채로 앞 기체의 돌진이 끝나길 기다린다
 			if go:
 				r["prev"] = r["from"]
 				dodged = false                             # 기체마다 새 공격
@@ -132,9 +132,16 @@ func _run(r: Dictionary, k: int, ppos: Vector2) -> void:
 func _aim_time(k: int) -> float:
 	if mode == "lance" and k > 0:                        # 되돌아 꿰뚫기: 짧게 겨눈다
 		return AIM_BACK
-	if mode == "chain" and k > 0:                        # 앞 기체가 들이받을 때쯤 겨누기를 마쳐 잠깐 멈춰 기다린다 (첫 기체만 예고가 길다)
-		return AIM_FIRST + WARN_FIRST + k * (STRIKE + RECOVER) - READY_WAIT
+	if mode == "chain" and k > 0:                        # 앞 기체가 들이받기를 마칠 때(첫 돌진 시작 + k×STRIKE)보다 READY_WAIT 앞서 겨누기를 마치고 멈춰 기다린다 (첫 기체만 예고가 길다)
+		return AIM_FIRST + WARN_FIRST + k * STRIKE - READY_WAIT
 	return AIM_FIRST if k == 0 or mode == "line" else AIM
+
+
+## 멈춤(warn) 길이 (chain 의 뒤 기체는 시간 대신 앞 기체를 기다린다: _prev_done)
+func _warn_time(k: int) -> float:
+	if mode == "lance" and k > 0:
+		return WARN_BACK
+	return WARN_FIRST if k == 0 or mode == "line" else WARN
 
 
 ## chain: 앞 기체의 돌진이 끝났는가 (요격으로 튕겨 나갔다면 잠깐 뒤)
@@ -227,7 +234,7 @@ func on_parried(hb: Dictionary) -> void:
 		return
 	if mode == "lance":                                  # 편대장 한 기체의 두 번 돌격: 첫 돌격을 쳐내면 다음 돌격은 끊긴다
 		for o in runs:
-			if o != r and (o["phase"] == "wait" or o["phase"] == "aim" or o["phase"] == "warn"):
+			if not is_same(o, r) and (o["phase"] == "wait" or o["phase"] == "aim" or o["phase"] == "warn"):
 				o["phase"] = "done"
 	r["knock_from"] = boss.drone_pos(int(r["i"]))
 	var d: Vector2 = hb.get("dir", Vector2.UP)

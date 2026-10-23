@@ -69,7 +69,7 @@ static func section_label(font: Font, ui_scale: float) -> Label:
 	return l
 
 
-## 메뉴용: 이름 · 슬라이더 · 퍼센트 줄 셋을 parent 에 넣는다 (손을 떼면 저장)
+## 메뉴용: 이름 · 슬라이더 · 퍼센트 줄 셋을 parent 에 넣는다 (값이 바뀔 때마다 저장: 키보드로 바꾸고 Esc 로 나가도 남는다)
 static func build_rows(parent: Control, font: Font, ui_scale: float) -> void:
 	for b in BUSES:
 		var bus: String = b
@@ -97,8 +97,8 @@ static func build_rows(parent: Control, font: Font, ui_scale: float) -> void:
 		pct.text = "%d%%" % roundi(s.value * 100.0)
 		s.value_changed.connect(func(v: float) -> void:
 			set_volume(bus, v)
+			save()
 			pct.text = "%d%%" % roundi(v * 100.0))
-		s.drag_ended.connect(func(_changed: bool) -> void: save())
 		row.add_child(name)
 		row.add_child(s)
 		row.add_child(pct)

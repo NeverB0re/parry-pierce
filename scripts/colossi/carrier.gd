@@ -189,6 +189,11 @@ func leader_of(s: int) -> int:
 	return s * PER
 
 
+## 출격 전(격납고에 숨어 있음)에는 보이지도, 노려지지도, 맞지도 않는다
+func part_targetable(i: int) -> bool:
+	return deployed and part_alive(i)
+
+
 func part_max_hp(i: int) -> int:
 	return LEADER_HP if is_leader(i) else WING_HP
 
@@ -494,7 +499,7 @@ func _step_phase(dt: float) -> void:
 
 ## 견제 사격: 차례가 아닌 드론 하나가 잠깐 빛난 뒤 플레이어를 겨눠 금색 탄 한 발. 근접 예고·돌진 중에는 쉰다 (탄막과 근접은 겹치지 않는다)
 func _harass(dt: float) -> void:
-	var melee := melee_warning() or attack_kind() == "squad_rush" or rush_wait > 0.0   # 돌격이 탄이 걷히길 기다리는 중에도 견제 사격은 쉰다
+	var melee := melee_warning() or attack_kind() == "squad_rush"
 	if harass_i >= 0:
 		if not part_alive(harass_i) or melee:
 			harass_i = -1
@@ -505,7 +510,7 @@ func _harass(dt: float) -> void:
 		if harass_wind >= HARASS_WIND:
 			var o := dpos[harass_i]
 			var d := (look_at - o).normalized()
-			shots.spawn(o + d * 50.0, d * HARASS_SPEED * bolt_mult(), 6.0)
+			shots.spawn(o + d * 50.0, d * HARASS_SPEED * bolt_mult(), 6.0, 0.0, 0.0, Projectiles.Kind.BOLT, Projectiles.STRAY)
 			emit(Ev.BOLT, o)
 			harass_i = -1
 		return

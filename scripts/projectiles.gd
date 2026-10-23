@@ -20,6 +20,7 @@ const END_BLINK := 0.6                # 적 주탄(잔탄 제외)은 수명이 �
 const END_BLINK_HZ := 7.0
 const SHELL_HOME := 9.0               # 대구경 포탄: 이 시간 동안 플레이어 쪽으로 천천히 방향을 튼다 (중요한 탄이 엉뚱한 데로 지나가지 않게)
 const SHELL_TURN := 1.1
+const STRAY := -1                     # 묶음 번호 대신: 견제 사격 같은 외톨이 탄 — 근접공격 시작을 막지 않는다 (shots_clear 가 건너뛴다)
 const ORBIT_SPIN := 1.3               # 호위탄이 포탄 둘레를 도는 속도 (rad/s)
 const REFLECT_SPEED := 1500.0         # 반사된 탄 속도
 const REFLECT_DMG := [1.0, 1.0, 0.5, 3.0, 3.0]   # 반사된 탄의 피해: 주탄 1 · 용융물 1 · 잔탄 0.5 · 유도탄 3 · 대구경 3 (main.gd 가 소수점을 모은다)
@@ -243,12 +244,12 @@ func reflect_one(i: int, target: Vector2) -> void:
 
 ## 탄 i 가 묶음의 우두머리(주포 탄)면 그 묶음 번호, 호위탄이거나 묶음이 없으면 0
 func lead_group(i: int) -> int:
-	return grp[i] if orb_r[i] <= 0.0 else 0
+	return grp[i] if grp[i] > 0 and orb_r[i] <= 0.0 else 0
 
 
 ## 묶음 g 의 탄을 모두 지운다 (주탄이 패리되면 호위탄 고리는 사라진다). g = 0 이면 아무것도 안 한다
 func remove_group(g: int) -> void:
-	if g == 0:
+	if g <= 0:
 		return
 	var k := pos.size() - 1
 	while k >= 0:

@@ -3068,4 +3068,32 @@ func _carrier_combo_test() -> void:
 			jump = maxf(jump, absf(angle_difference(prev_a, b.cannon_aim)))
 		prev_a = b.cannon_aim
 	_check("carrier: the main cannon turns smoothly even with the player at its muzzle (largest step %.3f rad)" % jump, jump < 0.08)
+	# 연속 돌진: 뒤 기체들도 겨누기를 마친 뒤 멈춰(warn, 요격 가능) 잠깐 기다렸다 들이받는다
+	b.reset()
+	b.hold_attacks = false
+	b.next_t = 99.0
+	var rs = b.SquadRush.new(1, "chain")
+	b.start_attack(rs)
+	var pp0 := Vector2(150, -1450)
+	var warn_t := [0.0, 0.0, 0.0]
+	for k in int(4.0 / DT):
+		b.step(DT, pp0)
+		if b.atk != rs:
+			break
+		for j in rs.runs.size():
+			if rs.runs[j]["phase"] == "warn":
+				warn_t[j] += DT
+	_check("carrier: chain rush — every drone stops ready before striking (warn %s)" % str(warn_t), rs.runs.size() == 3 and warn_t[1] > 0.3 and warn_t[2] > 0.3)
+	# 출격 전(발판 위)에는 격납고의 드론을 노리거나 칠 수 없다
+	b.reset()
+	b.hold_attacks = true
+	for k in 10:
+		b.step(DT, pp0)
+	var parts_targeted := 0
+	for tg in b.assist_targets(pp0):
+		if tg.get("intercept", false) == false and tg["pos"] != b.core.center:
+			parts_targeted += 1
+	_check("carrier: hidden drones in the hangars are not targets before takeoff (%d targeted, hit %s)" % [parts_targeted, str(b.strike_hit(b.part_pos(0), 40.0))],
+		parts_targeted == 0 and b.strike_hit(b.part_pos(0), 40.0).is_empty())
+	b.hold_attacks = false
 	b.reset()

@@ -127,7 +127,7 @@ func shots_clear(ppos: Vector2) -> bool:
 	if is_lingering("rings"):
 		return false
 	for k in shots.size():
-		if shots.mine[k] == 1:
+		if shots.mine[k] == 1 or shots.grp[k] == Projectiles.STRAY:   # 견제 사격 한 발은 근접을 막지 않는다 (막으면 견제가 이어지는 동안 근접이 영영 못 나온다)
 			continue
 		var d: Vector2 = ppos - shots.pos[k]
 		if d.length() < CLEAR_R and d.dot(shots.vel[k]) > 0.0:
@@ -366,6 +366,11 @@ func part_alive(i: int) -> bool:
 	return part_hp[i] > 0
 
 
+## 지금 노리고 칠 수 있는 부위인가 (살아 있고 전장에 나와 있다). 모함은 출격 전 격납고의 드론을 빼낸다
+func part_targetable(i: int) -> bool:
+	return part_alive(i)
+
+
 func parts_left() -> int:
 	var n := 0
 	for hp in part_hp:
@@ -438,7 +443,7 @@ func target_pos(from: Vector2) -> Vector2:
 	var best: Vector2 = core.center
 	var best_d := INF
 	for i in part_count():
-		if part_alive(i) and part_pos(i).distance_to(from) < best_d:
+		if part_targetable(i) and part_pos(i).distance_to(from) < best_d:
 			best_d = part_pos(i).distance_to(from)
 			best = part_pos(i)
 	return best
@@ -454,7 +459,7 @@ func strike_hit(p: Vector2, r: float) -> Dictionary:
 		var best := {}
 		var best_d := INF
 		for i in part_count():
-			if not part_alive(i):
+			if not part_targetable(i):
 				continue
 			var d := p.distance_to(part_pos(i))
 			if d < r + part_radius(i) and d < best_d:
@@ -472,7 +477,7 @@ func assist_targets(from := Vector2.ZERO) -> Array[Dictionary]:
 		return out
 	if phase == 1:
 		for i in part_count():
-			if part_alive(i):
+			if part_targetable(i):
 				out.append({"pos": part_pos(i), "r": part_radius(i)})
 	else:
 		out.append({"pos": core.center, "r": core_assist_r})
@@ -717,7 +722,7 @@ func _draw_part_marks() -> void:
 		return
 	var pulse := 0.5 + 0.5 * sin(t * 5.0)
 	for i in part_count():
-		if not part_alive(i):
+		if not part_targetable(i):
 			continue
 		var p := part_pos(i)
 		var r := part_radius(i)
