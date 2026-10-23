@@ -5,14 +5,14 @@ extends "res://scripts/attacks/attack.gd"
 ##   line  : 셋이 나란히 한 줄로 늘어서서 플레이어를 겨누고, 다 함께 돌진한다 (줄 끝 밖으로 빠지거나 하나를 요격해 틈을 연다)
 ##   chain : 셋이 차례로 연달아 돌진한다 (앞 기체가 들이받기 시작하면 다음 기체가 겨눈다. 예고는 겨누는 기체만, 기다리는 기체는 순번만)
 ##   lance : 편대장이 굵은 몸통으로 관통 돌격 — 플레이어를 꿰뚫고 반대편 끝까지 달려간 뒤, 곧바로 그 자리에서 몸을 돌려 되돌아 꿰뚫는다 (첫 돌격을 쳐내면 두 번째는 끊긴다)
-## 겨누는 동안(aim)은 플레이어를 따라간다. 멈춘 뒤(warn)엔 그 줄로. 예고가 떠 있는 동안(aim·warn·strike)은 언제든 요격된다.
+## 겨누는 동안(aim, 빠른 준비 동작)은 플레이어를 따라가고 경고가 없다. 멈춘 뒤(warn)엔 그 줄로 — 경고가 뜨고, 그때부터 들이받는 동안까지 요격된다 (v0.124 근접 규칙).
 ## boss 에 필요한 것: squad_alive(s), squad_center(s), leader_of(s), want_drone, hold_drone, drone_pos, aim_drone, seg_closest, emit
 
 const MeleeWarn := preload("res://scripts/melee_warn.gd")
-const AIM := 0.7
-const WARN := 0.45
-const AIM_FIRST := 1.15              # 첫 돌진(과 나란히 돌진)은 예고를 길게: 보고 준비할 시간 (v0.106)
-const WARN_FIRST := 0.6
+const AIM := 0.45                    # 겨누며 자리 잡기(준비 동작)는 빠르게, 경고 없음 (v0.124)
+const WARN := 0.8                    # 멈춘 뒤 경고를 충분히 (요격 대비)
+const AIM_FIRST := 0.6               # 첫 돌진(과 나란히 돌진)도 준비 동작은 빠르게
+const WARN_FIRST := 1.0              # 첫 돌진은 멈춘 뒤 경고를 더 길게: 보고 준비할 시간
 const STRIKE := 0.3
 const RECOVER := 0.3
 const STAND := 520.0                 # 겨누는 자리 = 플레이어에서 이만큼
@@ -22,9 +22,9 @@ const HALF := 46.0                   # 몸통 판정 반폭
 const LANCE_STAND := 760.0
 const LANCE_REACH := 1500.0
 const LANCE_HALF := 80.0             # 편대장 몸통 판정 (굵다)
-const AIM_BACK := 0.35               # lance: 되돌아 꿰뚫기 전 겨누기와 멈춤
-const WARN_BACK := 0.2
-const READY_WAIT := 0.45             # chain: 뒤 기체가 멈춰 서서 기다리는 시간
+const AIM_BACK := 0.25               # lance: 되돌아 꿰뚫기 전 겨누기와 멈춤
+const WARN_BACK := 0.6
+const READY_WAIT := 0.8              # chain: 뒤 기체가 멈춰 서서(경고를 띄우고) 기다리는 시간
 const KNOCK := 320.0
 const KNOCK_TIME := 0.4
 
@@ -216,10 +216,9 @@ func clash_box(ppos: Vector2) -> Dictionary:
 	return best
 
 
-## 요격: 돌진 예고(진홍 띠·화면 ⚠)가 떠 있는 동안 — 겨누기(aim)·멈춤(warn)·들이받기(strike) — 언제든 그 기체를 쳐낼 수 있다.
-## 앞선 보스들(팔·대검·프레스)과 같은 규칙: 경고가 보이면 요격된다 (v0.123. 전에는 aim 중엔 안 돼서, 경고를 보고 달려들면 그냥 부딪혀 튕겼다)
+## 요격: 경고가 뜬 뒤(멈춤 warn)부터 들이받는 동안(strike)까지 그 기체를 쳐낼 수 있다 — 모든 근접공격 공통 규칙 (docs/RULES.md 3.3)
 func _can_clash(r: Dictionary) -> bool:
-	return r["phase"] == "aim" or r["phase"] == "warn" or r["phase"] == "strike"
+	return r["phase"] == "warn" or r["phase"] == "strike"
 
 
 func assist_targets(_from: Vector2, out: Array[Dictionary]) -> void:
@@ -245,24 +244,20 @@ func on_parried(hb: Dictionary) -> void:
 
 func melee_warning() -> bool:
 	for r in runs:
-		if r["phase"] == "aim" or r["phase"] == "warn":
+		if r["phase"] == "warn":
 			return true
 	return false
 
 
-## 예고: 겨누는 기체의 돌진 줄 (진홍 띠). chain 은 기다리는 기체에 순번만
+## 예고: 멈춘(warn) 기체의 돌진 줄 (진홍 띠). 겨누는 준비 동작(aim) 중엔 그리지 않는다. chain 은 순번 표지
 func draw() -> void:
 	var c: CanvasItem = boss
 	for k in runs.size():
 		var r: Dictionary = runs[k]
-		var ph: String = r["phase"]
-		if ph == "wait" and mode == "chain":
-			MeleeWarn.tag(c, boss.drone_pos(int(r["i"])) + Vector2(0, -90), 0, boss.t, k)
-		if (ph != "aim" and ph != "warn") or not r.has("from"):
+		if r["phase"] != "warn" or not r.has("from"):
 			continue
-		var level := 1 if ph == "aim" else 2
 		var from: Vector2 = r["from"]
 		var to: Vector2 = r["to"]
 		var n := (to - from).normalized().orthogonal() * float(r["half"])
-		MeleeWarn.zone(c, PackedVector2Array([from + n, to + n, to - n, from - n]), level, boss.t)
-		MeleeWarn.tag(c, boss.drone_pos(int(r["i"])) + Vector2(0, -90), level, boss.t, k if mode == "chain" else -1)
+		MeleeWarn.zone(c, PackedVector2Array([from + n, to + n, to - n, from - n]), 2, boss.t)
+		MeleeWarn.tag(c, boss.drone_pos(int(r["i"])) + Vector2(0, -90), 2, boss.t, k if mode == "chain" else -1)

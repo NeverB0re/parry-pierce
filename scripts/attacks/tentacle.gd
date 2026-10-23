@@ -54,7 +54,7 @@ func step(dt: float, ppos: Vector2) -> void:
 		lead = false
 	if fired_t < 0.0 and _harmful():
 		fired_t = boss.t
-	if (phase == "prep" or phase == "set" or phase == "warn") and delay <= 0.0 and not queued():
+	if (phase == "set" or phase == "warn") and delay <= 0.0 and not queued():   # 점선 긋기는 경고가 뜬 뒤(멈춘 뒤)부터
 		trace_t += dt
 	if delay > 0.0:
 		delay -= dt

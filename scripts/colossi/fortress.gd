@@ -61,6 +61,8 @@ const SEG_GAP := 0.05
 const OPEN_TIME := 1.6
 
 # ── 공격 고르기 ────────────────────────────────────────
+const FURY_PART := 0.04              # 부위 하나 부술 때마다 패턴 속도 +4% (탄 속도는 base 의 bolt_speedup)
+const FURY_CORE := 0.15              # 코어가 깎일수록 패턴 속도 최대 +15% (v0.124: 모든 보스가 진행할수록 패턴·탄 둘 다 빨라지게)
 const GAP := Vector2(0.2, 0.45)      # 공격 사이 쉬는 시간 (짧게: 한 번에 적게 쏘는 대신 끊기지 않게)
 const GAP_CORE := Vector2(0.2, 0.45) # 코어 페이즈는 더 몰아친다
 const GAP_SPIRAL := Vector2(0.5, 0.8) # 회전형 탄막 뒤: 남은 탄이 지나갈 시간을 준다 (겹치지 않게)
@@ -1051,3 +1053,8 @@ func _draw_debris() -> void:
 		_cap(-half, half, float(d["w"]), C_HULL_DARK)
 		draw_circle(-half, float(d["w"]) * 0.35, Color(C_HEART, 0.2))
 	draw_set_transform(Vector2.ZERO, 0.0)
+
+
+## 진행할수록 사나워진다: 부위 파괴·코어 피해만큼 패턴이 빨라진다 (움찔 감속은 그대로)
+func pattern_scale() -> float:
+	return super() * (1.0 + FURY_PART * (part_count() - parts_left()) + FURY_CORE * core.frac())

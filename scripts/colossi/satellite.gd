@@ -250,6 +250,11 @@ func bolt_mult() -> float:
 	return (1.0 + 0.2 * core.frac()) * (1.0 + LEVEL_SPEEDUP * level)
 
 
+## 패턴 속도: 코어가 상할수록 빨라진다 (v0.124: 모든 보스가 진행할수록 패턴·탄 둘 다 빨라지게)
+func pattern_scale() -> float:
+	return super() * (1.0 + 0.15 * core.frac())
+
+
 # ── 진행 ───────────────────────────────────────────────
 func _step_effects(dt: float) -> void:
 	barrier_flash = maxf(0.0, barrier_flash - dt * 3.0)

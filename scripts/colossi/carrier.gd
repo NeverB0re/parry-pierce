@@ -590,8 +590,8 @@ func _pick_squad(ppos: Vector2) -> int:
 	if cands.is_empty() and not squad_alive(last_squad).is_empty():
 		cands.append(last_squad)
 	cands.shuffle()
-	if not cands.is_empty() and SQUAD_KIND[cands[0]] == "rush":   # 돌격 차례: 탄이 걷히고 함께 도는 패턴이 없어질 때까지 조금 기다린다
-		if shots_clear(ppos) and lingering.is_empty():
+	if not cands.is_empty() and SQUAD_KIND[cands[0]] == "rush":   # 돌격 차례: 함께 도는 모함 패턴(보라 주포 등)이 없어질 때까지 조금 기다린다 (탄은 괜찮다, v0.124)
+		if lingering.is_empty():
 			return cands[0]
 		rush_wait += 0.15
 		if rush_wait < RUSH_WAIT:
@@ -600,7 +600,7 @@ func _pick_squad(ppos: Vector2) -> int:
 		cands.append(last_squad)
 	for s in cands:                              # 아직 도는 모함 패턴과 겹쳐도 되는 편대만 (패리 불가 + 근접, 보라 둘은 겹치지 않는다)
 		if SQUAD_KIND[s] == "rush":
-			if shots_clear(ppos) and lingering.is_empty():
+			if lingering.is_empty():
 				return s
 			continue
 		if _fits_lingering(SQUAD_KIND[s]):

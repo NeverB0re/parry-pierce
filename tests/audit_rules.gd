@@ -1,5 +1,5 @@
 extends SceneTree
-# 규칙 점검 (헤드리스, 약 2분): 보스마다 150초, 부위를 차례로 부수며 겹침(탄막+근접·보라+근접·보라 둘)·동시 패턴 수·멍때림을 잰다. docs/RULES.md 10장
+# 규칙 점검 (헤드리스, 약 2분): 보스마다 150초, 부위를 차례로 부수며 겹침(보라+근접·보라 둘, 참고로 탄막+근접)·동시 패턴 수·멍때림을 잰다. docs/RULES.md 10장
 var main
 var n := 0
 func _initialize() -> void:
@@ -55,7 +55,7 @@ func _process(_d: float) -> bool:
 			if purple > 1:
 				stat["purple2"] += DT
 				why["purple2 " + _ks(acts)] = true
-			if acts.size() > 2:
+			if _patterns(acts) > 2:
 				stat["over2"] += DT
 				why["over2 " + _ks(acts)] = true
 			if acts.is_empty() and b.phase != 2 and b.shots_near(pp, 1500.0) == 0:
@@ -83,3 +83,18 @@ func _ks(acts: Array) -> String:
 		a.append(x.kind)
 	a.sort()
 	return str(a)
+
+
+## 동시에 도는 "패턴" 수: 한 패턴을 이루는 모듈은 하나로 센다
+## (탄막에 딸린 저격·유도탄, 연타 묶음의 촉수 타 = 묶음 하나, 같은 종류 여럿 = 하나)
+func _patterns(acts: Array) -> int:
+	var ks := {}
+	for x in acts:
+		var k: String = x.kind
+		if k == "hammer":
+			k = "pound"
+		ks[k] = true
+	if ks.size() > 1:
+		ks.erase("snipe")
+		ks.erase("homing")
+	return ks.size()

@@ -3,10 +3,10 @@ extends "res://scripts/attacks/tentacle.gd"
 ## 바깥쪽에서 안쪽으로 쓴다. 부채꼴 밖(뻗은 길이 너머·뿌리 위)으로 피하거나, 위치를 잡고 멈춘 동안(set·warn)·쓰는 중에 차지 강습으로 요격한다.
 ## 단계: prep(뒤로 젖힘, 앞부분만 조준) → set → warn → swing(판정) → hold → 끝
 
-const PREP := 0.85
+const PREP := 0.45                   # 준비 동작은 빠르게 (경고 없음, v0.124)
 const PREP_TRACK := 0.6
 const SET := 0.3
-const WARN := 0.7
+const WARN := 0.8                    # 멈춘 뒤 경고를 충분히 (요격 대비)
 const TIME := 0.7
 const HOLD := 0.25
 const SPAN := 1.9                    # 휩쓰는 각도 (라디안, 약 110도)
@@ -136,14 +136,14 @@ func _push(_i: int, _ppos: Vector2) -> Vector2:
 
 
 func melee_warning() -> bool:
-	return phase == "prep" or phase == "set" or phase == "warn"
+	return phase == "set" or phase == "warn"
 
 
 func draw() -> void:
-	if queued() or not (phase == "prep" or phase == "set" or phase == "warn"):   # 연타 대기 중인 타는 예고를 그리지 않는다 (다음 타만)
+	if queued() or not (phase == "set" or phase == "warn"):   # 연타 대기 중인 타는 예고를 그리지 않는다 (다음 타만). 준비 동작(prep) 중엔 경고 없음
 		return
 	var c: CanvasItem = boss
-	var level := _warn_level(0 if phase == "prep" else (1 if phase == "set" else 2))
+	var level := _warn_level(1 if phase == "set" else 2)
 	var area := _area if not _area.is_empty() else _sector()
 	MeleeWarn.zone(c, area, level, boss.t)
 	var root: Vector2 = boss.ROOTS[tents[0]]

@@ -4,9 +4,9 @@ extends "res://scripts/attacks/tentacle.gd"
 ## 단계: follow(따라다님) → set(젖힘, 위치 고정) → warn(점멸) → whip(감아침, 판정) → hold → 끝
 ## 척추: 0~4 = 뿌리에서 축(pivot)까지, 5~11 = 끝마디 (판정)
 
-const FOLLOW := 1.8
+const FOLLOW := 1.0                  # 따라다니는 준비 동작은 빠르게 (경고 없음, v0.124)
 const SET := 0.3
-const WARN := 0.5
+const WARN := 0.8                    # 멈춘 뒤 경고를 충분히 (요격 대비)
 const WHIP := 0.3
 const HOLD := 0.2
 const STANDOFF := 430.0              # 축이 플레이어에게서 떨어져 따라다니는 거리
@@ -100,7 +100,7 @@ func _harmful() -> bool:
 
 
 func _clashable() -> bool:
-	return phase == "follow" or phase == "set" or phase == "warn" or phase == "whip"
+	return phase == "set" or phase == "warn" or phase == "whip"
 
 
 func _push(_i: int, _ppos: Vector2) -> Vector2:
@@ -108,18 +108,12 @@ func _push(_i: int, _ppos: Vector2) -> Vector2:
 
 
 func melee_warning() -> bool:
-	return phase == "follow" or phase == "set" or phase == "warn"
+	return phase == "set" or phase == "warn"
 
 
-## 예고: 따라다니는 동안은 감아칠 수 있는 원의 윤곽만, 멈추면 감아칠 부채꼴
+## 예고: 멈춘 뒤(set·warn)에만 감아칠 부채꼴 (따라다니는 준비 동작 중엔 경고 없음, v0.124)
 func draw() -> void:
 	var c: CanvasItem = boss
-	if phase == "follow":
-		var ring := PackedVector2Array()
-		for q in 33:
-			ring.append(pivot + Vector2.from_angle(q * TAU / 32.0) * REACH)
-		MeleeWarn.zone(c, ring, 0, boss.t)
-		return
 	if phase != "set" and phase != "warn":
 		return
 	var level := 1 if phase == "set" else 2

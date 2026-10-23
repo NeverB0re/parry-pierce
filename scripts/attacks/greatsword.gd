@@ -8,10 +8,10 @@ extends "res://scripts/attacks/attack.gd"
 ## boss 에 필요한 것: sword_piv, sword_ang (대검 자세), SWORD_REST, sword_rest_ang(), HILT_GAP, BLADE_L, BLADE_W, core, emit
 
 const MeleeWarn := preload("res://scripts/melee_warn.gd")
-const RISE := 1.0                    # 날아올라 자세를 잡는다 (앞부분에서만 플레이어를 따라간다)
+const RISE := 0.55                   # 날아올라 자세를 잡는다 (앞부분에서만 플레이어를 따라간다). 빠르게, 경고 없음 (v0.124)
 const RISE_TRACK := 0.6
 const SET := 0.3
-const WARN := 0.8
+const WARN := 1.0                    # 멈춘 뒤 경고를 충분히 (요격 대비)
 const TIME := 0.6                    # 긋기
 const HOLD := 0.25
 const SPAN := 2.4                    # 긋는 각도 (라디안, 약 140도)
@@ -191,7 +191,7 @@ func on_parried(hb: Dictionary) -> void:
 
 
 func melee_warning() -> bool:
-	return phase == "rise" or phase == "set" or phase == "warn"
+	return phase == "set" or phase == "warn"
 
 
 func release_stagger() -> void:
@@ -213,10 +213,10 @@ func area() -> PackedVector2Array:
 
 
 func draw() -> void:
-	if phase != "rise" and phase != "set" and phase != "warn":
+	if phase != "set" and phase != "warn":                  # 날아오르는 준비 동작(rise) 중엔 경고 없음
 		return
 	var c: CanvasItem = boss
-	var level := 0 if phase == "rise" else (1 if phase == "set" else 2)
+	var level := 1 if phase == "set" else 2
 	MeleeWarn.zone(c, area(), level, boss.t)
 	var mid := (th0 + th1) * 0.5
 	MeleeWarn.tag(c, piv + Vector2.from_angle(mid) * (boss.HILT_GAP + boss.BLADE_L * 0.55), level, boss.t)

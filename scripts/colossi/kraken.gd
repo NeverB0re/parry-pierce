@@ -425,6 +425,11 @@ func tempo() -> float:
 	return 1.0 - 0.22 * core.frac()
 
 
+## 패턴 속도: 코어가 상할수록 탄막 패턴도 빨라진다 (촉수 근접은 tempo() 가 따로 당긴다, v0.124)
+func pattern_scale() -> float:
+	return super() * (1.0 + 0.12 * core.frac())
+
+
 ## 탄 속도: 코어가 상할수록 빨라진다 (촉수 수와는 무관) × 스테이지 난이도
 func bolt_mult() -> float:
 	return (1.0 + 0.3 * core.frac()) * (1.0 + LEVEL_SPEEDUP * level)

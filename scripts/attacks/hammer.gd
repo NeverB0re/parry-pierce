@@ -4,10 +4,10 @@ extends "res://scripts/attacks/tentacle.gd"
 ## 단계: prep(들어 올리며 플레이어를 따라감) → set → warn → strike(내려침, 판정) → lie(무해) → 끝. fast: 코어 페이즈 소용돌이용
 ## 척추: 0~3 = 뿌리에서 막대 한쪽 끝으로 오는 연결부, 4~11 = 가로 막대 (판정)
 
-const PREP := 0.9
+const PREP := 0.45                   # 준비 동작은 빠르게 (경고 없음, v0.124)
 const PREP_TRACK := 0.7
 const SET := 0.3
-const WARN := 0.6
+const WARN := 0.8                    # 멈춘 뒤 경고를 충분히 (요격 대비)
 const STRIKE := 0.3
 const LIE := 0.4
 const HALF_LEN := 520.0              # 막대 반길이
@@ -121,15 +121,15 @@ func _push(_i: int, ppos: Vector2) -> Vector2:
 
 
 func melee_warning() -> bool:
-	return delay <= 0.0 and (phase == "prep" or phase == "set" or phase == "warn")
+	return delay <= 0.0 and (phase == "set" or phase == "warn")
 
 
 ## 예고: 막대가 내려치며 쓸고 갈 직사각형 (막대 위치 ~ 멈추는 선)
 func draw() -> void:
-	if delay > 0.0 or queued() or not (phase == "prep" or phase == "set" or phase == "warn"):   # 연타 대기 중인 타는 예고를 그리지 않는다 (다음 타만)
+	if delay > 0.0 or queued() or not (phase == "set" or phase == "warn"):   # 연타 대기 중인 타는 예고를 그리지 않는다 (다음 타만). 준비 동작(prep) 중엔 경고 없음
 		return
 	var c: CanvasItem = boss
-	var level := _warn_level(0 if phase == "prep" else (1 if phase == "set" else 2))
+	var level := _warn_level(1 if phase == "set" else 2)
 	var x0 := cx - HALF_LEN - HALF
 	var x1 := cx + HALF_LEN + HALF
 	var area := PackedVector2Array([Vector2(x0, y_top - HALF), Vector2(x1, y_top - HALF), Vector2(x1, y_stop + HALF), Vector2(x0, y_stop + HALF)])

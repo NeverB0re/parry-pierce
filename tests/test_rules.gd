@@ -1606,10 +1606,10 @@ func _v039_test() -> void:
 	main.start_stage(0)
 	var b = main.boss
 	_air(Vector2(-700, -1500))
-	for ph in ["rise", "set", "warn"]:
+	for ph in ["set", "warn"]:
 		_swing(ph, 0.2, 1.0, 2.0)
 		_check("arm %s phase is a melee warning" % ph, b.melee_warning())
-	for ph in ["swing", "recoil", "return"]:
+	for ph in ["rise", "swing", "recoil", "return"]:                  # v0.124: 날아오르는 준비 동작(rise)엔 경고가 없다 (멈춘 뒤에만)
 		_swing(ph, 0.2, 1.0, 2.0)
 		_check("arm %s phase is not" % ph, not b.melee_warning())
 	b.atk = null
@@ -2220,15 +2220,20 @@ func _v047_test() -> void:
 	b.start_attack(es)
 	var ring_seen := false
 	var max_rot := 0.0
-	for k in int((es.WIND + es.SWEEP * 0.7) / DT):
+	var ring_during := false
+	var beam_ok := false
+	for k in int((es.WIND + es.SWEEP + 0.5) / DT):
 		b.step(DT, Vector2(0, -700))
 		max_rot = maxf(max_rot, absf(es.rot))
+		if es.phase == "fire" and es.t < es.SWEEP * 0.7:
+			var bp: Vector2 = b.CORE_POS + Vector2.from_angle(es._angle(0)) * 600.0
+			beam_ok = beam_ok or es.beam_hit(bp, 10.0) != Vector2.ZERO
 		for m in b.lingering:
 			if m.kind == "rings":
 				ring_seen = true
-	var bp: Vector2 = b.CORE_POS + Vector2.from_angle(es._angle(0)) * 600.0
-	_check("eye sweep: one beam from the pupil turns around the arena and a ring goes out on the way (rot %.2f, ring %s)" % [max_rot, ring_seen],
-		ring_seen and max_rot > PI and es.beam_hit(bp, 10.0) != Vector2.ZERO)
+				ring_during = ring_during or b.atk == es
+	_check("eye sweep: one beam turns around the arena, then a ring follows once it is done (rot %.2f, ring %s, overlapping %s)" % [max_rot, ring_seen, ring_during],
+		ring_seen and not ring_during and max_rot > PI and beam_ok)
 	b.atk = null
 	b.lingering.clear()
 	b.events.clear()
@@ -2920,12 +2925,12 @@ func _carrier_test() -> void:
 	for k in int(4.0 / DT):
 		b.step(DT, pp)
 		var striking := 0
-		var aiming := 0
+		var ready := 0
 		for r in rc.runs:
 			striking += 1 if r["phase"] == "strike" else 0
-			aiming += 1 if r["phase"] == "aim" else 0
-		overlap = overlap or (striking >= 1 and aiming >= 1)
-	_check("carrier rush chain: the next drone takes aim while the previous one rams", overlap)
+			ready += 1 if r["phase"] == "warn" else 0
+		overlap = overlap or (striking >= 1 and ready >= 1)
+	_check("carrier rush chain: the next drone already waits, stopped and warned, while the previous one rams", overlap)
 	# 결계 편대: 밖에서 그물을 엮고(무해) 플레이어를 따라가며 조인다. 선만 맞고, 퍼펙트 회피한 선은 사라진다
 	b.reset()
 	b.next_t = 99.0
@@ -3084,7 +3089,7 @@ func _carrier_combo_test() -> void:
 			if rs.runs[j]["phase"] == "warn":
 				warn_t[j] += DT
 	_check("carrier: chain rush — every drone stops ready before striking (warn %s)" % str(warn_t), rs.runs.size() == 3 and warn_t[1] > 0.3 and warn_t[2] > 0.3)
-	# 앞선 보스들과 같은 규칙: 돌진 예고가 뜨면(겨누는 중부터) 그 기체를 요격할 수 있고, 요격된 기체만 튕겨 나간다
+	# 근접 규칙 (v0.124): 겨누는 준비 동작 중엔 경고도 요격도 없고, 멈춘 뒤 경고가 뜨면 그 기체를 요격할 수 있다. 요격된 기체만 튕겨 나간다
 	b.reset()
 	b.hold_attacks = false
 	b.next_t = 99.0
@@ -3092,7 +3097,12 @@ func _carrier_combo_test() -> void:
 	b.start_attack(rs2)
 	for k in 6:
 		b.step(DT, pp0)
-	var aim_ok: bool = not rs2.runs.is_empty() and rs2.runs[0]["phase"] == "aim" and b.melee_warning()
+	var aim_ok: bool = not rs2.runs.is_empty() and rs2.runs[0]["phase"] == "aim" and not b.melee_warning() and b.clash_box(b.part_pos(int(rs2.runs[0]["i"]))).is_empty()
+	for k in int(1.0 / DT):
+		b.step(DT, pp0)
+		if rs2.runs[0]["phase"] == "warn":
+			break
+	aim_ok = aim_ok and rs2.runs[0]["phase"] == "warn" and b.melee_warning()
 	var dp: Vector2 = b.part_pos(int(rs2.runs[0]["i"]))
 	var hbx: Dictionary = b.clash_box(dp)
 	if not hbx.is_empty():
@@ -3102,7 +3112,7 @@ func _carrier_combo_test() -> void:
 	for r in rs2.runs:
 		if r["phase"] == "knocked":
 			knocked += 1
-	_check("carrier rush: a drone can be intercepted as soon as the warning shows (aiming %s, clash %s, knocked %d)" % [aim_ok, not hbx.is_empty(), knocked],
+	_check("carrier rush: no warning or intercept while aiming; once stopped and warned it can be intercepted (%s, clash %s, knocked %d)" % [aim_ok, not hbx.is_empty(), knocked],
 		aim_ok and not hbx.is_empty() and knocked == 1)
 	# 출격 전(발판 위)에는 격납고의 드론을 노리거나 칠 수 없다
 	b.reset()

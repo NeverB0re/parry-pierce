@@ -6,10 +6,10 @@ extends "res://scripts/attacks/tentacle.gd"
 ## 단계: prep(고리를 만들며 중심이 플레이어를 따라감) → set(고리 완성, 판정) → warn(점멸) → squeeze(조여 듦) → hold → 끝
 ## 척추: 0~3 마디 = 뿌리에서 감기 시작점으로 내려오는 곡선, 4~11 = 나선 (판정)
 
-const PREP := 0.8
+const PREP := 0.45                   # 준비 동작은 빠르게 (경고 없음, v0.124)
 const PREP_TRACK := 0.7
 const SET := 0.35
-const WARN := 0.6
+const WARN := 0.8                    # 멈춘 뒤 경고를 충분히 (요격 대비)
 const SQUEEZE := 0.9
 const HOLD := 0.2
 const R0 := 520.0
@@ -129,15 +129,15 @@ func _push(_i: int, ppos: Vector2) -> Vector2:
 
 
 func melee_warning() -> bool:
-	return phase == "prep" or phase == "set" or phase == "warn"
+	return phase == "set" or phase == "warn"
 
 
 ## 예고: 감길 고리 전체 (원) + 촉수마다 표지 (요격할 곳이 둘)
 func draw() -> void:
-	if not (phase == "prep" or phase == "set" or phase == "warn"):
+	if not (phase == "set" or phase == "warn"):             # 준비 동작(prep) 중엔 경고 없음
 		return
 	var c: CanvasItem = boss
-	var level := 0 if phase == "prep" else (1 if phase == "set" else 2)
+	var level := 1 if phase == "set" else 2
 	var rr: float = r * (1.0 + COIL_IN * 0.5) + boss.width_at(boss.N - 1) * 0.5
 	var pts := PackedVector2Array([center])
 	for q in 33:

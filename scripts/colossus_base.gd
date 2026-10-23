@@ -246,7 +246,9 @@ func step(dt: float, ppos: Vector2) -> void:
 		if hold_attacks:
 			next_t = maxf(next_t, 1.2)         # 날아오른 뒤 잠시 여유를 준다
 		next_t -= adt
-		if next_t <= 0.0:
+		if next_t <= 0.0 and lingering.size() >= 2:    # 동시에 도는 패턴은 둘까지 (docs/RULES.md 5장): 자리를 내준 패턴이 둘이면 하나가 끝날 때까지 기다린다
+			next_t = 0.1
+		elif next_t <= 0.0:
 			_choose(ppos)
 	else:
 		atk.t += adt
