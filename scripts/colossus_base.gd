@@ -46,6 +46,7 @@ var aim_from := Vector2.ZERO         # 플레이어 위치와 조준 방향 (mai
 var aim_dir := Vector2.UP
 const IDLE_LOOK := Vector2(0, -1200)   # 플레이어를 모를 때 바라보는 전장 한가운데
 var look_at := IDLE_LOOK       # 플레이어 위치 (그림 전용: 대기 모션이 바라본다. 판정에는 쓰지 않는다)
+var drive_aim := false              # 플레이어가 패리 후 리버스 드라이브를 겨누는 중 (main 이 매 프레임). 드라이브로만 열리는 표적이 쓴다 (반응로)
 var view_c := Vector2(0, -1500)        # 화면 가운데 (main 이 매 프레임): 멀리 있는 배경 몸체(모함)를 원근으로 그릴 때 쓴다
 # 체력 게이지: 코어를 두른 링 (모든 보스 공통, _draw 에서 _draw_gauge 를 부른다)
 const GAUGE_W := 10.0
@@ -529,12 +530,20 @@ func beam_hit(p: Vector2, r: float) -> Vector2:
 	return Vector2.ZERO
 
 
+## p 에 닿은 보라 줄기 중 퍼펙트 회피로 흡수할 수 있는(가는) 것이 있는가 — 두꺼운 줄기는 완전 동조가 안 된다 (attack.absorbable)
+func beam_absorbable(p: Vector2, r: float) -> bool:
+	for a in active_attacks():
+		if not a.dodged and a.absorbable() and a.beam_hit(p, r) != Vector2.ZERO:
+			return true
+	return false
+
+
 ## 패리 불가 판정을 p 에서 퍼펙트 회피했다(완전 동조): 닿은 공격의 에너지를 빨아들여 사라진다 (여러 줄기 공격은 그 줄기만)
 ## 돌려주는 값 = 빨아들인 줄기 위의 점들 (플레이어 둘레 ABSORB_REACH 안). 빨아들이기 전·후 판정을 비교해 그 줄기에만 있던 점을 고른다
 func mark_beam_dodged(p: Vector2, r: float) -> PackedVector2Array:
 	var out := PackedVector2Array()
 	for a in active_attacks():
-		if not a.dodged and a.beam_hit(p, r) != Vector2.ZERO:
+		if not a.dodged and a.absorbable() and a.beam_hit(p, r) != Vector2.ZERO:
 			var before := _strand_points(a, p)
 			a.mark_dodged(p, r)
 			for q in before:
@@ -749,6 +758,24 @@ func takes_reflect(hit: Dictionary) -> bool:
 	if hit.get("kind", "") == "core" and core_sealed():
 		return false
 	return not (hit.get("kind", "") == "core" and core != null and core.broken)
+
+
+## 카메라를 끌어당기는 몫 (기본 = 없음). 반응로: 맵 위의 방벽이 보이게 위로
+func view_bias(_p: Vector2) -> Vector2:
+	return Vector2.ZERO
+
+
+## 플레이어가 지나갈 수 없는 벽 (보스가 정한다. 기본 = 없음). 반응로의 에너지 방벽(위)·압착판(양옆)
+func wall_x_min() -> float:
+	return -INF
+
+
+func wall_x_max() -> float:
+	return INF
+
+
+func wall_y_min() -> float:
+	return -INF
 
 
 ## 코어가 드러나는 연출(페이즈 2) 동안 코어는 무적이다: 날아오던 반사탄·보조탄이나 지나가던 돌진에 혼자 깨지지 않게 (v0.125, 모든 보스)

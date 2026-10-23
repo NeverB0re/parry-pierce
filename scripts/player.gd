@@ -733,6 +733,21 @@ func _move(dt: float) -> void:
 		if position.y < CEILING + RADIUS:
 			position.y = CEILING + RADIUS
 			vel.y = absf(vel.y) * 0.3
+		if boss != null:                              # 보스가 세운 벽 (반응로 방벽·압착판): 지나갈 수 없다 (돌진 판정은 위에서 먼저 처리된다)
+			var bx0: float = boss.wall_x_min()
+			var bx1: float = boss.wall_x_max()
+			var by0: float = boss.wall_y_min()
+			if position.x < bx0 + RADIUS:
+				position.x = bx0 + RADIUS
+				vel.x = absf(vel.x) * 0.4
+			elif position.x > bx1 - RADIUS:
+				position.x = bx1 - RADIUS
+				vel.x = -absf(vel.x) * 0.4
+			if position.y < by0 + RADIUS:
+				position.y = by0 + RADIUS
+				vel.y = absf(vel.y) * 0.4
+				if dash_t > 0.0:
+					dash_t = minf(dash_t, 0.0001)
 		# 발판 (재출격 직후 등 발판이 떠 있을 때만)
 		var top := PLAT_CENTER.y - RADIUS
 		if main.plat_on and vel.y >= 0.0 and prev_y <= top + 0.5 and position.y >= top \
@@ -904,6 +919,20 @@ func bounce_off(dir: Vector2, kind := "dash", intercept := false, n := Vector2.Z
 		bdir = Vector2.UP
 	vel = bdir * stats.bounce_up * k + Vector2(steer * BOUNCE_STEER, 0.0)
 	bounce_rise = stats.bounce_up * k if shield_t > 0.0 else 0.0
+
+
+## 폭발에 크게 밀려난다 (반응로: 리버스 드라이브가 꽂힌 직후). 밀려나는 동안 무적
+const BLAST_SPEED := 1500.0
+const BLAST_SHIELD := 1.4
+
+
+func blast_back(dir: Vector2) -> void:
+	bounce_off(Vector2.UP, "power", true, Vector2.DOWN)
+	var d := dir.normalized() if dir.length() > 0.1 else Vector2.DOWN
+	vel = d * BLAST_SPEED
+	bounce_rise = 0.0
+	shield_t = maxf(shield_t, BLAST_SHIELD)
+	shield_max = maxf(shield_max, shield_t)
 
 
 ## 튕겨나는 힘 (반작용): 공격이 셀수록 더 크게 튕긴다 — 일반 돌진 < 차지 < 일반 패리 드라이브 < PERFECT·완전 동조

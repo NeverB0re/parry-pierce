@@ -56,6 +56,19 @@ func beam_hit(_p: Vector2, _r: float) -> Vector2:
 	return Vector2.ZERO
 
 
+## 이 보라 줄기의 두께 (판정 폭, px). 0 = 가는 심줄
+func strand_width() -> float:
+	return 0.0
+
+
+## 퍼펙트 회피로 흡수(완전 동조)할 수 있는 줄기인가: 돌진 한 번의 무적으로 건널 수 없는 두께(EVADE_CROSS_MAX 초과)는 안 된다 (v0.129 규칙)
+const EVADE_CROSS_MAX := 200.0
+
+
+func absorbable() -> bool:
+	return strand_width() <= EVADE_CROSS_MAX
+
+
 ## 회피했다 (p 에 닿은 판정). 기본 = 공격 전체가 더는 맞지 않는다. 여러 줄기 공격은 닿은 줄기만 (rings·radial_burst·lattice)
 func mark_dodged(_p: Vector2, _r: float) -> void:
 	dodged = true

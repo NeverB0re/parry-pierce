@@ -10,7 +10,7 @@ func _process(_d: float) -> bool:
 	if n != 3:
 		return false
 	var DT := 1.0 / 60.0
-	for st in 5:
+	for st in 6:
 		main.start_stage(st)
 		var b = main.boss
 		main.debug.god = true

@@ -19,6 +19,9 @@ const CORES := {
 	"wingman": {"name": "호위기 코어", "from": "carrier", "color": Color(0.95, 0.85, 0.35),
 		"desc": "PERFECT 패리에 성공하면 몇 초 동안 호위기가 기체 곁을 돌며 가까운 표적에 보조탄을 쏜다",
 		"mods": {"wingman": ["set", true]}},
+	"radiator": {"name": "방열 코어", "from": "reactor", "color": Color(0.45, 0.85, 1.0),
+		"desc": "잔탄에 긁혀 쌓인 과열이 두 배 빨리 식는다",
+		"mods": {"radiator": ["set", true]}},
 }
 
 

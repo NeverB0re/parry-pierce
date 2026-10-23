@@ -43,4 +43,5 @@ extends Resource
 @export var counter := false                ## 반격 코어: 패리한 탄(잔탄 흡수 포함)이 사라지지 않고 표적으로 빠르게 되돌아간다
 @export var reflect := false                ## 반사 코어: 리버스 드라이브로 돌진하는 동안만 닿은 탄을 표적으로 되돌린다
 @export var assault := false                ## 강습 코어: 연쇄 요격 — 4초 안에 요격을 이어 갈 때마다 요격 피해 +2 (최대 +6), 맞으면 끊김 (요격 성공 시 차지 쿨다운 초기화는 기본 시스템)
+@export var radiator := false              ## 방열 코어: 잔탄 긁힘 과열이 두 배 빨리 식는다
 @export var wingman := false               ## 호위기 코어: PERFECT 패리 성공 시 몇 초 동안 호위기가 곁을 돌며 가까운 표적에 보조탄을 쏜다

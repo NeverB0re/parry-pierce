@@ -42,6 +42,7 @@ func _process(_d: float) -> bool:
 	_carrier_test()
 	_carrier_combo_test()
 	_v0125_test()
+	_reactor_test()
 	print("FAILS ", fails)
 	quit(fails)
 	return false
@@ -3172,3 +3173,120 @@ func _v0125_test() -> void:
 		on_line = on_line and absf(q.x - x) < 70.0
 	_check("absorbing a lattice line hands its shape to the absorb effect (%d points, all on that line %s)" % [pts.size(), on_line], pts.size() >= 8 and on_line)
 	_check("lattice runs its four rounds in about four seconds (%.2f s)" % lt._end_t(), lt._end_t() <= 4.2)
+
+
+## 반응로 (6스테이지, v0.129): 방벽은 지나갈 수 없는 벽이고 리버스 드라이브만 뚫는다 / 꽂히면 경직·패턴 끊김·크게 밀려남 / 과열 N 번이면 끝
+## 두꺼운 보라는 완전 동조 불가 / 미로 통로 기준 / 압착 = 경고가 보이면 요격, 못 쳐내면 박혀서 전장이 좁아진다
+func _reactor_test() -> void:
+	main.start_stage(5)
+	var b = main.boss
+	var p = main.player
+	main.debug.god = true
+	b.next_t = 99.0
+	_check("stage 6 is the reactor with %d radiator panels" % b.HEAT_N, main.Stages.LIST[5]["id"] == "reactor" and b.HEAT_N == 5)
+	# 방벽: 위로 날아가도 못 넘는다
+	p.reset(Vector2(300, b.BARRIER_Y + 60.0), false)
+	p.on_platform = false
+	p.vel = Vector2(0, -1500)
+	_step(int(0.4 / DT))
+	_check("the energy barrier is a real wall (y %.0f, barrier %.0f)" % [p.position.y, b.BARRIER_Y], p.position.y >= b.BARRIER_Y + p.RADIUS - 1.0)
+	# 돌진·차지는 튕기고 소용없다
+	p.reset(Vector2(300, b.BARRIER_Y + 150.0), false)
+	_dash_dir("charge", Vector2.UP)
+	_step(int(0.4 / DT))
+	_check("a charge strike bounces off the barrier and does nothing (heat %d)" % b.heat, b.heat == 0)
+	_check("no aim targets while not aiming a reverse drive", b.assist_targets(p.position).is_empty())
+	b.drive_aim = true
+	_check("aiming a reverse drive reveals the cool panels as targets (%d)" % b.assist_targets(p.position).size(), b.assist_targets(p.position).size() == b.HEAT_N)
+	b.drive_aim = false
+	# 리버스 드라이브: 꿰뚫어 과열 1 + 경직(패턴 끊김, 탄 걷힘) + 크게 밀려남(무적)
+	b.next_t = 0.0
+	b.start_attack(b.Maze.new("zigzag", true))
+	_step(int(1.5 / DT))
+	var shots_before: int = b.shots.size()
+	p.reset(Vector2(450, b.BARRIER_Y + 150.0), false)
+	main.hitstop = 0
+	_dash_dir("power", Vector2.UP)
+	var y_hit := 0.0
+	for k in int(0.6 / DT):
+		main.hitstop = 0
+		main._physics_process(DT)
+		if b.heat == 1 and y_hit == 0.0:
+			y_hit = p.position.y
+	_check("a reverse drive pierces the barrier: heat %d, pattern cut %s, bullets cleared (%d -> %d)" % [b.heat, b.atk == null, shots_before, b.shots.size()],
+		b.heat == 1 and b.atk == null and b.shots.size() < shots_before and b.hot.count(true) == 1)
+	_check("the blast throws the pilot far down with invulnerability (y %.0f, shield %.2f)" % [p.position.y, p.shield_t],
+		p.position.y > b.BARRIER_Y + 500.0 and p.shield_t > 0.0)
+	_check("the reactor takes time to recover before the next pattern (%.1f s)" % b.next_t, b.next_t > 1.0)
+	# 과열 N 번 = 대폭발
+	var won := false
+	for i in b.HEAT_N - 1:
+		b.pending_drive = true
+		won = b.damage({"kind": "shield", "x": 0.0}, 12)
+	_check("the %dth overheat melts the core down" % b.HEAT_N, won and b.heat == b.HEAT_N and b.hot.count(true) == b.HEAT_N)
+	# 두꺼운 보라: 완전 동조 불가 (양분 광선·모함 주포), 가는 보라는 된다
+	main.start_stage(5)
+	b = main.boss
+	b.next_t = 99.0
+	var dv = b.Divide.new()
+	b.start_attack(dv)
+	for k in int((dv.WARN + 0.2) / DT):
+		b.step(DT, Vector2(-600, -1200))
+	var on_beam := Vector2(0, -1200)
+	_check("the divider beam is too thick to cross in one evade: it hurts but cannot be absorbed (hit %s, absorbable %s)" % [b.beam_hit(on_beam, 12.0) != Vector2.ZERO, b.beam_absorbable(on_beam, 28.0)],
+		b.beam_hit(on_beam, 12.0) != Vector2.ZERO and not b.beam_absorbable(on_beam, 28.0))
+	var cn = load("res://scripts/attacks/carrier_cannon.gd").new()
+	var lt = load("res://scripts/attacks/lattice.gd").new()
+	_check("the carrier main cannon cannot be absorbed either, a thin lattice line can (%s, %s)" % [cn.absorbable(), lt.absorbable()], not cn.absorbable() and lt.absorbable())
+	# 미로: 통로는 돌진 한 번 거리보다 넓고, 줄 사이에 멀리 튀지 않는다. 마지막 줄 통로에 금색 주탄
+	main.start_stage(5)
+	b = main.boss
+	b.next_t = 99.0
+	var ok_lanes := true
+	var worst := ""
+	for mode in ["zigzag", "snake", "funnel"]:
+		var mz = b.Maze.new(mode, true)
+		b.start_attack(mz)
+		b.step(DT, Vector2(0, -900))
+		var ln: Array = mz.lanes()
+		for k in ln.size():
+			if float(ln[k][1]) < 590.0 or (k > 0 and absf(float(ln[k][0]) - float(ln[k - 1][0])) > mz.MAX_SHIFT + 1.0):
+				ok_lanes = false
+				worst = "%s row %d" % [mode, k]
+		b.atk = null
+	_check("maze lanes are wider than one dash and never jump far between rows %s" % worst, ok_lanes)
+	b.shots.clear_near(Vector2(0, -1000), 99999.0)
+	var mz2 = b.Maze.new("zigzag", true)
+	b.start_attack(mz2)
+	var gold := 0
+	for k in int(16.0 / DT):
+		b.step(DT, Vector2(0, -300))
+		if b.atk != mz2:
+			break
+	for i in b.shots.size():
+		if b.shots.kind[i] == b.shots.Kind.BOLT and b.shots.mine[i] == 0:
+			gold += 1
+	_check("a maze ends with exactly one gold bolt in its last lane (%d)" % gold, gold == 1)
+	# 압착: 준비 동작엔 경고 없음 → 멈춰 경고(요격 가능) → 못 쳐내면 박혀 전장이 좁아졌다가 물러난다
+	main.start_stage(5)
+	b = main.boss
+	b.next_t = 99.0
+	var cl = b.Clamp.new()
+	b.start_side(cl)
+	b.step(DT, Vector2(0, -1000))
+	var prep_quiet: bool = not b.melee_warning() and b.clash_box(Vector2(-1000, -1000)).is_empty()
+	for k in int((cl.PREP + cl.SET + 0.1) / DT):
+		b.step(DT, Vector2(0, -1000))
+	var warned: bool = b.melee_warning() and not b.clash_box(Vector2(-1000, -1000)).is_empty()
+	var hb: Dictionary = b.clash_box(Vector2(-1000, -1000))
+	b.on_parried(hb)
+	for k in int(2.0 / DT):
+		b.step(DT, Vector2(0, -1000))
+	_check("clamp: no warning during the quick wind-up, warned and interceptable once stopped (%s, %s)" % [prep_quiet, warned], prep_quiet and warned)
+	_check("clamp: the intercepted side springs back, the other one stays jammed in (left %.0f, right %.0f)" % [b.squeeze_d[0], b.squeeze_d[1]],
+		b.squeeze_d[0] <= 0.5 and b.squeeze_d[1] > 300.0 and b.wall_x_max() < b.ARENA_X - 300.0)
+	for k in int((b.SQUEEZE_HOLD + 5.0) / DT):
+		b.step(DT, Vector2(0, -1000))
+	_check("clamp: a jammed plate stays a while, then backs off (right %.0f)" % b.squeeze_d[1], b.squeeze_d[1] <= 0.5)
+	main.debug.god = false
+	main.start_stage(0)

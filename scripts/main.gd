@@ -543,6 +543,7 @@ func _physics_body(delta: float) -> void:
 	boss.strike_glow = player.is_attacking()
 	boss.focus_glow = 1.0 if (player.aim_phase or player.is_charged()) else 0.0
 	boss.focus_from = player.position
+	boss.drive_aim = player.aim_phase
 	boss.aim_from = player.position
 	boss.view_c = cam.get_screen_center_position()
 	boss.aim_dir = player.aim
@@ -619,7 +620,7 @@ func _mobile_view_k() -> float:
 
 func _update_camera(delta: float) -> void:
 	var v: Vector2 = player.vel
-	var target: Vector2 = player.position + Vector2(v.x * 0.05, -80.0 + clampf(v.y * 0.1, -100.0, 100.0))
+	var target: Vector2 = player.position + Vector2(v.x * 0.05, -80.0 + clampf(v.y * 0.1, -100.0, 100.0)) + boss.view_bias(player.position)
 	var mode := 1.0
 	if player.aim_phase:                          # 줌아웃 + 조준 방향 보여주기는 조준·차지 중에만
 		target += player.aim * 160.0
@@ -640,7 +641,7 @@ func _update_camera(delta: float) -> void:
 func _check_attacks() -> void:
 	var p: Vector2 = player.position
 	var graze: float = Player.RADIUS + Player.PERFECT_EVADE_GRAZE
-	if player.can_evade_reward() and boss.beam_hit(p, graze) != Vector2.ZERO:
+	if player.can_evade_reward() and boss.beam_hit(p, graze) != Vector2.ZERO and boss.beam_absorbable(p, graze):   # 두꺼운 보라는 완전 동조 불가 (v0.129)
 		player.try_evade_reward(true)                   # 패리 불가 공격을 돌진 직후 스침 = 강한 퍼펙트 회피 (완전 동조, 4배)
 		_absorb_beam_fx(p)
 		fx.absorb(boss.mark_beam_dodged(p, graze), p)   # 그 공격(줄기)의 에너지를 빨아들인다: 줄기가 닿은 곳부터 풀려 보라 빛알이 기체로 빨려 든다
@@ -675,7 +676,7 @@ func _check_attacks() -> void:
 				return
 			var dash_parry: bool = player.is_dash_parry()          # 돌진패리: PERFECT 는 타이밍대로, 대신 드라이브 뒤 쿨다운 회복 (player.gd)
 			var perfect: bool = player.parry_t <= Player.PERFECT_WINDOW
-			if hb["id"] == "arm":                       # 팔은 그냥 패리하면 피해 없이 튕겨나기만 (받아치기는 차지 돌진)
+			if hb["id"] == "arm" or hb.get("parry_push", false):   # 팔·격벽은 그냥 패리하면 피해 없이 튕겨나기만 (받아치기는 차지 돌진)
 				var hp_pos: Vector2 = hb["pos"]
 				var away: Vector2 = p - hp_pos
 				if away.length() < 0.1:
@@ -723,7 +724,7 @@ func _cure_heat(at: Vector2) -> void:
 	if heat <= 0:
 		return
 	heat -= 1
-	heat_t = HEAT_COOL
+	heat_t = _heat_cool_time()
 	tele.add("heat_cure")
 	sfx.play("heal", -2.0, 0.0)
 	fx.ring(at, Color(1.0, 0.75, 0.35), 90.0, 0.35, 4.0, true)
@@ -843,6 +844,11 @@ func _dash_parry_feedback(p: Vector2, dir: Vector2) -> void:
 
 
 ## 잔탄 피격: 실드 셀이 바로 깨지지 않고 과열 게이지가 한 칸 오른다. 제어 불능도, 동조·차지 취소도 없다.
+## 과열 한 칸이 식는 시간 (방열 코어: 절반)
+func _heat_cool_time() -> float:
+	return HEAT_COOL * (0.5 if player.stats.radiator else 1.0)
+
+
 ## 게이지가 가득 차면(HEAT_MAX) 셀 1개가 깨지고 비워진다. HEAT_COOL 초 동안 안 맞으면 한 칸 식는다
 func _graze(hb: Dictionary) -> void:
 	boss.on_hit_player(hb)
@@ -852,7 +858,7 @@ func _graze(hb: Dictionary) -> void:
 	_tele_after_strike()
 	var p: Vector2 = player.position
 	heat += 1
-	heat_t = HEAT_COOL
+	heat_t = _heat_cool_time()
 	if heat < HEAT_MAX:
 		player.invuln = maxf(player.invuln, GRAZE_INVULN)
 		shake = maxf(shake, 5.0)
@@ -879,7 +885,7 @@ func _graze(hb: Dictionary) -> void:
 func heat_level() -> float:
 	if heat <= 0:
 		return 0.0
-	var f := float(heat - 1) + clampf(heat_t / HEAT_COOL, 0.0, 1.0)
+	var f := float(heat - 1) + clampf(heat_t / _heat_cool_time(), 0.0, 1.0)
 	return clampf(f / float(HEAT_MAX - 1), 0.0, 1.0)
 
 
@@ -912,7 +918,7 @@ func _heat_cool(dt: float) -> void:
 	heat_t -= dt
 	if heat_t <= 0.0:
 		heat -= 1
-		heat_t = HEAT_COOL
+		heat_t = _heat_cool_time()
 
 
 func _parry_feedback(p: Vector2, perfect: bool, hb: Dictionary) -> void:
@@ -1030,6 +1036,14 @@ func _drain_boss_events() -> void:
 				sfx.play("stomp", 2.0)
 				fx.burst(pos, 30, Color(1.0, 0.45, 0.15, 0.9), 700.0, 0.7, 5.0, 1200.0, Vector2.UP, PI * 0.4)
 				fx.ring(pos, Color(1.0, 0.5, 0.2, 0.6), 360.0, 0.35, 6.0)
+			Ev.BLAST:                            # 리버스 드라이브가 꽂혀 터진 폭발: 크게 밀려나 아래로 (무적)
+				player.blast_back(ev.get("dir", Vector2.DOWN))
+				shake = maxf(shake, 30.0)
+				hitstop = maxf(hitstop, 0.18)
+				fx.ring(pos, Color(1.0, 0.75, 0.4), 520.0, 0.5, 12.0)
+				fx.burst(pos, 50, Color(1.0, 0.6, 0.3), 1300.0, 0.7, 5.0)
+				sfx.play("break", 4.0)
+				sfx.play("stomp", 2.0)
 			Ev.BEAM:                             # 패리 불가 레이저 발사
 				shake = maxf(shake, 16.0)
 				sfx.play("beam", 2.0, 0.0)
