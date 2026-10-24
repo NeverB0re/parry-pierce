@@ -93,6 +93,6 @@ GODOT="C:/Users/JMS/Documents/Godot/Godot_v4.7.2-stable_win64.exe/Godot_v4.7.2-s
 |---|---|
 | `docs/RULES.md` | 게임 규칙과 승인된 예외 표 (위성 이중 결계벽, 반응로 예외들) |
 | `docs/BOSS_*.md` | 보스별 기획 |
-| `docs/SOUND.md` | 음량 기준. 기본 마스터 0.8 ≈ -21 LUFS, 음악 -6 dB, `sfx.TRIM` |
+| `docs/SOUND.md` | 사운드 기획. 음량 기준은 코드에 있다: `scripts/audio_settings.gd` (기본 마스터 0.8 ≈ -21 LUFS), `scripts/music.gd` (-6 dB), `scripts/sfx.gd`의 `TRIM` |
 | `itch/DEVLOG_v0.127.md`, `itch/STORE_PAGE.md`, `itch/UPLOAD.md` | itch 배포 자료 |
 | 메모리 `C:\Users\JMS\.claude\projects\C--Users-JMS-Downloads-parry\memory\` | 사용자 선호와 프로젝트 결정 (새 세션에 자동으로 로드됨) |
