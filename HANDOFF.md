@@ -8,7 +8,7 @@
 | 항목 | 값 |
 |---|---|
 | 엔진 | Godot 4.7.2, GDScript, 2D, 렌더러 `gl_compatibility` |
-| 폴더 | `C:\Users\JMS\Downloads\parry` (이 폴더 = `main` 브랜치) |
+| 폴더 | `C:\AI 작업물\parry` (이 폴더 = `main` 브랜치) |
 | 저장소 | GitHub `NeverB0re/parry-pierce`, 브랜치 `main` |
 | Godot 콘솔 실행 파일 | `C:\Users\JMS\Documents\Godot\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe` |
 | 프로젝트 이름 | `config/name="Parry Pierce (prototype)"` — **바꾸지 말 것** (저장 폴더 이름이 이것을 따른다). 창 제목은 코드에서 "Parry Pierce" |
