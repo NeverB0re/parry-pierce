@@ -1,23 +1,18 @@
-# 인수인계서 — Parry Pierce main 브랜치 (리워크 이전 방향)
+# 인수인계서 — Parry Pierce main 브랜치
 
 > 작성 2026-10-16. 다른 세션에서 **main 브랜치(기존 게임)** 작업을 이어 가기 위한 문서.
-> 사용자와는 **한국어**로 대화한다. 리워크(`rework` 브랜치)는 별도 세션이 맡으니 이 세션에서는 건드리지 않는다.
+> 사용자와는 **한국어**로 대화한다.
 
 ## 1. 프로젝트 기본
 
 | 항목 | 값 |
 |---|---|
 | 엔진 | Godot 4.7.2, GDScript, 2D, 렌더러 `gl_compatibility` |
-| 폴더 | `C:\AI 작업물\parry` (이 폴더 = `main` 브랜치) |
+| 폴더 | `C:\AI 작업물\ParryPierce` (이 폴더 = `main` 브랜치) |
 | 저장소 | GitHub `NeverB0re/parry-pierce`, 브랜치 `main` |
 | Godot 콘솔 실행 파일 | `C:\Users\JMS\Documents\Godot\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe` |
 | 프로젝트 이름 | `config/name="Parry Pierce (prototype)"` — **바꾸지 말 것** (저장 폴더 이름이 이것을 따른다). 창 제목은 코드에서 "Parry Pierce" |
 | 버전 | `project.godot` 의 `config/version="0.49"` (마지막 릴리즈 v0.49) |
-
-### 리워크 폴더 (건드리지 않음)
-- `C:\Users\JMS\Downloads\parry-rework` = git worktree, 브랜치 `rework`. 같은 저장소의 다른 폴더다.
-- 자유 비행 · 패리 = 구슬 · 리버스 드라이브만 공격 · 자동 사격 등으로 게임 구조를 바꾸는 실험. 기획서 `parry-rework/docs/PLAN_rework.md`.
-- main 에서 `git worktree` 나 `rework` 브랜치를 지우거나 합치지 말 것. 합칠지는 사용자가 정한다.
 
 ## 2. 작업 규칙 (사용자 지시)
 
@@ -71,7 +66,7 @@ GODOT="..." bash tests/run.sh --update-trace
 - 실험용 빌드 `ParryPierce0.50-test.exe` (디버그 빌드, gitignore) 를 사용자에게 줬다.
 
 ### 사용자 피드백 (이 개편 뒤)
-- "아무래도 별로 재미가 없다" — 근접(요격) 위주라 탄막 패리의 쾌감이 빠졌다는 진단이 나왔고, 이 방향의 대안이 **리워크 브랜치**다. main 에서 크라켄을 더 다듬을지, 리워크 결과를 기다릴지는 사용자에게 확인할 것.
+- "아무래도 별로 재미가 없다" — 근접(요격) 위주라 탄막 패리의 쾌감이 빠졌다는 진단이 나왔다.
 - 확인 요청해 둔 수치: `SHIELD_FLOOR`, `LEAD_K`(1.5), 연타 간격(0.8~0.95초).
 
 ### 보류·대기 중인 일
